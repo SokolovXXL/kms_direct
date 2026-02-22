@@ -6,6 +6,7 @@ let currentConversationId = null;
 let eventSource = null;
 let unreadByConvo = {};
 let dmListCache = [];
+let isAtBottom = true; // Для отслеживания позиции скролла
 
 const $ = (id) => document.getElementById(id);
 
@@ -52,7 +53,7 @@ function renderScreen() {
     loadDmList();
     loadNotificationCount();
     
-    // На мобильных показываем список чатов по умолчанию
+    // На мобильных показываем список чатов
     if (isMobile()) {
       showSidebar();
     }
@@ -69,6 +70,7 @@ function showSidebar() {
   const chatArea = $('chat-area');
   if (isMobile()) {
     sidebar.classList.remove('mobile-hidden');
+    chatArea.classList.remove('mobile-visible');
     chatArea.classList.add('mobile-hidden');
   }
 }
@@ -79,6 +81,7 @@ function showChat() {
   if (isMobile()) {
     sidebar.classList.add('mobile-hidden');
     chatArea.classList.remove('mobile-hidden');
+    chatArea.classList.add('mobile-visible');
   }
 }
 
@@ -101,6 +104,42 @@ function addBackButtonToChat() {
   chatHeader.prepend(backBtn);
 }
 
+// Создаём кнопку "Прокрутить вниз"
+function createScrollDownButton() {
+  const chatArea = $('chat-area');
+  const btn = document.createElement('button');
+  btn.className = 'btn-scroll-down hidden';
+  btn.innerHTML = '↓';
+  btn.setAttribute('aria-label', 'Scroll to bottom');
+  btn.addEventListener('click', () => {
+    scrollMessagesToBottom();
+    btn.classList.add('hidden');
+  });
+  chatArea.appendChild(btn);
+  return btn;
+}
+
+const scrollDownBtn = createScrollDownButton();
+
+// Отслеживаем скролл
+function setupScrollListener() {
+  const container = $('chat-messages-wrapper');
+  container.addEventListener('scroll', () => {
+    const threshold = 100; // пикселей от низа
+    const bottom = container.scrollHeight - container.scrollTop - container.clientHeight < threshold;
+    isAtBottom = bottom;
+    
+    if (bottom) {
+      scrollDownBtn.classList.add('hidden');
+    } else {
+      // Показываем кнопку только если есть сообщения и не внизу
+      if ($('messages-list').children.length > 0) {
+        scrollDownBtn.classList.remove('hidden');
+      }
+    }
+  });
+}
+
 async function fetchMe() {
   try {
     const me = await api('/api/me');
@@ -109,7 +148,7 @@ async function fetchMe() {
   } catch (_) {}
 }
 
-// ---- Sound notification ----
+// ---- Sound notification (убрали toast) ----
 let audioCtx = null;
 function playNotificationSound() {
   try {
@@ -192,15 +231,20 @@ function startNotificationStream() {
     try {
       const data = JSON.parse(e.data);
       if (data.type === 'new_message') {
-        playNotificationSound();
-        showNotificationToast('New message');
+        playNotificationSound(); // Только звук, без toast
         const convId = data.conversationId;
         const message = data.message;
         unreadByConvo[convId] = (unreadByConvo[convId] || 0) + 1;
-        updateBadgeFromCache();
         if (currentConversationId === convId && message) {
           appendMessageToChat(message);
-          scrollMessagesToBottom();
+          
+          // Если пользователь был внизу, прокручиваем
+          if (isAtBottom) {
+            scrollMessagesToBottom();
+          } else {
+            // Показываем кнопку прокрутки
+            scrollDownBtn.classList.remove('hidden');
+          }
         } else {
           updateSidebarRow(convId, message ? message.body : null);
         }
@@ -216,22 +260,16 @@ function stopNotificationStream() {
   }
 }
 
-function showNotificationToast(text) {
-  const toast = $('notification-toast');
-  toast.textContent = text;
-  show(toast);
-  clearTimeout(toast._t);
-  toast._t = setTimeout(() => hide(toast), 3000);
-}
+// Убираем функцию showNotificationToast, она больше не нужна
 
 function updateBadgeFromCache() {
+  // Обновляем только уведомления в списке чатов
   const total = Object.values(unreadByConvo).reduce((a, b) => a + b, 0);
-  const badge = $('notification-badge');
+  // Обновляем заголовок страницы
   if (total > 0) {
-    badge.textContent = total > 99 ? '99+' : total;
-    show(badge);
+    document.title = `(${total}) Messenger`;
   } else {
-    hide(badge);
+    document.title = 'Messenger';
   }
 }
 
@@ -241,13 +279,7 @@ async function loadNotificationCount() {
     const data = await api('/api/notifications/count');
     const byConvo = await api('/api/notifications');
     unreadByConvo = byConvo;
-    const badge = $('notification-badge');
-    if (data.count > 0) {
-      badge.textContent = data.count > 99 ? '99+' : data.count;
-      show(badge);
-    } else {
-      hide(badge);
-    }
+    updateBadgeFromCache();
   } catch (_) {}
 }
 
@@ -272,7 +304,12 @@ function appendMessageToChat(message) {
 function scrollMessagesToBottom() {
   const container = $('chat-messages-wrapper');
   if (container) {
-    container.scrollTop = container.scrollHeight;
+    container.scrollTo({
+      top: container.scrollHeight,
+      behavior: 'smooth'
+    });
+    isAtBottom = true;
+    scrollDownBtn.classList.add('hidden');
   }
 }
 
@@ -350,6 +387,12 @@ async function selectConversation(convId) {
   if (isMobile()) {
     showChat();
   }
+  
+  // Сбрасываем состояние скролла
+  setTimeout(() => {
+    isAtBottom = true;
+    scrollMessagesToBottom();
+  }, 100);
 }
 
 async function loadMessages(convId) {
@@ -391,7 +434,8 @@ $('send-form').addEventListener('submit', async (e) => {
     if (dm) dm.lastMessage = body;
   } catch (err) {
     input.value = body;
-    showNotificationToast(err.message || 'Failed to send');
+    // Вместо toast показываем ошибку в консоли или можно добавить другое уведомление
+    console.error(err.message);
   }
 });
 
@@ -413,7 +457,7 @@ $('btn-new-dm').addEventListener('click', async () => {
           hide($('modal-new-dm'));
           selectConversation(data.conversationId);
         } catch (err) {
-          showNotificationToast(err.message || 'Failed');
+          console.error(err.message);
         }
       });
       li.appendChild(btn);
@@ -466,7 +510,8 @@ $('btn-copy-code').addEventListener('click', () => {
   const code = currentUser.friend_code;
   if (code && navigator.clipboard) {
     navigator.clipboard.writeText(code);
-    showNotificationToast('Copied!');
+    // Короткое всплывающее сообщение (можно заменить на что-то другое)
+    alert('Copied!');
   }
 });
 
@@ -482,7 +527,7 @@ $('btn-add-friend').addEventListener('click', async () => {
     await api('/api/friends', { method: 'POST', body: JSON.stringify({ friendCode: code }) });
     $('friend-code-input').value = '';
     errEl.textContent = '';
-    showNotificationToast('Friend added');
+    alert('Friend added');
     const friends = await api('/api/friends');
     const ul = $('friends-list');
     ul.innerHTML = '';
@@ -541,6 +586,7 @@ $('btn-confirm-delete').addEventListener('click', async () => {
 
 // Инициализация
 addBackButtonToChat();
+setupScrollListener();
 renderScreen();
 
 // Обработка изменения размера окна
@@ -551,6 +597,7 @@ window.addEventListener('resize', () => {
     const chatArea = $('chat-area');
     sidebar.classList.remove('mobile-hidden');
     chatArea.classList.remove('mobile-hidden');
+    chatArea.classList.remove('mobile-visible');
   } else {
     // На мобильных возвращаемся к списку чатов если нет выбранного
     if (!currentConversationId) {

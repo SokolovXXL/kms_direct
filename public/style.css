@@ -244,7 +244,7 @@ body {
   filter: brightness(1.1);
 }
 
-/* Кнопка "Назад" для мобильной версии */
+/* Кнопка "Назад" */
 .btn-back {
   display: none;
   background: transparent;
@@ -259,6 +259,36 @@ body {
 
 .btn-back:hover {
   color: var(--accent);
+}
+
+/* Кнопка "Прокрутить вниз" */
+.btn-scroll-down {
+  position: absolute;
+  bottom: 80px;
+  right: 20px;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: white;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.2rem;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  transition: all 0.2s ease;
+  z-index: 30;
+}
+
+.btn-scroll-down:hover {
+  background: var(--accent-hover);
+  transform: scale(1.1);
+}
+
+.btn-scroll-down.hidden {
+  display: none;
 }
 
 /* Основной лэйаут */
@@ -377,6 +407,7 @@ body {
   background: var(--bg);
   height: 100%;
   overflow: hidden;
+  position: relative;
 }
 
 .placeholder {
@@ -409,7 +440,7 @@ body {
 }
 
 .chat-header .btn-back {
-  display: none; /* По умолчанию скрыта */
+  display: none;
 }
 
 /* Контейнер сообщений */
@@ -421,6 +452,7 @@ body {
   background: var(--bg);
   display: flex;
   flex-direction: column;
+  scroll-behavior: smooth;
 }
 
 #messages-list {
@@ -652,32 +684,13 @@ body {
   }
 }
 
+/* Убираем старый бейдж справа сверху */
 .badge {
-  position: fixed;
-  top: 0.75rem;
-  right: 8rem;
-  min-width: 22px;
-  height: 22px;
-  padding: 0 6px;
-  border-radius: 11px;
-  background: var(--danger);
-  color: white;
-  font-size: 0.75rem;
-  font-weight: 600;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 100;
-  border: 2px solid var(--surface);
+  display: none !important;
 }
 
-.badge.hidden {
-  display: none;
-}
-
-/* ========== МОБИЛЬНАЯ ВЕРСИЯ (как в Telegram) ========== */
+/* ========== МОБИЛЬНАЯ ВЕРСИЯ ========== */
 @media (max-width: 768px) {
-  /* Кнопка "Назад" показывается только на мобильных */
   .btn-back {
     display: inline-block;
   }
@@ -686,9 +699,10 @@ body {
     display: inline-block;
   }
   
-  /* На мобильных либо список чатов, либо чат (не одновременно) */
+  /* На мобильных показываем только один экран */
   .layout {
     position: relative;
+    overflow: hidden;
   }
   
   .sidebar {
@@ -700,9 +714,9 @@ body {
     z-index: 10;
     transition: transform 0.3s ease;
     border-right: none;
+    background: var(--surface);
   }
   
-  /* Скрываем сайдбар когда открыт чат */
   .sidebar.mobile-hidden {
     transform: translateX(-100%);
   }
@@ -716,25 +730,11 @@ body {
     z-index: 20;
     background: var(--bg);
     transition: transform 0.3s ease;
-  }
-  
-  /* Чат скрыт когда не выбран */
-  .chat-area.mobile-hidden {
     transform: translateX(100%);
   }
   
-  /* Показываем нужный экран */
-  .chat-area:not(.mobile-hidden) {
+  .chat-area.mobile-visible {
     transform: translateX(0);
-  }
-  
-  .sidebar:not(.mobile-hidden) {
-    transform: translateX(0);
-  }
-  
-  /* Скрываем плейсхолдер на мобильных когда нет чата */
-  .placeholder {
-    height: 100%;
   }
   
   /* Убираем лишние отступы */
@@ -750,10 +750,12 @@ body {
     max-width: 85%;
   }
   
-  /* Фикс для бейджа уведомлений */
-  .badge {
-    top: 0.5rem;
-    right: 1rem;
+  .btn-scroll-down {
+    bottom: 70px;
+    right: 15px;
+    width: 36px;
+    height: 36px;
+    font-size: 1rem;
   }
   
   /* Шапка на мобильных */
