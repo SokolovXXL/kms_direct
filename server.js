@@ -20,7 +20,7 @@ const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret-change-in-production';
 // Cookie settings
 const COOKIE_OPTIONS = {
   httpOnly: true,
-  secure: process.env.NODE_ENV === 'production', // true в production (HTTPS)
+  secure: process.env.NODE_ENV === 'production',
   sameSite: 'lax',
   maxAge: 1000 * 60 * 60 * 24 * 30 // 30 дней
 };
@@ -36,7 +36,6 @@ app.use(express.static(path.join(__dirname, 'public')));
 const sseClients = new Map();
 
 function authMiddleware(req, res, next) {
-  // Пробуем получить токен из cookie или заголовка
   const token = req.cookies.token || 
                 (req.headers.authorization && req.headers.authorization.startsWith('Bearer ') && 
                  req.headers.authorization.slice(7));
@@ -89,7 +88,6 @@ app.post('/api/register', async (req, res) => {
       const user = r.rows[0];
       const token = jwt.sign({ userId: user.id }, JWT_SECRET);
       
-      // Устанавливаем httpOnly cookie
       res.cookie('token', token, COOKIE_OPTIONS);
       
       return res.json({ 
@@ -132,7 +130,6 @@ app.post('/api/login', async (req, res) => {
   
   const token = jwt.sign({ userId: user.id }, JWT_SECRET);
   
-  // Устанавливаем httpOnly cookie
   res.cookie('token', token, COOKIE_OPTIONS);
   
   return res.json({ 
@@ -185,12 +182,13 @@ app.delete('/api/account', authMiddleware, async (req, res) => {
 });
 
 // ---- Friends (by friend code) ----
+// FIXED: No more duplicates - using single-direction lookup
 app.get('/api/friends', authMiddleware, async (req, res) => {
   const r = await pool.query(`
     SELECT u.id, u.username, u.friend_code
     FROM friends f
-    JOIN users u ON u.id = CASE WHEN f.user_id = $1 THEN f.friend_id ELSE f.user_id END
-    WHERE (f.user_id = $1 OR f.friend_id = $1) AND u.id != $1
+    JOIN users u ON u.id = f.friend_id
+    WHERE f.user_id = $1
     ORDER BY u.username
   `, [req.userId]);
   res.json(r.rows);
@@ -209,6 +207,7 @@ app.post('/api/friends', authMiddleware, async (req, res) => {
   if (friend.id === req.userId) return res.status(400).json({ error: 'Cannot add yourself' });
   
   try {
+    // Insert both directions to make lookups easier
     await pool.query(
       'INSERT INTO friends (user_id, friend_id) VALUES ($1, $2), ($2, $1) ON CONFLICT (user_id, friend_id) DO NOTHING',
       [req.userId, friend.id]
@@ -221,30 +220,55 @@ app.post('/api/friends', authMiddleware, async (req, res) => {
   res.json({ id: friend.id, username: friend.username });
 });
 
-// ---- DMs ----
-app.get('/api/dms', authMiddleware, async (req, res) => {
+// ---- Conversations (DMs & Groups) ----
+// FIXED: No more duplicates, added group support
+app.get('/api/conversations', authMiddleware, async (req, res) => {
   const r = await pool.query(`
-    SELECT c.id, c.created_at,
-           u.id AS other_user_id, u.username AS other_username,
-           (SELECT body FROM messages WHERE conversation_id = c.id ORDER BY created_at DESC LIMIT 1) AS last_message,
-           (SELECT created_at FROM messages WHERE conversation_id = c.id ORDER BY created_at DESC LIMIT 1) AS last_at
+    SELECT DISTINCT ON (c.id)
+           c.id,
+           c.created_at,
+           c.is_group,
+           c.title,
+           u.id AS other_user_id,
+           u.username AS other_username,
+           (
+             SELECT body FROM messages
+             WHERE conversation_id = c.id
+             ORDER BY created_at DESC
+             LIMIT 1
+           ) AS last_message,
+           (
+             SELECT created_at FROM messages
+             WHERE conversation_id = c.id
+             ORDER BY created_at DESC
+             LIMIT 1
+           ) AS last_at
     FROM conversations c
-    JOIN conversation_participants cp ON cp.conversation_id = c.id
-    JOIN users u ON u.id = cp.user_id AND u.id != $1
-    WHERE c.id IN (SELECT conversation_id FROM conversation_participants WHERE user_id = $1)
-    ORDER BY last_at DESC NULLS LAST, c.id DESC
+    JOIN conversation_participants cp1 
+         ON cp1.conversation_id = c.id AND cp1.user_id = $1
+    LEFT JOIN conversation_participants cp2 
+         ON cp2.conversation_id = c.id AND cp2.user_id != $1 AND c.is_group = false
+    LEFT JOIN users u ON u.id = cp2.user_id
+    ORDER BY c.id, last_at DESC NULLS LAST
   `, [req.userId]);
-  
+
   const convos = r.rows.map(row => ({
     id: row.id,
-    otherUser: { id: row.other_user_id, username: row.other_username },
+    isGroup: row.is_group || false,
+    title: row.title,
+    otherUser: !row.is_group && row.other_user_id ? {
+      id: row.other_user_id,
+      username: row.other_username
+    } : null,
     lastMessage: row.last_message,
     lastAt: row.last_at,
+    createdAt: row.created_at
   }));
   
   res.json(convos);
 });
 
+// Create DM (legacy endpoint for backward compatibility)
 app.post('/api/dms', authMiddleware, async (req, res) => {
   const { otherUserId } = req.body || {};
   if (!otherUserId || otherUserId === req.userId) {
@@ -262,7 +286,8 @@ app.post('/api/dms', authMiddleware, async (req, res) => {
   
   const existing = await pool.query(`
     SELECT c.id FROM conversations c
-    WHERE EXISTS (SELECT 1 FROM conversation_participants WHERE conversation_id = c.id AND user_id = $1)
+    WHERE c.is_group = false
+    AND EXISTS (SELECT 1 FROM conversation_participants WHERE conversation_id = c.id AND user_id = $1)
     AND EXISTS (SELECT 1 FROM conversation_participants WHERE conversation_id = c.id AND user_id = $2)
   `, [req.userId, otherUserId]);
   
@@ -273,10 +298,14 @@ app.post('/api/dms', authMiddleware, async (req, res) => {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    const ins = await client.query('INSERT INTO conversations DEFAULT VALUES RETURNING id');
+    const ins = await client.query(
+      'INSERT INTO conversations (is_group) VALUES (false) RETURNING id'
+    );
     const cid = ins.rows[0].id;
-    await client.query('INSERT INTO conversation_participants (conversation_id, user_id) VALUES ($1, $2), ($1, $3)',
-      [cid, req.userId, otherUserId]);
+    await client.query(
+      'INSERT INTO conversation_participants (conversation_id, user_id) VALUES ($1, $2), ($1, $3)',
+      [cid, req.userId, otherUserId]
+    );
     await client.query('COMMIT');
     res.json({ conversationId: cid });
   } catch (e) {
@@ -287,8 +316,166 @@ app.post('/api/dms', authMiddleware, async (req, res) => {
   }
 });
 
+// ---- Groups ----
+// Create group
+app.post('/api/groups', authMiddleware, async (req, res) => {
+  const { title, userIds } = req.body || {};
+
+  if (!title || !Array.isArray(userIds) || userIds.length < 1) {
+    return res.status(400).json({ error: 'Title and at least 1 other user required' });
+  }
+
+  // Validate all users exist and are friends
+  const allUserIds = [...new Set([req.userId, ...userIds])];
+  
+  // Check friendship for all non-self pairs
+  for (const uid of userIds) {
+    if (uid === req.userId) continue;
+    
+    const isFriend = await pool.query(
+      'SELECT 1 FROM friends WHERE (user_id = $1 AND friend_id = $2) OR (user_id = $2 AND friend_id = $1)',
+      [req.userId, uid]
+    );
+    
+    if (isFriend.rows.length === 0) {
+      return res.status(403).json({ 
+        error: `User ${uid} is not your friend. Add them first using their friend code.` 
+      });
+    }
+  }
+
+  const client = await pool.connect();
+
+  try {
+    await client.query('BEGIN');
+
+    const ins = await client.query(
+      'INSERT INTO conversations (is_group, title) VALUES (true, $1) RETURNING id',
+      [title]
+    );
+
+    const cid = ins.rows[0].id;
+
+    for (const uid of allUserIds) {
+      await client.query(
+        'INSERT INTO conversation_participants (conversation_id, user_id) VALUES ($1, $2)',
+        [cid, uid]
+      );
+    }
+
+    await client.query('COMMIT');
+    
+    // Notify all participants except creator
+    for (const uid of userIds) {
+      const clients = sseClients.get(uid);
+      if (clients) {
+        const payload = {
+          type: 'new_group',
+          conversationId: cid,
+          groupTitle: title
+        };
+        clients.forEach(r => {
+          try { r.write(`data: ${JSON.stringify(payload)}\n\n`); } catch (_) {}
+        });
+      }
+    }
+    
+    res.json({ conversationId: cid });
+
+  } catch (e) {
+    await client.query('ROLLBACK');
+    throw e;
+  } finally {
+    client.release();
+  }
+});
+
+// Get group info
+app.get('/api/groups/:id', authMiddleware, async (req, res) => {
+  const groupId = parseInt(req.params.id, 10);
+  
+  const group = await pool.query(`
+    SELECT c.id, c.title, c.created_at, 
+           json_agg(json_build_object('id', u.id, 'username', u.username)) as participants
+    FROM conversations c
+    JOIN conversation_participants cp ON cp.conversation_id = c.id
+    JOIN users u ON u.id = cp.user_id
+    WHERE c.id = $1 AND c.is_group = true
+    GROUP BY c.id
+  `, [groupId]);
+  
+  if (group.rows.length === 0) {
+    return res.status(404).json({ error: 'Group not found' });
+  }
+  
+  // Check if user is a member
+  const isMember = group.rows[0].participants.some(p => p.id === req.userId);
+  if (!isMember) {
+    return res.status(403).json({ error: 'Not a member of this group' });
+  }
+  
+  res.json(group.rows[0]);
+});
+
+// Add user to group
+app.post('/api/groups/:id/members', authMiddleware, async (req, res) => {
+  const groupId = parseInt(req.params.id, 10);
+  const { userId } = req.body || {};
+  
+  if (!userId) {
+    return res.status(400).json({ error: 'User ID required' });
+  }
+  
+  // Check if group exists and user is member
+  const check = await pool.query(`
+    SELECT c.is_group FROM conversations c
+    JOIN conversation_participants cp ON cp.conversation_id = c.id
+    WHERE c.id = $1 AND cp.user_id = $2
+  `, [groupId, req.userId]);
+  
+  if (check.rows.length === 0 || !check.rows[0].is_group) {
+    return res.status(404).json({ error: 'Group not found or not a member' });
+  }
+  
+  // Check if new user is friend
+  const isFriend = await pool.query(
+    'SELECT 1 FROM friends WHERE (user_id = $1 AND friend_id = $2) OR (user_id = $2 AND friend_id = $1)',
+    [req.userId, userId]
+  );
+  
+  if (isFriend.rows.length === 0) {
+    return res.status(403).json({ error: 'You can only add friends to groups' });
+  }
+  
+  try {
+    await pool.query(
+      'INSERT INTO conversation_participants (conversation_id, user_id) VALUES ($1, $2)',
+      [groupId, userId]
+    );
+    
+    // Notify new member
+    const clients = sseClients.get(userId);
+    if (clients) {
+      const payload = {
+        type: 'added_to_group',
+        conversationId: groupId
+      };
+      clients.forEach(r => {
+        try { r.write(`data: ${JSON.stringify(payload)}\n\n`); } catch (_) {}
+      });
+    }
+    
+    res.json({ success: true });
+  } catch (e) {
+    if (e.code === '23505') {
+      return res.status(400).json({ error: 'User already in group' });
+    }
+    throw e;
+  }
+});
+
 // ---- Messages ----
-app.get('/api/dms/:id/messages', authMiddleware, async (req, res) => {
+app.get('/api/conversations/:id/messages', authMiddleware, async (req, res) => {
   const convId = parseInt(req.params.id, 10);
   
   const part = await pool.query(
@@ -309,7 +496,7 @@ app.get('/api/dms/:id/messages', authMiddleware, async (req, res) => {
   res.json(r.rows);
 });
 
-app.post('/api/dms/:id/messages', authMiddleware, async (req, res) => {
+app.post('/api/conversations/:id/messages', authMiddleware, async (req, res) => {
   const convId = parseInt(req.params.id, 10);
   const { body } = req.body || {};
   
@@ -368,6 +555,54 @@ app.post('/api/dms/:id/messages', authMiddleware, async (req, res) => {
     created_at: msg.created_at, 
     sender_id: msg.sender_id 
   });
+});
+
+// Legacy endpoint for backward compatibility
+app.get('/api/dms', authMiddleware, async (req, res) => {
+  // Redirect to new endpoint but keep old name for compatibility
+  const r = await pool.query(`
+    SELECT DISTINCT ON (c.id)
+           c.id,
+           c.created_at,
+           c.is_group,
+           c.title,
+           u.id AS other_user_id,
+           u.username AS other_username,
+           (
+             SELECT body FROM messages
+             WHERE conversation_id = c.id
+             ORDER BY created_at DESC
+             LIMIT 1
+           ) AS last_message,
+           (
+             SELECT created_at FROM messages
+             WHERE conversation_id = c.id
+             ORDER BY created_at DESC
+             LIMIT 1
+           ) AS last_at
+    FROM conversations c
+    JOIN conversation_participants cp1 
+         ON cp1.conversation_id = c.id AND cp1.user_id = $1
+    LEFT JOIN conversation_participants cp2 
+         ON cp2.conversation_id = c.id AND cp2.user_id != $1 AND c.is_group = false
+    LEFT JOIN users u ON u.id = cp2.user_id
+    ORDER BY c.id, last_at DESC NULLS LAST
+  `, [req.userId]);
+
+  const convos = r.rows.map(row => ({
+    id: row.id,
+    isGroup: row.is_group || false,
+    title: row.title,
+    otherUser: !row.is_group && row.other_user_id ? {
+      id: row.other_user_id,
+      username: row.other_username
+    } : null,
+    lastMessage: row.last_message,
+    lastAt: row.last_at,
+    createdAt: row.created_at
+  }));
+  
+  res.json(convos);
 });
 
 // ---- Notifications ----
