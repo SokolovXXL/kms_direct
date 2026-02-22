@@ -7,7 +7,6 @@ let eventSource = null;
 let unreadByConvo = {};
 let dmListCache = [];
 let isAtBottom = true;
-let scrollThreshold = 30000; // Увеличиваем порог для определения "внизу"
 
 const $ = (id) => document.getElementById(id);
 
@@ -142,13 +141,14 @@ function createScrollDownButton() {
 // Инициализируем кнопку после загрузки DOM
 let scrollDownBtn = null;
 
-// Отслеживаем скролл
+// Отслеживаем скролл - ИСПРАВЛЕНО
 function setupScrollListener() {
   const container = $('chat-messages-wrapper');
   if (!container) return;
   
   container.addEventListener('scroll', () => {
-    const bottom = container.scrollHeight - container.scrollTop - container.clientHeight < scrollThreshold;
+    // Используем порог в 5px для более точного определения
+    const bottom = container.scrollHeight - container.scrollTop - container.clientHeight <= 5;
     isAtBottom = bottom;
     
     if (bottom) {
@@ -253,7 +253,7 @@ if (logoutBtn) {
   });
 }
 
-// ---- Notifications (SSE) ----
+// ---- Notifications (SSE) - ИСПРАВЛЕНО ----
 function startNotificationStream() {
   stopNotificationStream();
   if (!token) return;
@@ -271,22 +271,20 @@ function startNotificationStream() {
         if (currentConversationId === convId && message) {
           appendMessageToChat(message);
           
-          // Проверяем, находится ли пользователь внизу чата
-          const container = $('chat-messages-wrapper');
-          if (container) {
-            // Увеличиваем порог до 300px для более агрессивной прокрутки
-            const bottom = container.scrollHeight - container.scrollTop - container.clientHeight < scrollThreshold;
-            
-            if (bottom) {
-              // Если пользователь близко к низу, прокручиваем вниз
-              setTimeout(() => {
-                scrollMessagesToBottom();
-              }, 50); // Небольшая задержка для гарантии
+          // Используем requestAnimationFrame для гарантии после обновления DOM
+          requestAnimationFrame(() => {
+            const container = $('chat-messages-wrapper');
+            if (!container) return;
+
+            // Проверяем с минимальным порогом в 5px
+            const isNearBottom = container.scrollHeight - container.scrollTop - container.clientHeight <= 5;
+
+            if (isNearBottom) {
+              scrollMessagesToBottom(); // теперь без smooth
             } else {
-              // Если не внизу, показываем кнопку прокрутки
               if (scrollDownBtn) scrollDownBtn.classList.remove('hidden');
             }
-          }
+          });
         } else {
           updateSidebarRow(convId, message ? message.body : null);
         }
@@ -341,25 +339,15 @@ function appendMessageToChat(message) {
   list.appendChild(div);
 }
 
+// ИСПРАВЛЕНО: убрал smooth-scroll
 function scrollMessagesToBottom() {
   const container = $('chat-messages-wrapper');
-  if (container) {
-    container.scrollTo({
-      top: container.scrollHeight,
-      behavior: 'smooth'
-    });
-    isAtBottom = true;
-    if (scrollDownBtn) scrollDownBtn.classList.add('hidden');
-  }
-}
+  if (!container) return;
 
-function forceScrollToBottom() {
-  const container = $('chat-messages-wrapper');
-  if (container) {
-    container.scrollTop = container.scrollHeight;
-    isAtBottom = true;
-    if (scrollDownBtn) scrollDownBtn.classList.add('hidden');
-  }
+  container.scrollTop = container.scrollHeight;
+  isAtBottom = true;
+
+  if (scrollDownBtn) scrollDownBtn.classList.add('hidden');
 }
 
 function updateSidebarRow(convId, lastMessageText) {
@@ -451,13 +439,14 @@ async function selectConversation(convId) {
     showChat();
   }
   
-  // Принудительная прокрутка вниз при выборе чата
+  // Прокрутка при выборе чата
   setTimeout(() => {
     isAtBottom = true;
-    forceScrollToBottom();
+    scrollMessagesToBottom();
   }, 200);
 }
 
+// ИСПРАВЛЕНО: loadMessages с requestAnimationFrame
 async function loadMessages(convId) {
   const list = $('messages-list');
   if (!list) return;
@@ -474,10 +463,10 @@ async function loadMessages(convId) {
       `;
       list.appendChild(div);
     }
-    // Принудительная прокрутка вниз после загрузки сообщений
-    setTimeout(() => {
-      forceScrollToBottom();
-    }, 100);
+    // Используем requestAnimationFrame для прокрутки после полной отрисовки
+    requestAnimationFrame(() => {
+      scrollMessagesToBottom();
+    });
   } catch (_) {
     list.innerHTML = '<p style="color:var(--text-muted)">Could not load messages</p>';
   }
@@ -500,10 +489,10 @@ if (sendForm) {
         body: JSON.stringify({ body }),
       });
       appendMessageToChat(msg);
-      // Принудительная прокрутка вниз после отправки
-      setTimeout(() => {
-        forceScrollToBottom();
-      }, 50);
+      // Прокрутка после отправки
+      requestAnimationFrame(() => {
+        scrollMessagesToBottom();
+      });
       updateSidebarRow(currentConversationId, body);
       const dm = dmListCache.find(d => d.id === currentConversationId);
       if (dm) dm.lastMessage = body;
