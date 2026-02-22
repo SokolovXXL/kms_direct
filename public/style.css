@@ -110,7 +110,8 @@ body {
   flex: 1;
   display: flex;
   flex-direction: column;
-  min-height: 100vh;
+  height: 100vh;
+  overflow: hidden;
 }
 
 .header {
@@ -120,6 +121,7 @@ body {
   padding: 0.75rem 1.25rem;
   background: var(--surface);
   border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
 }
 
 .logo {
@@ -233,6 +235,8 @@ body {
   flex: 1;
   display: flex;
   min-height: 0;
+  height: calc(100vh - 57px); /* Вычитаем высоту хедера */
+  overflow: hidden;
 }
 
 .sidebar {
@@ -243,11 +247,13 @@ body {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  height: 100%;
 }
 
 .sidebar-actions {
   padding: 1rem;
   border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
 }
 
 .btn-primary {
@@ -269,6 +275,7 @@ body {
 .dm-list {
   flex: 1;
   overflow-y: auto;
+  height: 100%;
 }
 
 .dm-item {
@@ -336,6 +343,8 @@ body {
   flex-direction: column;
   min-width: 0;
   background: var(--bg);
+  height: 100%;
+  overflow: hidden;
 }
 
 .placeholder {
@@ -345,13 +354,14 @@ body {
   justify-content: center;
   color: var(--text-muted);
   padding: 2rem;
+  height: 100%;
 }
 
 #chat-active {
   flex: 1;
   display: flex;
   flex-direction: column;
-  min-height: 0;
+  height: 100%;
   overflow: hidden;
 }
 
@@ -366,21 +376,10 @@ body {
 .chat-messages-wrapper {
   flex: 1;
   min-height: 0;
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-}
-
-#messages-container {
-  flex: 1;
-  min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
   padding: 1rem;
-}
-
-.send-form {
-  flex-shrink: 0;
+  background: var(--bg);
 }
 
 #messages-list {
@@ -472,6 +471,8 @@ body {
   padding: 1.5rem;
   max-width: 400px;
   width: 100%;
+  max-height: 90vh;
+  overflow-y: auto;
 }
 
 .modal-content h2 {
@@ -581,11 +582,19 @@ body {
 }
 
 @media (max-width: 640px) {
+  .layout {
+    flex-direction: column;
+  }
+  
   .sidebar {
     width: 100%;
     min-width: 0;
+    height: 40%;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
   }
-  .layout {
-    flex-direction: column;
+  
+  .chat-area {
+    height: 60%;
   }
 }

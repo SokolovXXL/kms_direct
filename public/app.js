@@ -224,8 +224,10 @@ function appendMessageToChat(message) {
 }
 
 function scrollMessagesToBottom() {
-  const container = $('messages-container');
-  if (container) container.scrollTop = container.scrollHeight;
+  const container = $('chat-messages-wrapper');
+  if (container) {
+    container.scrollTop = container.scrollHeight;
+  }
 }
 
 function updateSidebarRow(convId, lastMessageText) {
