@@ -33,6 +33,7 @@
       <header class="header">
         <span class="logo">Messenger</span>
         <span class="user-name" id="header-username"></span>
+        <button type="button" class="btn-header" id="btn-friends">Friends</button>
         <button type="button" class="btn-logout" id="btn-logout">Sign out</button>
       </header>
       <div class="layout">
@@ -50,8 +51,10 @@
             <div class="chat-header">
               <span id="chat-with-name"></span>
             </div>
-            <div id="messages-container">
-              <div id="messages-list"></div>
+            <div class="chat-messages-wrapper">
+              <div id="messages-container">
+                <div id="messages-list"></div>
+              </div>
             </div>
             <form id="send-form" class="send-form">
               <input type="text" id="message-input" placeholder="Type a message..." autocomplete="off" />
@@ -65,9 +68,40 @@
     <div id="modal-new-dm" class="modal hidden">
       <div class="modal-content">
         <h2>New message</h2>
-        <p>Choose a user to start a conversation</p>
+        <p>Choose a friend to message</p>
         <ul id="user-list" class="user-list"></ul>
         <button type="button" class="btn-close-modal" id="btn-close-modal">Cancel</button>
+      </div>
+    </div>
+
+    <div id="modal-friends" class="modal hidden">
+      <div class="modal-content">
+        <h2>Friends</h2>
+        <p class="friend-code-row">My friend code: <strong id="my-friend-code"></strong> <button type="button" class="btn-copy" id="btn-copy-code">Copy</button></p>
+        <label class="add-friend-label">Add friend by code</label>
+        <div class="add-friend-row">
+          <input type="text" id="friend-code-input" placeholder="Paste friend code" />
+          <button type="button" class="btn-primary" id="btn-add-friend">Add</button>
+        </div>
+        <p id="friends-error" class="auth-error"></p>
+        <ul id="friends-list" class="user-list"></ul>
+        <div class="modal-actions">
+          <button type="button" class="btn-danger" id="btn-delete-account">Delete account</button>
+          <button type="button" class="btn-close-modal" id="btn-close-friends">Close</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="modal-delete-confirm" class="modal hidden">
+      <div class="modal-content">
+        <h2>Delete account</h2>
+        <p>This cannot be undone. Enter your password to confirm.</p>
+        <input type="password" id="delete-password" placeholder="Your password" />
+        <p id="delete-error" class="auth-error"></p>
+        <div class="modal-actions">
+          <button type="button" class="btn-danger" id="btn-confirm-delete">Delete my account</button>
+          <button type="button" class="btn-close-modal" id="btn-cancel-delete">Cancel</button>
+        </div>
       </div>
     </div>
 

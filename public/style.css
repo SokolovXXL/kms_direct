@@ -143,9 +143,90 @@ body {
   cursor: pointer;
 }
 
+.btn-header {
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  cursor: pointer;
+}
+
+.btn-header:hover {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
 .btn-logout:hover {
   background: var(--surface-hover);
   color: var(--text);
+}
+
+.btn-copy {
+  padding: 0.25rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface-hover);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.btn-copy:hover {
+  background: var(--border);
+}
+
+.friend-code-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0 0 1rem;
+}
+
+.add-friend-label {
+  display: block;
+  font-size: 0.9rem;
+  color: var(--text-muted);
+  margin-bottom: 0.25rem;
+}
+
+.add-friend-row {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.add-friend-row input {
+  flex: 1;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+}
+
+.modal-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 1rem;
+  flex-wrap: wrap;
+}
+
+.btn-danger {
+  padding: 0.5rem 1rem;
+  border: none;
+  border-radius: 8px;
+  background: var(--danger);
+  color: white;
+  font: inherit;
+  cursor: pointer;
+}
+
+.btn-danger:hover {
+  filter: brightness(1.1);
 }
 
 .layout {
@@ -271,19 +352,35 @@ body {
   display: flex;
   flex-direction: column;
   min-height: 0;
+  overflow: hidden;
 }
 
 .chat-header {
+  flex-shrink: 0;
   padding: 1rem 1.25rem;
   background: var(--surface);
   border-bottom: 1px solid var(--border);
   font-weight: 600;
 }
 
+.chat-messages-wrapper {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
 #messages-container {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
+  overflow-x: hidden;
   padding: 1rem;
+}
+
+.send-form {
+  flex-shrink: 0;
 }
 
 #messages-list {
@@ -324,6 +421,7 @@ body {
   padding: 1rem;
   background: var(--surface);
   border-top: 1px solid var(--border);
+  flex-shrink: 0;
 }
 
 .send-form input {

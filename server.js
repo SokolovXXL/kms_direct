@@ -3,8 +3,14 @@ const express = require('express');
 const cors = require('cors');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const crypto = require('crypto');
 const { pool, initDb } = require('./db');
 const path = require('path');
+
+function generateFriendCode() {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  return crypto.randomBytes(8).reduce((s, b) => s + chars[b % chars.length], '');
+}
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -50,39 +56,99 @@ app.post('/api/register', async (req, res) => {
     return res.status(400).json({ error: 'Username (min 2 chars) and password required' });
   }
   const hash = await bcrypt.hash(password, 10);
-  try {
-    const r = await pool.query(
-      'INSERT INTO users (username, password_hash) VALUES ($1, $2) RETURNING id, username',
-      [username.trim(), hash]
-    );
-    const user = r.rows[0];
-    const token = jwt.sign({ userId: user.id }, JWT_SECRET);
-    return res.json({ user: { id: user.id, username: user.username }, token });
-  } catch (e) {
-    if (e.code === '23505') return res.status(400).json({ error: 'Username taken' });
-    throw e;
+  let friendCode = generateFriendCode();
+  for (let tries = 0; tries < 10; tries++) {
+    try {
+      const r = await pool.query(
+        'INSERT INTO users (username, password_hash, friend_code) VALUES ($1, $2, $3) RETURNING id, username, friend_code',
+        [username.trim(), hash, friendCode]
+      );
+      const user = r.rows[0];
+      const token = jwt.sign({ userId: user.id }, JWT_SECRET);
+      return res.json({ user: { id: user.id, username: user.username, friend_code: user.friend_code }, token });
+    } catch (e) {
+      if (e.code === '23505') {
+        if (e.constraint && e.constraint.includes('friend_code')) { friendCode = generateFriendCode(); continue; }
+        return res.status(400).json({ error: 'Username taken' });
+      }
+      throw e;
+    }
   }
+  return res.status(500).json({ error: 'Could not generate friend code' });
 });
 
 app.post('/api/login', async (req, res) => {
   const { username, password } = req.body || {};
   if (!username || !password) return res.status(400).json({ error: 'Username and password required' });
-  const r = await pool.query('SELECT id, username, password_hash FROM users WHERE username = $1', [username.trim()]);
+  const r = await pool.query('SELECT id, username, password_hash, friend_code FROM users WHERE username = $1', [username.trim()]);
   const user = r.rows[0];
   if (!user || !(await bcrypt.compare(password, user.password_hash))) {
     return res.status(401).json({ error: 'Invalid credentials' });
   }
+  let friendCode = user.friend_code;
+  if (!friendCode) {
+    friendCode = generateFriendCode();
+    await pool.query('UPDATE users SET friend_code = $1 WHERE id = $2', [friendCode, user.id]);
+  }
   const token = jwt.sign({ userId: user.id }, JWT_SECRET);
-  return res.json({ user: { id: user.id, username: user.username }, token });
+  return res.json({ user: { id: user.id, username: user.username, friend_code: friendCode }, token });
 });
 
-// ---- Users ----
-app.get('/api/users', authMiddleware, async (req, res) => {
-  const r = await pool.query(
-    'SELECT id, username FROM users WHERE id != $1 ORDER BY username',
-    [req.userId]
-  );
+// ---- Me (profile + friend code) ----
+app.get('/api/me', authMiddleware, async (req, res) => {
+  const r = await pool.query('SELECT id, username, friend_code FROM users WHERE id = $1', [req.userId]);
+  const user = r.rows[0];
+  if (!user) return res.status(404).json({ error: 'Not found' });
+  if (!user.friend_code) {
+    user.friend_code = generateFriendCode();
+    await pool.query('UPDATE users SET friend_code = $1 WHERE id = $2', [user.friend_code, user.id]);
+  }
+  res.json({ id: user.id, username: user.username, friend_code: user.friend_code });
+});
+
+// ---- Delete account ----
+app.delete('/api/account', authMiddleware, async (req, res) => {
+  const { password } = req.body || {};
+  const r = await pool.query('SELECT password_hash FROM users WHERE id = $1', [req.userId]);
+  const user = r.rows[0];
+  if (!user) return res.status(404).json({ error: 'Not found' });
+  if (!password || !(await bcrypt.compare(password, user.password_hash))) {
+    return res.status(401).json({ error: 'Password required to delete account' });
+  }
+  await pool.query('DELETE FROM users WHERE id = $1', [req.userId]);
+  res.json({ ok: true });
+});
+
+// ---- Friends (by friend code) ----
+app.get('/api/friends', authMiddleware, async (req, res) => {
+  const r = await pool.query(`
+    SELECT u.id, u.username, u.friend_code
+    FROM friends f
+    JOIN users u ON u.id = CASE WHEN f.user_id = $1 THEN f.friend_id ELSE f.user_id END
+    WHERE (f.user_id = $1 OR f.friend_id = $1) AND u.id != $1
+    ORDER BY u.username
+  `, [req.userId]);
   res.json(r.rows);
+});
+
+app.post('/api/friends', authMiddleware, async (req, res) => {
+  const { friendCode } = req.body || {};
+  const code = String(friendCode || '').trim().toUpperCase();
+  if (!code) return res.status(400).json({ error: 'Friend code required' });
+  const other = await pool.query('SELECT id, username FROM users WHERE UPPER(friend_code) = $1', [code]);
+  const friend = other.rows[0];
+  if (!friend) return res.status(404).json({ error: 'No user with this friend code' });
+  if (friend.id === req.userId) return res.status(400).json({ error: 'Cannot add yourself' });
+  try {
+    await pool.query(
+      'INSERT INTO friends (user_id, friend_id) VALUES ($1, $2), ($2, $1) ON CONFLICT (user_id, friend_id) DO NOTHING',
+      [req.userId, friend.id]
+    );
+  } catch (e) {
+    if (e.code === '23503') return res.status(400).json({ error: 'Invalid user' });
+    throw e;
+  }
+  res.json({ id: friend.id, username: friend.username });
 });
 
 // ---- DMs ----
@@ -111,6 +177,13 @@ app.post('/api/dms', authMiddleware, async (req, res) => {
   const { otherUserId } = req.body || {};
   if (!otherUserId || otherUserId === req.userId) {
     return res.status(400).json({ error: 'Valid other user required' });
+  }
+  const isFriend = await pool.query(
+    'SELECT 1 FROM friends WHERE (user_id = $1 AND friend_id = $2) OR (user_id = $2 AND friend_id = $1)',
+    [req.userId, otherUserId]
+  );
+  if (isFriend.rows.length === 0) {
+    return res.status(403).json({ error: 'Add this user as a friend first (using their friend code)' });
   }
   const existing = await pool.query(`
     SELECT c.id FROM conversations c
@@ -172,6 +245,19 @@ app.post('/api/dms/:id/messages', authMiddleware, async (req, res) => {
     [convId, req.userId, String(body).trim()]
   );
   const msg = ins.rows[0];
+  const sender = await pool.query('SELECT username FROM users WHERE id = $1', [req.userId]);
+  const payload = {
+    type: 'new_message',
+    conversationId: convId,
+    messageId: msg.id,
+    message: {
+      id: msg.id,
+      body: msg.body,
+      created_at: msg.created_at,
+      sender_id: msg.sender_id,
+      sender_username: sender.rows[0]?.username || '',
+        },
+  };
   for (const uid of otherUserIds) {
     await pool.query(
       'INSERT INTO notifications (user_id, conversation_id, message_id) VALUES ($1, $2, $3)',
@@ -180,7 +266,7 @@ app.post('/api/dms/:id/messages', authMiddleware, async (req, res) => {
     const clients = sseClients.get(uid);
     if (clients) {
       clients.forEach(r => {
-        try { r.write(`data: ${JSON.stringify({ type: 'new_message', conversationId: convId, messageId: msg.id })}\n\n`); } catch (_) {}
+        try { r.write(`data: ${JSON.stringify(payload)}\n\n`); } catch (_) {}
       });
     }
   }

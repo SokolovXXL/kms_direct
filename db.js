@@ -17,6 +17,17 @@ async function initDb() {
       );
     `);
     await client.query(`
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS friend_code VARCHAR(16) UNIQUE;
+    `);
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS friends (
+        user_id INT REFERENCES users(id) ON DELETE CASCADE,
+        friend_id INT REFERENCES users(id) ON DELETE CASCADE,
+        PRIMARY KEY (user_id, friend_id),
+        CHECK (user_id != friend_id)
+      );
+    `);
+    await client.query(`
       CREATE TABLE IF NOT EXISTS conversations (
         id SERIAL PRIMARY KEY,
         created_at TIMESTAMPTZ DEFAULT NOW()
@@ -49,6 +60,8 @@ async function initDb() {
     `);
     await client.query(`CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(user_id);`);
     await client.query(`CREATE INDEX IF NOT EXISTS idx_messages_conversation ON messages(conversation_id);`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_friends_user ON friends(user_id);`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_friends_friend ON friends(friend_id);`);
   } finally {
     client.release();
   }

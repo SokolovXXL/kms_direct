@@ -5,6 +5,7 @@ let currentUser = JSON.parse(localStorage.getItem('user') || 'null');
 let currentConversationId = null;
 let eventSource = null;
 let unreadByConvo = {};
+let dmListCache = [];
 
 const $ = (id) => document.getElementById(id);
 
@@ -43,6 +44,7 @@ function renderScreen() {
     hide($('auth-screen'));
     show($('main-screen'));
     $('header-username').textContent = currentUser.username;
+    if (!currentUser.friend_code) fetchMe();
     startNotificationStream();
     loadDmList();
     loadNotificationCount();
@@ -51,6 +53,33 @@ function renderScreen() {
     hide($('main-screen'));
     stopNotificationStream();
   }
+}
+
+async function fetchMe() {
+  try {
+    const me = await api('/api/me');
+    currentUser.friend_code = me.friend_code;
+    localStorage.setItem('user', JSON.stringify(currentUser));
+  } catch (_) {}
+}
+
+// ---- Sound notification ----
+let audioCtx = null;
+function playNotificationSound() {
+  try {
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    osc.frequency.value = 880;
+    osc.type = 'sine';
+    gain.gain.setValueAtTime(0.15, audioCtx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.15);
+    osc.start(audioCtx.currentTime);
+    osc.stop(audioCtx.currentTime + 0.15);
+  } catch (_) {}
 }
 
 // ---- Auth ----
@@ -107,7 +136,7 @@ $('btn-logout').addEventListener('click', () => {
   renderScreen();
 });
 
-// ---- Notifications (SSE) ----
+// ---- Notifications (SSE): incremental updates, no full reload ----
 function startNotificationStream() {
   stopNotificationStream();
   if (!token) return;
@@ -117,10 +146,18 @@ function startNotificationStream() {
     try {
       const data = JSON.parse(e.data);
       if (data.type === 'new_message') {
-        loadNotificationCount();
+        playNotificationSound();
         showNotificationToast('New message');
-        if (currentConversationId !== data.conversationId) loadDmList();
-        else loadMessages(currentConversationId);
+        const convId = data.conversationId;
+        const message = data.message;
+        unreadByConvo[convId] = (unreadByConvo[convId] || 0) + 1;
+        updateBadgeFromCache();
+        if (currentConversationId === convId && message) {
+          appendMessageToChat(message);
+          scrollMessagesToBottom();
+        } else {
+          updateSidebarRow(convId, message ? message.body : null);
+        }
       }
     } catch (_) {}
   };
@@ -141,10 +178,23 @@ function showNotificationToast(text) {
   toast._t = setTimeout(() => hide(toast), 3000);
 }
 
+function updateBadgeFromCache() {
+  const total = Object.values(unreadByConvo).reduce((a, b) => a + b, 0);
+  const badge = $('notification-badge');
+  if (total > 0) {
+    badge.textContent = total > 99 ? '99+' : total;
+    show(badge);
+  } else {
+    hide(badge);
+  }
+}
+
 async function loadNotificationCount() {
   if (!token) return;
   try {
     const data = await api('/api/notifications/count');
+    const byConvo = await api('/api/notifications');
+    unreadByConvo = byConvo;
     const badge = $('notification-badge');
     if (data.count > 0) {
       badge.textContent = data.count > 99 ? '99+' : data.count;
@@ -155,15 +205,58 @@ async function loadNotificationCount() {
   } catch (_) {}
 }
 
+function escapeHtml(s) {
+  if (s == null) return '';
+  const div = document.createElement('div');
+  div.textContent = s;
+  return div.innerHTML;
+}
+
+function appendMessageToChat(message) {
+  const list = $('messages-list');
+  const div = document.createElement('div');
+  div.className = 'message ' + (message.sender_id === currentUser.id ? 'mine' : 'theirs');
+  div.innerHTML = `
+    <div>${escapeHtml(message.body)}</div>
+    <div class="message-meta">${new Date(message.created_at).toLocaleString()}</div>
+  `;
+  list.appendChild(div);
+}
+
+function scrollMessagesToBottom() {
+  const container = $('messages-container');
+  if (container) container.scrollTop = container.scrollHeight;
+}
+
+function updateSidebarRow(convId, lastMessageText) {
+  const btn = document.querySelector(`.dm-item[data-id="${convId}"]`);
+  if (!btn) return;
+  const preview = btn.querySelector('.dm-preview');
+  if (preview) preview.textContent = lastMessageText || 'No messages yet';
+  let unreadEl = btn.querySelector('.dm-unread');
+  const unread = unreadByConvo[convId] || 0;
+  if (unread > 0) {
+    if (!unreadEl) {
+      unreadEl = document.createElement('span');
+      unreadEl.className = 'dm-unread';
+      btn.appendChild(unreadEl);
+    }
+    unreadEl.textContent = unread > 99 ? '99+' : unread;
+  } else if (unreadEl) {
+    unreadEl.remove();
+  }
+}
+
 // ---- DMs ----
 async function loadDmList() {
   const list = $('dm-list');
   list.innerHTML = '';
   try {
-    const [dms, notifByConvo] = await Promise.all([api('/api/dms'), api('/api/notifications')]);
+    const [dms, notifByConvoResp] = await Promise.all([api('/api/dms'), api('/api/notifications')]);
+    unreadByConvo = notifByConvoResp;
+    dmListCache = dms;
     for (const dm of dms) {
-      const unread = notifByConvo[dm.id] || 0;
-      unreadByConvo[dm.id] = unread;
+      const unread = notifByConvoResp[dm.id] || 0;
       const item = document.createElement('button');
       item.type = 'button';
       item.className = 'dm-item' + (dm.id === currentConversationId ? ' active' : '');
@@ -178,17 +271,10 @@ async function loadDmList() {
       item.addEventListener('click', () => selectConversation(dm.id));
       list.appendChild(item);
     }
-    loadNotificationCount();
+    updateBadgeFromCache();
   } catch (_) {
     list.innerHTML = '<p style="padding:1rem;color:var(--text-muted)">Could not load conversations</p>';
   }
-}
-
-function escapeHtml(s) {
-  if (s == null) return '';
-  const div = document.createElement('div');
-  div.textContent = s;
-  return div.innerHTML;
 }
 
 async function selectConversation(convId) {
@@ -197,13 +283,19 @@ async function selectConversation(convId) {
     await api('/api/notifications/read', { method: 'POST', body: JSON.stringify({ conversationId: convId }) });
   } catch (_) {}
   unreadByConvo[convId] = 0;
-  loadNotificationCount();
-  loadDmList();
-  const dms = await api('/api/dms').catch(() => []);
-  const dm = dms.find(d => d.id === convId);
+  updateBadgeFromCache();
+  updateSidebarRow(convId, null);
+  let dm = dmListCache.find(d => d.id === convId);
+  if (!dm) {
+    await loadDmList();
+    dm = dmListCache.find(d => d.id === convId);
+  }
   hide($('chat-placeholder'));
   show($('chat-active'));
   $('chat-with-name').textContent = dm ? dm.otherUser.username : '…';
+  document.querySelectorAll('.dm-item').forEach(el => {
+    el.classList.toggle('active', parseInt(el.dataset.id, 10) === convId);
+  });
   loadMessages(convId);
 }
 
@@ -221,7 +313,7 @@ async function loadMessages(convId) {
       `;
       list.appendChild(div);
     }
-    list.parentElement.scrollTop = list.parentElement.scrollHeight;
+    scrollMessagesToBottom();
   } catch (_) {
     list.innerHTML = '<p style="color:var(--text-muted)">Could not load messages</p>';
   }
@@ -235,26 +327,29 @@ $('send-form').addEventListener('submit', async (e) => {
   if (!body) return;
   input.value = '';
   try {
-    await api(`/api/dms/${currentConversationId}/messages`, {
+    const msg = await api(`/api/dms/${currentConversationId}/messages`, {
       method: 'POST',
       body: JSON.stringify({ body }),
     });
-    loadMessages(currentConversationId);
-    loadDmList();
+    appendMessageToChat(msg);
+    scrollMessagesToBottom();
+    updateSidebarRow(currentConversationId, body);
+    const dm = dmListCache.find(d => d.id === currentConversationId);
+    if (dm) dm.lastMessage = body;
   } catch (err) {
     input.value = body;
     showNotificationToast(err.message || 'Failed to send');
   }
 });
 
-// ---- New DM modal ----
+// ---- New DM modal (friends only) ----
 $('btn-new-dm').addEventListener('click', async () => {
   show($('modal-new-dm'));
   const ul = $('user-list');
   ul.innerHTML = '';
   try {
-    const users = await api('/api/users');
-    for (const u of users) {
+    const friends = await api('/api/friends');
+    for (const u of friends) {
       const li = document.createElement('li');
       const btn = document.createElement('button');
       btn.type = 'button';
@@ -264,13 +359,16 @@ $('btn-new-dm').addEventListener('click', async () => {
           const data = await api('/api/dms', { method: 'POST', body: JSON.stringify({ otherUserId: u.id }) });
           hide($('modal-new-dm'));
           selectConversation(data.conversationId);
-        } catch (_) {}
+        } catch (err) {
+          showNotificationToast(err.message || 'Failed');
+        }
       });
       li.appendChild(btn);
       ul.appendChild(li);
     }
+    if (friends.length === 0) ul.innerHTML = '<li style="color:var(--text-muted)">Add friends first (Friends → paste their code)</li>';
   } catch (_) {
-    ul.innerHTML = '<li style="color:var(--text-muted)">Could not load users</li>';
+    ul.innerHTML = '<li style="color:var(--text-muted)">Could not load friends</li>';
   }
 });
 
@@ -280,6 +378,102 @@ $('modal-new-dm').addEventListener('click', (e) => {
   if (e.target.id === 'modal-new-dm') hide($('modal-new-dm'));
 });
 
-// Unread per-conversation: we don't have an API for it; use count and mark read when opening. Badge is global.
-// Init
+// ---- Friends modal ----
+$('btn-friends').addEventListener('click', async () => {
+  show($('modal-friends'));
+  $('friends-error').textContent = '';
+  $('my-friend-code').textContent = currentUser.friend_code || '…';
+  $('friend-code-input').value = '';
+  const ul = $('friends-list');
+  ul.innerHTML = '';
+  try {
+    const friends = await api('/api/friends');
+    for (const u of friends) {
+      const li = document.createElement('li');
+      li.textContent = u.username;
+      ul.appendChild(li);
+    }
+    if (friends.length === 0) ul.innerHTML = '<li style="color:var(--text-muted)">No friends yet. Share your code or add someone else\'s.</li>';
+  } catch (_) {
+    ul.innerHTML = '<li style="color:var(--text-muted)">Could not load</li>';
+  }
+});
+
+$('btn-copy-code').addEventListener('click', () => {
+  const code = currentUser.friend_code;
+  if (code && navigator.clipboard) {
+    navigator.clipboard.writeText(code);
+    showNotificationToast('Copied!');
+  }
+});
+
+$('btn-add-friend').addEventListener('click', async () => {
+  const code = $('friend-code-input').value.trim();
+  const errEl = $('friends-error');
+  errEl.textContent = '';
+  if (!code) {
+    errEl.textContent = 'Enter a friend code';
+    return;
+  }
+  try {
+    await api('/api/friends', { method: 'POST', body: JSON.stringify({ friendCode: code }) });
+    $('friend-code-input').value = '';
+    errEl.textContent = '';
+    showNotificationToast('Friend added');
+    const friends = await api('/api/friends');
+    const ul = $('friends-list');
+    ul.innerHTML = '';
+    for (const u of friends) {
+      const li = document.createElement('li');
+      li.textContent = u.username;
+      ul.appendChild(li);
+    }
+  } catch (err) {
+    errEl.textContent = err.message || 'Failed';
+  }
+});
+
+$('btn-close-friends').addEventListener('click', () => hide($('modal-friends')));
+$('modal-friends').addEventListener('click', (e) => {
+  if (e.target.id === 'modal-friends') hide($('modal-friends'));
+});
+
+// ---- Delete account ----
+$('btn-delete-account').addEventListener('click', () => {
+  hide($('modal-friends'));
+  show($('modal-delete-confirm'));
+  $('delete-password').value = '';
+  $('delete-error').textContent = '';
+});
+
+$('btn-cancel-delete').addEventListener('click', () => hide($('modal-delete-confirm')));
+$('modal-delete-confirm').addEventListener('click', (e) => {
+  if (e.target.id === 'modal-delete-confirm') hide($('modal-delete-confirm'));
+});
+
+$('btn-confirm-delete').addEventListener('click', async () => {
+  const password = $('delete-password').value;
+  const errEl = $('delete-error');
+  errEl.textContent = '';
+  if (!password) {
+    errEl.textContent = 'Enter your password';
+    return;
+  }
+  try {
+    await api('/api/account', {
+      method: 'DELETE',
+      body: JSON.stringify({ password }),
+    });
+    hide($('modal-delete-confirm'));
+    token = null;
+    currentUser = null;
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
+    currentConversationId = null;
+    renderScreen();
+  } catch (err) {
+    errEl.textContent = err.message || 'Failed';
+  }
+});
+
 renderScreen();
