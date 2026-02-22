@@ -1,6 +1,5 @@
 const API = window.location.origin;
 
-let token = localStorage.getItem('token');
 let currentUser = JSON.parse(localStorage.getItem('user') || 'null');
 let currentConversationId = null;
 let eventSource = null;
@@ -20,37 +19,61 @@ function hide(el) {
   if (el) el.classList.add('hidden');
 }
 
-function authHeaders() {
-  return { Authorization: `Bearer ${token}` };
-}
-
 function showAuthError(msg) {
   const el = $('auth-error');
   if (el) el.textContent = msg || '';
 }
 
+// API функция с автоматической отправкой cookies
 async function api(path, options = {}) {
   const res = await fetch(API + path, {
+    credentials: 'include', // Критически важно для отправки cookies
     ...options,
     headers: {
       'Content-Type': 'application/json',
-      ...authHeaders(),
       ...(options.headers || {}),
     },
   });
-  const data = res.ok ? await res.json().catch(() => ({})) : await res.json().catch(() => ({}));
+
+  const data = await res.json().catch(() => ({}));
+
   if (!res.ok) throw new Error(data.error || res.statusText);
   return data;
 }
 
+// Попытка автоматического входа при загрузке
+async function tryAutoLogin() {
+  // Если есть сохраненный пользователь, показываем интерфейс сразу
+  if (currentUser) {
+    renderScreen();
+  }
+
+  try {
+    // Пытаемся получить актуальные данные пользователя через cookie
+    const me = await api('/api/me');
+    currentUser = me;
+    localStorage.setItem('user', JSON.stringify(me));
+    renderScreen();
+  } catch (err) {
+    // Не авторизован - очищаем сохраненные данные
+    currentUser = null;
+    localStorage.removeItem('user');
+    renderScreen();
+  }
+}
+
 function renderScreen() {
-  console.log('renderScreen called', { token, currentUser });
-  if (token && currentUser) {
+  console.log('renderScreen called', { currentUser });
+  
+  if (currentUser) {
     hide($('auth-screen'));
     show($('main-screen'));
+    
     const headerUsername = $('header-username');
     if (headerUsername) headerUsername.textContent = currentUser.username;
+    
     if (!currentUser.friend_code) fetchMe();
+    
     startNotificationStream();
     loadDmList();
     loadNotificationCount();
@@ -137,7 +160,6 @@ async function fetchMe() {
 }
 
 // ---- Sound notification ----
-// Создаём аудио объект для уведомлений
 const notificationAudio = new Audio('/notification.mp3');
 
 function playNotificationSound(conversationId) {
@@ -156,6 +178,7 @@ if (loginForm) {
   loginForm.addEventListener('submit', async (e) => {
     e.preventDefault();
     showAuthError('');
+    
     try {
       const data = await api('/api/login', {
         method: 'POST',
@@ -164,11 +187,11 @@ if (loginForm) {
           password: $('login-password').value,
         }),
       });
-      token = data.token;
+      
       currentUser = data.user;
-      localStorage.setItem('token', token);
       localStorage.setItem('user', JSON.stringify(currentUser));
       $('login-password').value = '';
+      
       renderScreen();
     } catch (err) {
       showAuthError(err.message);
@@ -181,6 +204,7 @@ if (registerForm) {
   registerForm.addEventListener('submit', async (e) => {
     e.preventDefault();
     showAuthError('');
+    
     try {
       const data = await api('/api/register', {
         method: 'POST',
@@ -189,11 +213,11 @@ if (registerForm) {
           password: $('register-password').value,
         }),
       });
-      token = data.token;
+      
       currentUser = data.user;
-      localStorage.setItem('token', token);
       localStorage.setItem('user', JSON.stringify(currentUser));
       $('register-password').value = '';
+      
       renderScreen();
     } catch (err) {
       showAuthError(err.message);
@@ -203,10 +227,12 @@ if (registerForm) {
 
 const logoutBtn = $('btn-logout');
 if (logoutBtn) {
-  logoutBtn.addEventListener('click', () => {
-    token = null;
+  logoutBtn.addEventListener('click', async () => {
+    try {
+      await api('/api/logout', { method: 'POST' });
+    } catch (_) {}
+    
     currentUser = null;
-    localStorage.removeItem('token');
     localStorage.removeItem('user');
     currentConversationId = null;
     renderScreen();
@@ -216,9 +242,13 @@ if (logoutBtn) {
 // ---- Notifications (SSE) ----
 function startNotificationStream() {
   stopNotificationStream();
-  if (!token) return;
-  const url = `${API}/api/notifications/stream?token=${encodeURIComponent(token)}`;
-  eventSource = new EventSource(url);
+  if (!currentUser) return;
+  
+  // SSE не поддерживает credentials автоматически, поэтому используем токен в URL
+  // Но можно также положить токен в cookie - он отправится автоматически
+  const url = `${API}/api/notifications/stream`;
+  eventSource = new EventSource(url, { withCredentials: true });
+  
   eventSource.onmessage = (e) => {
     try {
       const data = JSON.parse(e.data);
@@ -227,7 +257,6 @@ function startNotificationStream() {
         const message = data.message;
         unreadByConvo[convId] = (unreadByConvo[convId] || 0) + 1;
         
-        // Играем звук для нового сообщения
         playNotificationSound(convId);
         
         if (currentConversationId === convId && message) {
@@ -237,6 +266,10 @@ function startNotificationStream() {
         }
       }
     } catch (_) {}
+  };
+  
+  eventSource.onerror = () => {
+    // Автоматически переподключается
   };
 }
 
@@ -253,7 +286,8 @@ function updateBadgeFromCache() {
 }
 
 async function loadNotificationCount() {
-  if (!token) return;
+  if (!currentUser) return;
+  
   try {
     await api('/api/notifications/count');
     const byConvo = await api('/api/notifications');
@@ -269,7 +303,6 @@ function escapeHtml(s) {
   return div.innerHTML;
 }
 
-// Функция добавления сообщения с авто-прокруткой
 function appendMessageToChat(message) {
   const list = $('messages-list');
   if (!list) return;
@@ -311,10 +344,13 @@ function scrollMessagesToBottom() {
 function updateSidebarRow(convId, lastMessageText) {
   const btn = document.querySelector(`.dm-item[data-id="${convId}"]`);
   if (!btn) return;
+  
   const preview = btn.querySelector('.dm-preview');
   if (preview) preview.textContent = lastMessageText || 'No messages yet';
+  
   let unreadEl = btn.querySelector('.dm-unread');
   const unread = unreadByConvo[convId] || 0;
+  
   if (unread > 0) {
     if (!unreadEl) {
       unreadEl = document.createElement('span');
@@ -333,8 +369,13 @@ async function loadDmList() {
   if (!list) return;
   
   list.innerHTML = '';
+  
   try {
-    const [dms, notifByConvoResp] = await Promise.all([api('/api/dms'), api('/api/notifications')]);
+    const [dms, notifByConvoResp] = await Promise.all([
+      api('/api/dms'), 
+      api('/api/notifications')
+    ]);
+    
     unreadByConvo = notifByConvoResp;
     dmListCache = dms;
     
@@ -374,9 +415,14 @@ async function loadDmList() {
 
 async function selectConversation(convId) {
   currentConversationId = convId;
+  
   try {
-    await api('/api/notifications/read', { method: 'POST', body: JSON.stringify({ conversationId: convId }) });
+    await api('/api/notifications/read', { 
+      method: 'POST', 
+      body: JSON.stringify({ conversationId: convId }) 
+    });
   } catch (_) {}
+  
   unreadByConvo[convId] = 0;
   updateBadgeFromCache();
   updateSidebarRow(convId, null);
@@ -412,8 +458,10 @@ async function loadMessages(convId) {
   if (!list) return;
   
   list.innerHTML = '';
+  
   try {
     const messages = await api(`/api/dms/${convId}/messages`);
+    
     for (const m of messages) {
       const div = document.createElement('div');
       div.className = 'message ' + (m.sender_id === currentUser.id ? 'mine' : 'theirs');
@@ -423,6 +471,7 @@ async function loadMessages(convId) {
       `;
       list.appendChild(div);
     }
+    
     requestAnimationFrame(() => {
       scrollMessagesToBottom();
     });
@@ -431,7 +480,7 @@ async function loadMessages(convId) {
   }
 }
 
-// ИСПРАВЛЕННЫЙ обработчик отправки сообщений
+// Отправка сообщений
 const sendForm = $('send-form');
 if (sendForm) {
   sendForm.addEventListener('submit', async (e) => {
@@ -453,13 +502,10 @@ if (sendForm) {
 
       appendMessageToChat(msg);
 
-      // Очищаем input
+      // Очищаем input и возвращаем фокус
       input.value = '';
-
-      // ВАЖНО - возвращаем фокус обратно в input
       input.focus();
 
-      // Прокручиваем вниз
       requestAnimationFrame(() => {
         scrollMessagesToBottom();
       });
@@ -485,8 +531,10 @@ if (btnNewDm) {
     if (!ul) return;
     
     ul.innerHTML = '';
+    
     try {
       const friends = await api('/api/friends');
+      
       for (const u of friends) {
         const li = document.createElement('li');
         const btn = document.createElement('button');
@@ -494,7 +542,10 @@ if (btnNewDm) {
         btn.textContent = u.username;
         btn.addEventListener('click', async () => {
           try {
-            const data = await api('/api/dms', { method: 'POST', body: JSON.stringify({ otherUserId: u.id }) });
+            const data = await api('/api/dms', { 
+              method: 'POST', 
+              body: JSON.stringify({ otherUserId: u.id }) 
+            });
             hide($('modal-new-dm'));
             selectConversation(data.conversationId);
             if (isMobile()) {
@@ -507,7 +558,10 @@ if (btnNewDm) {
         li.appendChild(btn);
         ul.appendChild(li);
       }
-      if (friends.length === 0) ul.innerHTML = '<li style="color:var(--text-muted)">Add friends first (Friends → paste their code)</li>';
+      
+      if (friends.length === 0) {
+        ul.innerHTML = '<li style="color:var(--text-muted)">Add friends first (Friends → paste their code)</li>';
+      }
     } catch (_) {
       ul.innerHTML = '<li style="color:var(--text-muted)">Could not load friends</li>';
     }
@@ -543,13 +597,16 @@ if (btnFriends) {
     if (!friendsList) return;
     
     friendsList.innerHTML = '';
+    
     try {
       const friends = await api('/api/friends');
+      
       for (const u of friends) {
         const li = document.createElement('li');
         li.textContent = u.username;
         friendsList.appendChild(li);
       }
+      
       if (friends.length === 0) {
         const li = document.createElement('li');
         li.textContent = 'No friends yet. Share your code or add someone else\'s.';
@@ -586,15 +643,22 @@ if (btnAddFriend) {
     if (!errEl) return;
     
     errEl.textContent = '';
+    
     if (!code) {
       errEl.textContent = 'Enter a friend code';
       return;
     }
+    
     try {
-      await api('/api/friends', { method: 'POST', body: JSON.stringify({ friendCode: code }) });
+      await api('/api/friends', { 
+        method: 'POST', 
+        body: JSON.stringify({ friendCode: code }) 
+      });
+      
       if ($('friend-code-input')) $('friend-code-input').value = '';
       errEl.textContent = '';
       alert('Friend added');
+      
       const friends = await api('/api/friends');
       const ul = $('friends-list');
       if (ul) {
@@ -656,19 +720,21 @@ if (btnConfirmDelete) {
     if (!errEl) return;
     
     errEl.textContent = '';
+    
     if (!password) {
       errEl.textContent = 'Enter your password';
       return;
     }
+    
     try {
       await api('/api/account', {
         method: 'DELETE',
         body: JSON.stringify({ password }),
       });
+      
       hide($('modal-delete-confirm'));
-      token = null;
+      
       currentUser = null;
-      localStorage.removeItem('token');
       localStorage.removeItem('user');
       currentConversationId = null;
       renderScreen();
@@ -727,5 +793,6 @@ document.addEventListener('DOMContentLoaded', () => {
     header.insertBefore(btn, header.firstChild);
   }
   
-  renderScreen();
+  // Пытаемся автоматически войти
+  tryAutoLogin();
 });
