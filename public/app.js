@@ -86,26 +86,6 @@ function showChat() {
   layout.classList.add('chat-open');
 }
 
-// Добавляем кнопку "Назад" в шапку чата
-function addBackButtonToChat() {
-  const header = $('chat-header');
-  if (!header) return;
-
-  // Проверяем, не добавлена ли уже кнопка
-  if ($('btn-back-mobile')) return;
-
-  const btn = document.createElement('button');
-  btn.id = 'btn-back-mobile';
-  btn.innerHTML = '←';
-  btn.setAttribute('aria-label', 'Back');
-
-  btn.onclick = () => {
-    showSidebar();
-  };
-
-  header.prepend(btn);
-}
-
 // Создаём кнопку "Прокрутить вниз"
 function createScrollDownButton() {
   if (document.querySelector('.btn-scroll-down')) return document.querySelector('.btn-scroll-down');
@@ -254,20 +234,8 @@ function startNotificationStream() {
         unreadByConvo[convId] = (unreadByConvo[convId] || 0) + 1;
         
         if (currentConversationId === convId && message) {
+          // Просто добавляем сообщение, прокрутка внутри appendMessageToChat
           appendMessageToChat(message);
-          
-          requestAnimationFrame(() => {
-            const container = $('chat-messages-wrapper');
-            if (!container) return;
-
-            const isNearBottom = container.scrollHeight - container.scrollTop - container.clientHeight <= 5;
-
-            if (isNearBottom) {
-              scrollMessagesToBottom();
-            } else {
-              if (scrollDownBtn) scrollDownBtn.classList.remove('hidden');
-            }
-          });
         } else {
           updateSidebarRow(convId, message ? message.body : null);
         }
@@ -305,10 +273,16 @@ function escapeHtml(s) {
   return div.innerHTML;
 }
 
+// ИСПРАВЛЕННАЯ функция добавления сообщения с авто-прокруткой
 function appendMessageToChat(message) {
   const list = $('messages-list');
   if (!list) return;
+
+  const container = $('chat-messages-wrapper');
   
+  // Проверяем, был ли пользователь внизу до добавления сообщения
+  const wasAtBottom = container.scrollHeight - container.scrollTop - container.clientHeight <= 20;
+
   const div = document.createElement('div');
   div.className = 'message ' + (message.sender_id === currentUser.id ? 'mine' : 'theirs');
   div.innerHTML = `
@@ -316,6 +290,16 @@ function appendMessageToChat(message) {
     <div class="message-meta">${new Date(message.created_at).toLocaleString()}</div>
   `;
   list.appendChild(div);
+
+  // Прокручиваем вниз ТОЛЬКО если пользователь был внизу
+  requestAnimationFrame(() => {
+    if (wasAtBottom) {
+      container.scrollTop = container.scrollHeight;
+      if (scrollDownBtn) scrollDownBtn.classList.add('hidden');
+    } else {
+      if (scrollDownBtn) scrollDownBtn.classList.remove('hidden');
+    }
+  });
 }
 
 function scrollMessagesToBottom() {
@@ -468,9 +452,6 @@ if (sendForm) {
         body: JSON.stringify({ body }),
       });
       appendMessageToChat(msg);
-      requestAnimationFrame(() => {
-        scrollMessagesToBottom();
-      });
       updateSidebarRow(currentConversationId, body);
       const dm = dmListCache.find(d => d.id === currentConversationId);
       if (dm) dm.lastMessage = body;
@@ -699,22 +680,36 @@ window.addEventListener('resize', () => {
   }
 });
 
-// Обработка фокуса на input (для клавиатуры)
-const messageInput = $('message-input');
-if (messageInput) {
-  messageInput.addEventListener('focus', () => {
-    setTimeout(() => {
-      scrollMessagesToBottom();
-    }, 300);
-  });
-}
-
 // Инициализация после загрузки DOM
 document.addEventListener('DOMContentLoaded', () => {
   console.log('DOM loaded, initializing app');
   
   scrollDownBtn = createScrollDownButton();
   setupScrollListener();
-  addBackButtonToChat();
+  
+  // Добавляем кнопку "Назад" на мобильных
+  const header = $('chat-header');
+  if (header && isMobile() && !$('mobile-back-btn')) {
+    const btn = document.createElement('button');
+    btn.innerHTML = '←';
+    btn.id = 'mobile-back-btn';
+    btn.setAttribute('aria-label', 'Back');
+    
+    btn.style.fontSize = '26px';
+    btn.style.marginRight = '12px';
+    btn.style.cursor = 'pointer';
+    btn.style.background = 'none';
+    btn.style.border = 'none';
+    btn.style.color = 'var(--text)';
+    btn.style.zIndex = '999';
+    btn.style.padding = '0 5px';
+    
+    btn.onclick = () => {
+      showSidebar();
+    };
+    
+    header.insertBefore(btn, header.firstChild);
+  }
+  
   renderScreen();
 });

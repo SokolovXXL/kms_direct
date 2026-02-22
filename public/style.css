@@ -820,3 +820,30 @@ body {
 ::-webkit-scrollbar-thumb:hover {
   background: var(--text-muted);
 }
+/* Фикс для заголовка чата */
+#chat-header {
+  display: flex;
+  align-items: center;
+  position: relative;
+  z-index: 15;
+}
+
+/* Стили для мобильной кнопки назад */
+#mobile-back-btn {
+  display: none;
+}
+
+@media (max-width: 768px) {
+  #mobile-back-btn {
+    display: inline-block;
+  }
+  
+  /* Увеличиваем область нажатия */
+  #mobile-back-btn {
+    min-width: 44px;
+    min-height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+}
