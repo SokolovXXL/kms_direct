@@ -66,29 +66,33 @@ function renderScreen() {
   }
 }
 
-// Функции для мобильной навигации
+// Функции для мобильной навигации - ИСПРАВЛЕНЫ
 function showSidebar() {
   const sidebar = $('sidebar');
   const chatArea = $('chat-area');
+
   if (!sidebar || !chatArea) return;
-  
-  if (isMobile()) {
-    sidebar.classList.remove('mobile-hidden');
-    chatArea.classList.remove('mobile-visible');
-    chatArea.classList.add('mobile-hidden');
-  }
+
+  sidebar.style.display = 'flex';
+  chatArea.style.display = 'none';
+
+  sidebar.classList.remove('mobile-hidden');
+  chatArea.classList.remove('mobile-visible');
+  chatArea.classList.add('mobile-hidden');
 }
 
 function showChat() {
   const sidebar = $('sidebar');
   const chatArea = $('chat-area');
+
   if (!sidebar || !chatArea) return;
-  
-  if (isMobile()) {
-    sidebar.classList.add('mobile-hidden');
-    chatArea.classList.remove('mobile-hidden');
-    chatArea.classList.add('mobile-visible');
-  }
+
+  sidebar.style.display = 'none';
+  chatArea.style.display = 'flex';
+
+  sidebar.classList.add('mobile-hidden');
+  chatArea.classList.remove('mobile-hidden');
+  chatArea.classList.add('mobile-visible');
 }
 
 // Добавляем кнопку "Назад" в шапку чата
@@ -141,14 +145,14 @@ function createScrollDownButton() {
 // Инициализируем кнопку после загрузки DOM
 let scrollDownBtn = null;
 
-// Отслеживаем скролл - ИСПРАВЛЕНО
+// Отслеживаем скролл
 function setupScrollListener() {
   const container = $('chat-messages-wrapper');
   if (!container) return;
   
   container.addEventListener('scroll', () => {
     // Используем порог в 5px для более точного определения
-    const bottom = container.scrollHeight - container.scrollTop - container.clientHeight <= 500;
+    const bottom = container.scrollHeight - container.scrollTop - container.clientHeight <= 5;
     isAtBottom = bottom;
     
     if (bottom) {
@@ -253,7 +257,7 @@ if (logoutBtn) {
   });
 }
 
-// ---- Notifications (SSE) - ИСПРАВЛЕНО ----
+// ---- Notifications (SSE) ----
 function startNotificationStream() {
   stopNotificationStream();
   if (!token) return;
@@ -277,10 +281,10 @@ function startNotificationStream() {
             if (!container) return;
 
             // Проверяем с минимальным порогом в 5px
-            const isNearBottom = container.scrollHeight - container.scrollTop - container.clientHeight <= 500;
+            const isNearBottom = container.scrollHeight - container.scrollTop - container.clientHeight <= 5;
 
             if (isNearBottom) {
-              scrollMessagesToBottom(); // теперь без smooth
+              scrollMessagesToBottom();
             } else {
               if (scrollDownBtn) scrollDownBtn.classList.remove('hidden');
             }
@@ -339,7 +343,6 @@ function appendMessageToChat(message) {
   list.appendChild(div);
 }
 
-// ИСПРАВЛЕНО: убрал smooth-scroll
 function scrollMessagesToBottom() {
   const container = $('chat-messages-wrapper');
   if (!container) return;
@@ -398,7 +401,13 @@ async function loadDmList() {
         </div>
         ${unread > 0 ? `<span class="dm-unread">${unread > 99 ? '99+' : unread}</span>` : ''}
       `;
-      item.addEventListener('click', () => selectConversation(dm.id));
+      // ИСПРАВЛЕНО: мобильная навигация сразу при клике
+      item.addEventListener('click', () => {
+        if (isMobile()) {
+          showChat(); // переключаем на чат мгновенно
+        }
+        selectConversation(dm.id);
+      });
       list.appendChild(item);
     }
     updateBadgeFromCache();
@@ -435,18 +444,14 @@ async function selectConversation(convId) {
   });
   loadMessages(convId);
   
-  if (isMobile()) {
-    showChat();
-  }
+  // УДАЛЕНО: вызов showChat() отсюда - теперь он вызывается сразу при клике
   
-  // Прокрутка при выборе чата
   setTimeout(() => {
     isAtBottom = true;
     scrollMessagesToBottom();
   }, 200);
 }
 
-// ИСПРАВЛЕНО: loadMessages с requestAnimationFrame
 async function loadMessages(convId) {
   const list = $('messages-list');
   if (!list) return;
@@ -725,6 +730,8 @@ window.addEventListener('resize', () => {
     const sidebar = $('sidebar');
     const chatArea = $('chat-area');
     if (sidebar && chatArea) {
+      sidebar.style.display = 'flex';
+      chatArea.style.display = 'flex';
       sidebar.classList.remove('mobile-hidden');
       chatArea.classList.remove('mobile-hidden');
       chatArea.classList.remove('mobile-visible');
@@ -732,6 +739,8 @@ window.addEventListener('resize', () => {
   } else {
     if (!currentConversationId) {
       showSidebar();
+    } else {
+      showChat();
     }
   }
 });
