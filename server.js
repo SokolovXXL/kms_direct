@@ -659,6 +659,89 @@ app.post('/api/notifications/read', authMiddleware, async (req, res) => {
   
   res.json({ ok: true });
 });
+// ---- Backward compatibility for old frontend ----
+// Keep old DM messages routes for frontend compatibility
+app.get('/api/dms/:id/messages', authMiddleware, async (req, res) => {
+  const convId = parseInt(req.params.id, 10);
+  
+  const part = await pool.query(
+    'SELECT 1 FROM conversation_participants WHERE conversation_id = $1 AND user_id = $2',
+    [convId, req.userId]
+  );
+  
+  if (part.rows.length === 0) return res.status(404).json({ error: 'Conversation not found' });
+  
+  const r = await pool.query(`
+    SELECT m.id, m.body, m.created_at, m.sender_id, u.username AS sender_username
+    FROM messages m
+    JOIN users u ON u.id = m.sender_id
+    WHERE m.conversation_id = $1
+    ORDER BY m.created_at ASC
+  `, [convId]);
+  
+  res.json(r.rows);
+});
+
+app.post('/api/dms/:id/messages', authMiddleware, async (req, res) => {
+  const convId = parseInt(req.params.id, 10);
+  const { body } = req.body || {};
+  
+  if (!body || !String(body).trim()) return res.status(400).json({ error: 'Message body required' });
+  
+  const part = await pool.query(
+    'SELECT user_id FROM conversation_participants WHERE conversation_id = $1',
+    [convId]
+  );
+  
+  if (part.rows.length === 0) return res.status(404).json({ error: 'Conversation not found' });
+  
+  const isMember = part.rows.some(p => p.user_id === req.userId);
+  if (!isMember) return res.status(403).json({ error: 'Not in this conversation' });
+  
+  const otherUserIds = part.rows.filter(p => p.user_id !== req.userId).map(p => p.user_id);
+  
+  const ins = await pool.query(
+    'INSERT INTO messages (conversation_id, sender_id, body) VALUES ($1, $2, $3) RETURNING id, body, created_at, sender_id',
+    [convId, req.userId, String(body).trim()]
+  );
+  
+  const msg = ins.rows[0];
+  const sender = await pool.query('SELECT username FROM users WHERE id = $1', [req.userId]);
+  
+  const payload = {
+    type: 'new_message',
+    conversationId: convId,
+    messageId: msg.id,
+    message: {
+      id: msg.id,
+      body: msg.body,
+      created_at: msg.created_at,
+      sender_id: msg.sender_id,
+      sender_username: sender.rows[0]?.username || '',
+    },
+  };
+  
+  for (const uid of otherUserIds) {
+    await pool.query(
+      'INSERT INTO notifications (user_id, conversation_id, message_id) VALUES ($1, $2, $3)',
+      [uid, convId, msg.id]
+    );
+    
+    const clients = sseClients.get(uid);
+    if (clients) {
+      clients.forEach(r => {
+        try { r.write(`data: ${JSON.stringify(payload)}\n\n`); } catch (_) {}
+      });
+    }
+  }
+  
+  res.status(201).json({ 
+    id: msg.id, 
+    body: msg.body, 
+    created_at: msg.created_at, 
+    sender_id: msg.sender_id 
+  });
+});
 
 app.get('*', (req, res) => {
   if (req.path.startsWith('/api/')) return res.status(404).json({ error: 'Not found' });
