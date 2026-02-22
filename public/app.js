@@ -796,3 +796,387 @@ document.addEventListener('DOMContentLoaded', () => {
   // Пытаемся автоматически войти
   tryAutoLogin();
 });
+// ---- GROUPS ----
+const btnGroups = $('btn-groups');
+const btnCreateGroupBtn = $('btn-create-group-btn');
+const modalCreateGroup = $('modal-create-group');
+const modalGroupInfo = $('modal-group-info');
+const modalAddMember = $('modal-add-member');
+
+// Open groups list modal
+if (btnGroups) {
+  btnGroups.addEventListener('click', async () => {
+    show($('modal-groups-list'));
+    await loadGroupsList();
+  });
+}
+
+// Create group button in sidebar
+if (btnCreateGroupBtn) {
+  btnCreateGroupBtn.addEventListener('click', async () => {
+    show(modalCreateGroup);
+    await loadFriendsForGroup();
+  });
+}
+
+// Close group modal
+const btnCloseGroup = $('btn-close-group');
+if (btnCloseGroup) {
+  btnCloseGroup.addEventListener('click', () => hide(modalCreateGroup));
+}
+
+if (modalCreateGroup) {
+  modalCreateGroup.addEventListener('click', (e) => {
+    if (e.target.id === 'modal-create-group') hide(modalCreateGroup);
+  });
+}
+
+// Load friends for group creation
+async function loadFriendsForGroup() {
+  const list = $('group-friends-list');
+  if (!list) return;
+  
+  list.innerHTML = '';
+  $('group-error').textContent = '';
+  $('group-title').value = '';
+  
+  try {
+    const friends = await api('/api/friends');
+    
+    if (friends.length === 0) {
+      list.innerHTML = '<li style="color:var(--text-muted); padding:1rem;">Add friends first</li>';
+      return;
+    }
+    
+    friends.forEach(friend => {
+      const li = document.createElement('li');
+      li.style.display = 'flex';
+      li.style.alignItems = 'center';
+      li.style.padding = '0.5rem 1rem';
+      
+      const checkbox = document.createElement('input');
+      checkbox.type = 'checkbox';
+      checkbox.value = friend.id;
+      checkbox.id = `friend-${friend.id}`;
+      checkbox.style.marginRight = '0.75rem';
+      checkbox.style.width = '18px';
+      checkbox.style.height = '18px';
+      
+      const label = document.createElement('label');
+      label.htmlFor = `friend-${friend.id}`;
+      label.textContent = friend.username;
+      label.style.flex = '1';
+      label.style.cursor = 'pointer';
+      
+      li.appendChild(checkbox);
+      li.appendChild(label);
+      list.appendChild(li);
+    });
+  } catch (err) {
+    list.innerHTML = '<li style="color:var(--danger);">Failed to load friends</li>';
+  }
+}
+
+// Create group
+const btnCreateGroup = $('btn-create-group');
+if (btnCreateGroup) {
+  btnCreateGroup.addEventListener('click', async () => {
+    const title = $('group-title').value.trim();
+    const checkboxes = document.querySelectorAll('#group-friends-list input[type="checkbox"]:checked');
+    const userIds = Array.from(checkboxes).map(cb => parseInt(cb.value, 10));
+    const errorEl = $('group-error');
+    
+    if (!title) {
+      errorEl.textContent = 'Group name required';
+      return;
+    }
+    
+    if (userIds.length === 0) {
+      errorEl.textContent = 'Select at least one friend';
+      return;
+    }
+    
+    try {
+      const data = await api('/api/groups', {
+        method: 'POST',
+        body: JSON.stringify({ title, userIds })
+      });
+      
+      hide(modalCreateGroup);
+      await loadDmList(); // Reload conversations
+      
+      // Open the new group
+      selectConversation(data.conversationId);
+      if (isMobile()) showChat();
+      
+    } catch (err) {
+      errorEl.textContent = err.message;
+    }
+  });
+}
+
+// Update conversation list to show groups
+// Modify the render function in loadDmList
+// Find where you create dm-item and replace with:
+
+// In loadDmList function, replace the item creation part with:
+/*
+for (const dm of dms) {
+  const unread = notifByConvoResp[dm.id] || 0;
+  const item = document.createElement('button');
+  item.type = 'button';
+  item.className = 'dm-item' + (dm.id === currentConversationId ? ' active' : '');
+  item.dataset.id = dm.id;
+  
+  let nameHtml = '';
+  if (dm.isGroup) {
+    nameHtml = `<span class="dm-name">👥 ${escapeHtml(dm.title)}</span>`;
+  } else {
+    nameHtml = `<span class="dm-name">${escapeHtml(dm.otherUser?.username || 'Unknown')}</span>`;
+  }
+  
+  item.innerHTML = `
+    <div style="flex:1;min-width:0;">
+      ${nameHtml}
+      <span class="dm-preview">${escapeHtml(dm.lastMessage || 'No messages yet')}</span>
+    </div>
+    ${unread > 0 ? `<span class="dm-unread">${unread > 99 ? '99+' : unread}</span>` : ''}
+  `;
+  
+  item.addEventListener('click', () => {
+    selectConversation(dm.id);
+    if (dm.isGroup) {
+      // Show group info button in header
+      showGroupInfoButton(dm.id, dm.title);
+    } else {
+      hideGroupInfoButton();
+    }
+    if (isMobile()) setTimeout(() => showChat(), 10);
+  });
+  list.appendChild(item);
+}
+*/
+
+// But since we can't replace the whole function, let's add a patch
+// Add this after loadDmList function definition:
+
+// Patch the existing loadDmList function
+const originalLoadDmList = loadDmList;
+loadDmList = async function() {
+  const list = $('dm-list');
+  if (!list) return;
+  
+  list.innerHTML = '';
+  
+  try {
+    const [dms, notifByConvoResp] = await Promise.all([
+      api('/api/conversations'), // Use new endpoint that includes groups
+      api('/api/notifications')
+    ]);
+    
+    unreadByConvo = notifByConvoResp;
+    dmListCache = dms;
+    
+    if (dms.length === 0) {
+      list.innerHTML = '<p style="padding:1rem;color:var(--text-muted)">No conversations yet. Start a new message!</p>';
+      return;
+    }
+    
+    for (const dm of dms) {
+      const unread = notifByConvoResp[dm.id] || 0;
+      const item = document.createElement('button');
+      item.type = 'button';
+      item.className = 'dm-item' + (dm.id === currentConversationId ? ' active' : '');
+      item.dataset.id = dm.id;
+      
+      let nameHtml = '';
+      if (dm.isGroup) {
+        nameHtml = `<span class="dm-name">👥 ${escapeHtml(dm.title)}</span>`;
+      } else {
+        nameHtml = `<span class="dm-name">${escapeHtml(dm.otherUser?.username || 'Unknown')}</span>`;
+      }
+      
+      item.innerHTML = `
+        <div style="flex:1;min-width:0;">
+          ${nameHtml}
+          <span class="dm-preview">${escapeHtml(dm.lastMessage || 'No messages yet')}</span>
+        </div>
+        ${unread > 0 ? `<span class="dm-unread">${unread > 99 ? '99+' : unread}</span>` : ''}
+      `;
+      
+      item.addEventListener('click', () => {
+        selectConversation(dm.id);
+        if (dm.isGroup) {
+          showGroupInfoButton(dm.id, dm.title);
+        } else {
+          hideGroupInfoButton();
+        }
+        if (isMobile()) setTimeout(() => showChat(), 10);
+      });
+      list.appendChild(item);
+    }
+    updateBadgeFromCache();
+  } catch (err) {
+    console.error('Failed to load conversations:', err);
+    list.innerHTML = '<p style="padding:1rem;color:var(--text-muted)">Could not load conversations</p>';
+  }
+};
+
+// Group info button in chat header
+function showGroupInfoButton(groupId, groupTitle) {
+  const header = $('chat-header');
+  if (!header) return;
+  
+  // Remove existing info button if any
+  const oldBtn = document.getElementById('group-info-btn');
+  if (oldBtn) oldBtn.remove();
+  
+  const btn = document.createElement('button');
+  btn.id = 'group-info-btn';
+  btn.innerHTML = 'ℹ️';
+  btn.style.marginLeft = 'auto';
+  btn.style.background = 'none';
+  btn.style.border = 'none';
+  btn.style.color = 'var(--text-muted)';
+  btn.style.fontSize = '1.2rem';
+  btn.style.cursor = 'pointer';
+  btn.style.padding = '0 10px';
+  btn.title = 'Group info';
+  
+  btn.addEventListener('click', () => showGroupInfo(groupId, groupTitle));
+  
+  header.appendChild(btn);
+}
+
+function hideGroupInfoButton() {
+  const btn = document.getElementById('group-info-btn');
+  if (btn) btn.remove();
+}
+
+// Show group info modal
+async function showGroupInfo(groupId, groupTitle) {
+  const modal = $('modal-group-info');
+  const titleEl = $('group-info-title');
+  const listEl = $('group-members-list');
+  
+  if (!modal || !titleEl || !listEl) return;
+  
+  titleEl.textContent = groupTitle || 'Group';
+  listEl.innerHTML = '<li style="color:var(--text-muted);">Loading...</li>';
+  
+  show(modal);
+  
+  try {
+    const group = await api(`/api/groups/${groupId}`);
+    
+    listEl.innerHTML = '';
+    group.participants.forEach(member => {
+      const li = document.createElement('li');
+      li.textContent = member.username + (member.id === currentUser.id ? ' (you)' : '');
+      listEl.appendChild(li);
+    });
+    
+    // Store groupId for add member button
+    const addBtn = $('btn-add-member');
+    if (addBtn) {
+      addBtn.dataset.groupId = groupId;
+      addBtn.dataset.groupTitle = groupTitle;
+    }
+    
+  } catch (err) {
+    listEl.innerHTML = `<li style="color:var(--danger);">Failed to load members</li>`;
+  }
+}
+
+// Close group info modal
+const btnCloseGroupInfo = $('btn-close-group-info');
+if (btnCloseGroupInfo) {
+  btnCloseGroupInfo.addEventListener('click', () => hide(modalGroupInfo));
+}
+
+if (modalGroupInfo) {
+  modalGroupInfo.addEventListener('click', (e) => {
+    if (e.target.id === 'modal-group-info') hide(modalGroupInfo);
+  });
+}
+
+// Add member button
+const btnAddMember = $('btn-add-member');
+if (btnAddMember) {
+  btnAddMember.addEventListener('click', async () => {
+    const groupId = btnAddMember.dataset.groupId;
+    const groupTitle = btnAddMember.dataset.groupTitle;
+    
+    if (!groupId) return;
+    
+    hide(modalGroupInfo);
+    await loadFriendsToAdd(groupId, groupTitle);
+    show(modalAddMember);
+  });
+}
+
+// Load friends that are not in group
+async function loadFriendsToAdd(groupId, groupTitle) {
+  const list = $('add-member-list');
+  if (!list) return;
+  
+  list.innerHTML = '<li style="color:var(--text-muted);">Loading...</li>';
+  $('add-member-error').textContent = '';
+  
+  try {
+    const [friends, group] = await Promise.all([
+      api('/api/friends'),
+      api(`/api/groups/${groupId}`)
+    ]);
+    
+    const memberIds = group.participants.map(p => p.id);
+    const availableFriends = friends.filter(f => !memberIds.includes(f.id));
+    
+    if (availableFriends.length === 0) {
+      list.innerHTML = '<li style="color:var(--text-muted);">All friends are already in group</li>';
+      return;
+    }
+    
+    list.innerHTML = '';
+    availableFriends.forEach(friend => {
+      const li = document.createElement('li');
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.textContent = friend.username;
+      btn.style.width = '100%';
+      btn.style.textAlign = 'left';
+      
+      btn.addEventListener('click', async () => {
+        try {
+          await api(`/api/groups/${groupId}/members`, {
+            method: 'POST',
+            body: JSON.stringify({ userId: friend.id })
+          });
+          
+          hide(modalAddMember);
+          showGroupInfo(groupId, groupTitle); // Refresh info
+        } catch (err) {
+          $('add-member-error').textContent = err.message;
+        }
+      });
+      
+      li.appendChild(btn);
+      list.appendChild(li);
+    });
+    
+  } catch (err) {
+    list.innerHTML = `<li style="color:var(--danger);">Failed to load friends</li>`;
+  }
+}
+
+// Close add member modal
+const btnCloseAddMember = $('btn-close-add-member');
+if (btnCloseAddMember) {
+  btnCloseAddMember.addEventListener('click', () => hide(modalAddMember));
+}
+
+if (modalAddMember) {
+  modalAddMember.addEventListener('click', (e) => {
+    if (e.target.id === 'modal-add-member') hide(modalAddMember);
+  });
+}

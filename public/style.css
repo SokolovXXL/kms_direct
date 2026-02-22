@@ -847,3 +847,25 @@ body {
     justify-content: center;
   }
 }
+/* Group styles */
+.dm-item .dm-name:has(👥) {
+  color: var(--accent);
+}
+
+#group-info-btn {
+  transition: opacity 0.2s ease;
+}
+
+#group-info-btn:hover {
+  opacity: 0.8;
+}
+
+/* Checkbox styles */
+#group-friends-list input[type="checkbox"] {
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+#group-friends-list li:hover {
+  background: var(--surface-hover);
+}

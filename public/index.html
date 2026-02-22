@@ -35,12 +35,14 @@
         <span class="logo">Messenger</span>
         <span class="user-name" id="header-username"></span>
         <button type="button" class="btn-header" id="btn-friends">Friends</button>
+        <button type="button" class="btn-header" id="btn-groups">Groups</button>
         <button type="button" class="btn-logout" id="btn-logout">Sign out</button>
       </header>
       <div class="layout">
         <aside class="sidebar" id="sidebar">
           <div class="sidebar-actions">
-            <button type="button" class="btn-primary" id="btn-new-dm">New message</button>
+            <button type="button" class="btn-primary" id="btn-new-dm" style="margin-bottom:0.5rem;">New message</button>
+            <button type="button" class="btn-primary" id="btn-create-group-btn" style="background:var(--surface-hover); color:var(--text);">Create group</button>
           </div>
           <div id="dm-list" class="dm-list"></div>
         </aside>
@@ -102,6 +104,51 @@
         <div class="modal-actions">
           <button type="button" class="btn-danger" id="btn-confirm-delete">Delete my account</button>
           <button type="button" class="btn-close-modal" id="btn-cancel-delete">Cancel</button>
+        </div>
+      </div>
+    </div>
+    <div id="modal-create-group" class="modal hidden">
+      <div class="modal-content">
+        <h2>Create group</h2>
+        <p>Select friends to add</p>
+        
+        <input type="text" id="group-title" placeholder="Group name" style="width:100%; margin-bottom:1rem; padding:0.75rem; background:var(--bg); border:1px solid var(--border); border-radius:8px; color:var(--text);" />
+        
+        <div style="margin-bottom:0.5rem; color:var(--text-muted); font-size:0.9rem;">Select friends:</div>
+        <ul id="group-friends-list" class="user-list" style="max-height:200px;"></ul>
+        
+        <p id="group-error" class="auth-error"></p>
+        
+        <div class="modal-actions">
+          <button type="button" class="btn-primary" id="btn-create-group">Create group</button>
+          <button type="button" class="btn-close-modal" id="btn-close-group">Cancel</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal: Group info (view members) -->
+    <div id="modal-group-info" class="modal hidden">
+      <div class="modal-content">
+        <h2 id="group-info-title">Group</h2>
+        <p>Members:</p>
+        <ul id="group-members-list" class="user-list" style="max-height:200px;"></ul>
+        
+        <div class="modal-actions">
+          <button type="button" class="btn-primary" id="btn-add-member">Add member</button>
+          <button type="button" class="btn-close-modal" id="btn-close-group-info">Close</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal: Add member to group -->
+    <div id="modal-add-member" class="modal hidden">
+      <div class="modal-content">
+        <h2>Add member</h2>
+        <p>Select a friend to add:</p>
+        <ul id="add-member-list" class="user-list" style="max-height:200px;"></ul>
+        <p id="add-member-error" class="auth-error"></p>
+        <div class="modal-actions">
+          <button type="button" class="btn-close-modal" id="btn-close-add-member">Cancel</button>
         </div>
       </div>
     </div>
