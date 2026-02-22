@@ -23,6 +23,7 @@ body {
   background: var(--bg);
   color: var(--text);
   height: 100vh;
+  height: 100dvh;
   overflow: hidden;
 }
 
@@ -30,6 +31,7 @@ body {
 
 #app {
   height: 100vh;
+  height: 100dvh;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -38,6 +40,7 @@ body {
 /* Auth */
 #auth-screen {
   height: 100vh;
+  height: 100dvh;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -112,6 +115,7 @@ body {
 /* Main app */
 #main-screen {
   height: 100vh;
+  height: 100dvh;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -280,6 +284,7 @@ body {
   display: flex;
   min-height: 0;
   height: calc(100vh - 57px);
+  height: calc(100dvh - 57px);
   overflow: hidden;
   position: relative;
 }
@@ -675,25 +680,8 @@ body {
 
 /* ========== МОБИЛЬНАЯ ВЕРСИЯ ========== */
 @media (max-width: 768px) {
-  /* Мобильная кнопка назад */
-  .btn-back-mobile {
-    display: inline-block;
-    font-size: 24px;
-    background: none;
-    border: none;
-    color: var(--text);
-    margin-right: 10px;
-    cursor: pointer;
-    padding: 0 5px;
-    line-height: 1;
-  }
-  
-  .btn-back-mobile:hover {
-    color: var(--accent);
-  }
-  
-  .chat-header {
-    padding: 0.75rem 1rem;
+  body, #app, #main-screen, .layout {
+    height: 100dvh;
   }
   
   .layout {
@@ -737,13 +725,22 @@ body {
     transform: translateX(0);
   }
   
-  /* Убираем лишние отступы */
+  /* Фикс для клавиатуры */
   .send-form {
     padding: 0.75rem 1rem;
+    padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
+    position: sticky;
+    bottom: 0;
+    background: var(--surface);
+    z-index: 20;
   }
   
   .send-form input {
     font-size: 16px; /* Предотвращает зум на iOS */
+  }
+  
+  .chat-messages-wrapper {
+    padding-bottom: 0;
   }
   
   .message {
@@ -772,10 +769,31 @@ body {
     padding: 0.4rem 0.6rem;
     font-size: 0.9rem;
   }
+  
+  /* Кнопка назад в чате */
+  #chat-header {
+    padding-left: 0.5rem;
+  }
+  
+  #btn-back-mobile {
+    display: inline-block;
+    font-size: 24px;
+    background: none;
+    border: none;
+    color: var(--text);
+    margin-right: 8px;
+    cursor: pointer;
+    padding: 4px 8px;
+    line-height: 1;
+  }
+  
+  #btn-back-mobile:active {
+    opacity: 0.7;
+  }
 }
 
 /* Для десктопа скрываем мобильную кнопку */
-.btn-back-mobile {
+#btn-back-mobile {
   display: none;
 }
 

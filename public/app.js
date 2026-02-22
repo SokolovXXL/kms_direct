@@ -86,6 +86,26 @@ function showChat() {
   layout.classList.add('chat-open');
 }
 
+// Добавляем кнопку "Назад" в шапку чата
+function addBackButtonToChat() {
+  const header = $('chat-header');
+  if (!header) return;
+
+  // Проверяем, не добавлена ли уже кнопка
+  if ($('btn-back-mobile')) return;
+
+  const btn = document.createElement('button');
+  btn.id = 'btn-back-mobile';
+  btn.innerHTML = '←';
+  btn.setAttribute('aria-label', 'Back');
+
+  btn.onclick = () => {
+    showSidebar();
+  };
+
+  header.prepend(btn);
+}
+
 // Создаём кнопку "Прокрутить вниз"
 function createScrollDownButton() {
   if (document.querySelector('.btn-scroll-down')) return document.querySelector('.btn-scroll-down');
@@ -663,14 +683,6 @@ if (btnConfirmDelete) {
   });
 }
 
-// ---- Mobile back button ----
-const backMobileBtn = $('btn-back-mobile');
-if (backMobileBtn) {
-  backMobileBtn.addEventListener('click', () => {
-    showSidebar();
-  });
-}
-
 // Обработка изменения размера окна
 window.addEventListener('resize', () => {
   const layout = document.querySelector('.layout');
@@ -687,11 +699,22 @@ window.addEventListener('resize', () => {
   }
 });
 
+// Обработка фокуса на input (для клавиатуры)
+const messageInput = $('message-input');
+if (messageInput) {
+  messageInput.addEventListener('focus', () => {
+    setTimeout(() => {
+      scrollMessagesToBottom();
+    }, 300);
+  });
+}
+
 // Инициализация после загрузки DOM
 document.addEventListener('DOMContentLoaded', () => {
   console.log('DOM loaded, initializing app');
   
   scrollDownBtn = createScrollDownButton();
   setupScrollListener();
+  addBackButtonToChat();
   renderScreen();
 });
