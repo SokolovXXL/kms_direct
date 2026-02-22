@@ -148,7 +148,7 @@ function setupScrollListener() {
   
   container.addEventListener('scroll', () => {
     // Используем порог в 5px для более точного определения
-    const bottom = container.scrollHeight - container.scrollTop - container.clientHeight <= 5;
+    const bottom = container.scrollHeight - container.scrollTop - container.clientHeight <= 500;
     isAtBottom = bottom;
     
     if (bottom) {
@@ -277,7 +277,7 @@ function startNotificationStream() {
             if (!container) return;
 
             // Проверяем с минимальным порогом в 5px
-            const isNearBottom = container.scrollHeight - container.scrollTop - container.clientHeight <= 5;
+            const isNearBottom = container.scrollHeight - container.scrollTop - container.clientHeight <= 500;
 
             if (isNearBottom) {
               scrollMessagesToBottom(); // теперь без smooth
