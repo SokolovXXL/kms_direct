@@ -14,10 +14,10 @@ const $ = (id) => document.getElementById(id);
 const isMobile = () => window.innerWidth <= 768;
 
 function show(el) {
-  el.classList.remove('hidden');
+  if (el) el.classList.remove('hidden');
 }
 function hide(el) {
-  el.classList.add('hidden');
+  if (el) el.classList.add('hidden');
 }
 
 function authHeaders() {
@@ -26,7 +26,7 @@ function authHeaders() {
 
 function showAuthError(msg) {
   const el = $('auth-error');
-  el.textContent = msg || '';
+  if (el) el.textContent = msg || '';
 }
 
 async function api(path, options = {}) {
@@ -48,7 +48,8 @@ function renderScreen() {
   if (token && currentUser) {
     hide($('auth-screen'));
     show($('main-screen'));
-    $('header-username').textContent = currentUser.username;
+    const headerUsername = $('header-username');
+    if (headerUsername) headerUsername.textContent = currentUser.username;
     if (!currentUser.friend_code) fetchMe();
     startNotificationStream();
     loadDmList();
@@ -69,6 +70,8 @@ function renderScreen() {
 function showSidebar() {
   const sidebar = $('sidebar');
   const chatArea = $('chat-area');
+  if (!sidebar || !chatArea) return;
+  
   if (isMobile()) {
     sidebar.classList.remove('mobile-hidden');
     chatArea.classList.remove('mobile-visible');
@@ -79,6 +82,8 @@ function showSidebar() {
 function showChat() {
   const sidebar = $('sidebar');
   const chatArea = $('chat-area');
+  if (!sidebar || !chatArea) return;
+  
   if (isMobile()) {
     sidebar.classList.add('mobile-hidden');
     chatArea.classList.remove('mobile-hidden');
@@ -89,6 +94,8 @@ function showChat() {
 // Добавляем кнопку "Назад" в шапку чата
 function addBackButtonToChat() {
   const chatHeader = $('chat-header');
+  if (!chatHeader) return;
+  
   // Проверяем, не добавлена ли уже кнопка
   if (chatHeader.querySelector('.btn-back')) return;
   
@@ -114,6 +121,11 @@ function createScrollDownButton() {
   if (document.querySelector('.btn-scroll-down')) return document.querySelector('.btn-scroll-down');
   
   const chatArea = $('chat-area');
+  if (!chatArea) {
+    console.log('Chat area not found yet, will create button later');
+    return null;
+  }
+  
   const btn = document.createElement('button');
   btn.className = 'btn-scroll-down hidden';
   btn.innerHTML = '↓';
@@ -126,7 +138,8 @@ function createScrollDownButton() {
   return btn;
 }
 
-const scrollDownBtn = createScrollDownButton();
+// Инициализируем кнопку после загрузки DOM
+let scrollDownBtn = null;
 
 // Отслеживаем скролл
 function setupScrollListener() {
@@ -139,9 +152,9 @@ function setupScrollListener() {
     isAtBottom = bottom;
     
     if (bottom) {
-      scrollDownBtn.classList.add('hidden');
+      if (scrollDownBtn) scrollDownBtn.classList.add('hidden');
     } else {
-      if ($('messages-list').children.length > 0) {
+      if (scrollDownBtn && $('messages-list').children.length > 0) {
         scrollDownBtn.classList.remove('hidden');
       }
     }
@@ -151,8 +164,10 @@ function setupScrollListener() {
 async function fetchMe() {
   try {
     const me = await api('/api/me');
-    currentUser.friend_code = me.friend_code;
-    localStorage.setItem('user', JSON.stringify(currentUser));
+    if (currentUser) {
+      currentUser.friend_code = me.friend_code;
+      localStorage.setItem('user', JSON.stringify(currentUser));
+    }
   } catch (_) {}
 }
 
@@ -176,58 +191,67 @@ function playNotificationSound() {
 }
 
 // ---- Auth ----
-$('login-form').addEventListener('submit', async (e) => {
-  e.preventDefault();
-  showAuthError('');
-  try {
-    const data = await api('/api/login', {
-      method: 'POST',
-      body: JSON.stringify({
-        username: $('login-username').value.trim(),
-        password: $('login-password').value,
-      }),
-    });
-    token = data.token;
-    currentUser = data.user;
-    localStorage.setItem('token', token);
-    localStorage.setItem('user', JSON.stringify(currentUser));
-    $('login-password').value = '';
-    renderScreen();
-  } catch (err) {
-    showAuthError(err.message);
-  }
-});
+const loginForm = $('login-form');
+if (loginForm) {
+  loginForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    showAuthError('');
+    try {
+      const data = await api('/api/login', {
+        method: 'POST',
+        body: JSON.stringify({
+          username: $('login-username').value.trim(),
+          password: $('login-password').value,
+        }),
+      });
+      token = data.token;
+      currentUser = data.user;
+      localStorage.setItem('token', token);
+      localStorage.setItem('user', JSON.stringify(currentUser));
+      $('login-password').value = '';
+      renderScreen();
+    } catch (err) {
+      showAuthError(err.message);
+    }
+  });
+}
 
-$('register-form').addEventListener('submit', async (e) => {
-  e.preventDefault();
-  showAuthError('');
-  try {
-    const data = await api('/api/register', {
-      method: 'POST',
-      body: JSON.stringify({
-        username: $('register-username').value.trim(),
-        password: $('register-password').value,
-      }),
-    });
-    token = data.token;
-    currentUser = data.user;
-    localStorage.setItem('token', token);
-    localStorage.setItem('user', JSON.stringify(currentUser));
-    $('register-password').value = '';
-    renderScreen();
-  } catch (err) {
-    showAuthError(err.message);
-  }
-});
+const registerForm = $('register-form');
+if (registerForm) {
+  registerForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    showAuthError('');
+    try {
+      const data = await api('/api/register', {
+        method: 'POST',
+        body: JSON.stringify({
+          username: $('register-username').value.trim(),
+          password: $('register-password').value,
+        }),
+      });
+      token = data.token;
+      currentUser = data.user;
+      localStorage.setItem('token', token);
+      localStorage.setItem('user', JSON.stringify(currentUser));
+      $('register-password').value = '';
+      renderScreen();
+    } catch (err) {
+      showAuthError(err.message);
+    }
+  });
+}
 
-$('btn-logout').addEventListener('click', () => {
-  token = null;
-  currentUser = null;
-  localStorage.removeItem('token');
-  localStorage.removeItem('user');
-  currentConversationId = null;
-  renderScreen();
-});
+const logoutBtn = $('btn-logout');
+if (logoutBtn) {
+  logoutBtn.addEventListener('click', () => {
+    token = null;
+    currentUser = null;
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
+    currentConversationId = null;
+    renderScreen();
+  });
+}
 
 // ---- Notifications (SSE) ----
 function startNotificationStream() {
@@ -249,7 +273,7 @@ function startNotificationStream() {
           if (isAtBottom) {
             scrollMessagesToBottom();
           } else {
-            scrollDownBtn.classList.remove('hidden');
+            if (scrollDownBtn) scrollDownBtn.classList.remove('hidden');
           }
         } else {
           updateSidebarRow(convId, message ? message.body : null);
@@ -294,6 +318,8 @@ function escapeHtml(s) {
 
 function appendMessageToChat(message) {
   const list = $('messages-list');
+  if (!list) return;
+  
   const div = document.createElement('div');
   div.className = 'message ' + (message.sender_id === currentUser.id ? 'mine' : 'theirs');
   div.innerHTML = `
@@ -311,7 +337,7 @@ function scrollMessagesToBottom() {
       behavior: 'smooth'
     });
     isAtBottom = true;
-    scrollDownBtn.classList.add('hidden');
+    if (scrollDownBtn) scrollDownBtn.classList.add('hidden');
   }
 }
 
@@ -337,6 +363,8 @@ function updateSidebarRow(convId, lastMessageText) {
 // ---- DMs ----
 async function loadDmList() {
   const list = $('dm-list');
+  if (!list) return;
+  
   list.innerHTML = '';
   try {
     const [dms, notifByConvoResp] = await Promise.all([api('/api/dms'), api('/api/notifications')]);
@@ -384,9 +412,15 @@ async function selectConversation(convId) {
     await loadDmList();
     dm = dmListCache.find(d => d.id === convId);
   }
-  hide($('chat-placeholder'));
-  show($('chat-active'));
-  $('chat-with-name').textContent = dm ? dm.otherUser.username : '…';
+  
+  const chatPlaceholder = $('chat-placeholder');
+  const chatActive = $('chat-active');
+  const chatWithName = $('chat-with-name');
+  
+  if (chatPlaceholder) hide(chatPlaceholder);
+  if (chatActive) show(chatActive);
+  if (chatWithName) chatWithName.textContent = dm ? dm.otherUser.username : '…';
+  
   document.querySelectorAll('.dm-item').forEach(el => {
     el.classList.toggle('active', parseInt(el.dataset.id, 10) === convId);
   });
@@ -404,6 +438,8 @@ async function selectConversation(convId) {
 
 async function loadMessages(convId) {
   const list = $('messages-list');
+  if (!list) return;
+  
   list.innerHTML = '';
   try {
     const messages = await api(`/api/dms/${convId}/messages`);
@@ -422,186 +458,260 @@ async function loadMessages(convId) {
   }
 }
 
-$('send-form').addEventListener('submit', async (e) => {
-  e.preventDefault();
-  if (!currentConversationId) return;
-  const input = $('message-input');
-  const body = input.value.trim();
-  if (!body) return;
-  input.value = '';
-  try {
-    const msg = await api(`/api/dms/${currentConversationId}/messages`, {
-      method: 'POST',
-      body: JSON.stringify({ body }),
-    });
-    appendMessageToChat(msg);
-    scrollMessagesToBottom();
-    updateSidebarRow(currentConversationId, body);
-    const dm = dmListCache.find(d => d.id === currentConversationId);
-    if (dm) dm.lastMessage = body;
-  } catch (err) {
-    input.value = body;
-    alert('Failed to send message: ' + err.message);
-  }
-});
+const sendForm = $('send-form');
+if (sendForm) {
+  sendForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    if (!currentConversationId) return;
+    const input = $('message-input');
+    if (!input) return;
+    
+    const body = input.value.trim();
+    if (!body) return;
+    input.value = '';
+    try {
+      const msg = await api(`/api/dms/${currentConversationId}/messages`, {
+        method: 'POST',
+        body: JSON.stringify({ body }),
+      });
+      appendMessageToChat(msg);
+      scrollMessagesToBottom();
+      updateSidebarRow(currentConversationId, body);
+      const dm = dmListCache.find(d => d.id === currentConversationId);
+      if (dm) dm.lastMessage = body;
+    } catch (err) {
+      input.value = body;
+      alert('Failed to send message: ' + err.message);
+    }
+  });
+}
 
 // ---- New DM modal (friends only) ----
-$('btn-new-dm').addEventListener('click', async () => {
-  show($('modal-new-dm'));
-  const ul = $('user-list');
-  ul.innerHTML = '';
-  try {
-    const friends = await api('/api/friends');
-    for (const u of friends) {
-      const li = document.createElement('li');
-      const btn = document.createElement('button');
-      btn.type = 'button';
-      btn.textContent = u.username;
-      btn.addEventListener('click', async () => {
-        try {
-          const data = await api('/api/dms', { method: 'POST', body: JSON.stringify({ otherUserId: u.id }) });
-          hide($('modal-new-dm'));
-          selectConversation(data.conversationId);
-        } catch (err) {
-          alert('Failed to create conversation: ' + err.message);
-        }
-      });
-      li.appendChild(btn);
-      ul.appendChild(li);
+const btnNewDm = $('btn-new-dm');
+if (btnNewDm) {
+  btnNewDm.addEventListener('click', async () => {
+    show($('modal-new-dm'));
+    const ul = $('user-list');
+    if (!ul) return;
+    
+    ul.innerHTML = '';
+    try {
+      const friends = await api('/api/friends');
+      for (const u of friends) {
+        const li = document.createElement('li');
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.textContent = u.username;
+        btn.addEventListener('click', async () => {
+          try {
+            const data = await api('/api/dms', { method: 'POST', body: JSON.stringify({ otherUserId: u.id }) });
+            hide($('modal-new-dm'));
+            selectConversation(data.conversationId);
+          } catch (err) {
+            alert('Failed to create conversation: ' + err.message);
+          }
+        });
+        li.appendChild(btn);
+        ul.appendChild(li);
+      }
+      if (friends.length === 0) ul.innerHTML = '<li style="color:var(--text-muted)">Add friends first (Friends → paste their code)</li>';
+    } catch (_) {
+      ul.innerHTML = '<li style="color:var(--text-muted)">Could not load friends</li>';
     }
-    if (friends.length === 0) ul.innerHTML = '<li style="color:var(--text-muted)">Add friends first (Friends → paste their code)</li>';
-  } catch (_) {
-    ul.innerHTML = '<li style="color:var(--text-muted)">Could not load friends</li>';
-  }
-});
+  });
+}
 
-$('btn-close-modal').addEventListener('click', () => hide($('modal-new-dm')));
+const btnCloseModal = $('btn-close-modal');
+if (btnCloseModal) {
+  btnCloseModal.addEventListener('click', () => hide($('modal-new-dm')));
+}
 
-$('modal-new-dm').addEventListener('click', (e) => {
-  if (e.target.id === 'modal-new-dm') hide($('modal-new-dm'));
-});
+const modalNewDm = $('modal-new-dm');
+if (modalNewDm) {
+  modalNewDm.addEventListener('click', (e) => {
+    if (e.target.id === 'modal-new-dm') hide($('modal-new-dm'));
+  });
+}
 
 // ---- Friends modal ----
-$('btn-friends').addEventListener('click', async () => {
-  show($('modal-friends'));
-  $('friends-error').textContent = '';
-  $('my-friend-code').textContent = currentUser.friend_code || '…';
-  $('friend-code-input').value = '';
-  const ul = $('friends-list');
-  ul.innerHTML = '';
-  try {
-    const friends = await api('/api/friends');
-    for (const u of friends) {
+const btnFriends = $('btn-friends');
+if (btnFriends) {
+  btnFriends.addEventListener('click', async () => {
+    show($('modal-friends'));
+    
+    const friendsError = $('friends-error');
+    const myFriendCode = $('my-friend-code');
+    const friendCodeInput = $('friend-code-input');
+    const friendsList = $('friends-list');
+    
+    if (friendsError) friendsError.textContent = '';
+    if (myFriendCode) myFriendCode.textContent = currentUser?.friend_code || '…';
+    if (friendCodeInput) friendCodeInput.value = '';
+    if (!friendsList) return;
+    
+    friendsList.innerHTML = '';
+    try {
+      const friends = await api('/api/friends');
+      for (const u of friends) {
+        const li = document.createElement('li');
+        li.textContent = u.username;
+        friendsList.appendChild(li);
+      }
+      if (friends.length === 0) {
+        const li = document.createElement('li');
+        li.textContent = 'No friends yet. Share your code or add someone else\'s.';
+        li.style.color = 'var(--text-muted)';
+        li.style.fontStyle = 'italic';
+        friendsList.appendChild(li);
+      }
+    } catch (_) {
       const li = document.createElement('li');
-      li.textContent = u.username;
-      ul.appendChild(li);
-    }
-    if (friends.length === 0) {
-      const li = document.createElement('li');
-      li.textContent = 'No friends yet. Share your code or add someone else\'s.';
+      li.textContent = 'Could not load friends';
       li.style.color = 'var(--text-muted)';
       li.style.fontStyle = 'italic';
-      ul.appendChild(li);
+      friendsList.appendChild(li);
     }
-  } catch (_) {
-    const li = document.createElement('li');
-    li.textContent = 'Could not load friends';
-    li.style.color = 'var(--text-muted)';
-    li.style.fontStyle = 'italic';
-    ul.appendChild(li);
-  }
-});
+  });
+}
 
-$('btn-copy-code').addEventListener('click', () => {
-  const code = currentUser.friend_code;
-  if (code && navigator.clipboard) {
-    navigator.clipboard.writeText(code);
-    alert('Copied!');
-  }
-});
+const btnCopyCode = $('btn-copy-code');
+if (btnCopyCode) {
+  btnCopyCode.addEventListener('click', () => {
+    const code = currentUser?.friend_code;
+    if (code && navigator.clipboard) {
+      navigator.clipboard.writeText(code);
+      alert('Copied!');
+    }
+  });
+}
 
-$('btn-add-friend').addEventListener('click', async () => {
-  const code = $('friend-code-input').value.trim();
-  const errEl = $('friends-error');
-  errEl.textContent = '';
-  if (!code) {
-    errEl.textContent = 'Enter a friend code';
-    return;
-  }
-  try {
-    await api('/api/friends', { method: 'POST', body: JSON.stringify({ friendCode: code }) });
-    $('friend-code-input').value = '';
+const btnAddFriend = $('btn-add-friend');
+if (btnAddFriend) {
+  btnAddFriend.addEventListener('click', async () => {
+    const code = $('friend-code-input')?.value.trim();
+    const errEl = $('friends-error');
+    if (!errEl) return;
+    
     errEl.textContent = '';
-    alert('Friend added');
-    const friends = await api('/api/friends');
-    const ul = $('friends-list');
-    ul.innerHTML = '';
-    for (const u of friends) {
-      const li = document.createElement('li');
-      li.textContent = u.username;
-      ul.appendChild(li);
+    if (!code) {
+      errEl.textContent = 'Enter a friend code';
+      return;
     }
-  } catch (err) {
-    errEl.textContent = err.message || 'Failed';
-  }
-});
+    try {
+      await api('/api/friends', { method: 'POST', body: JSON.stringify({ friendCode: code }) });
+      if ($('friend-code-input')) $('friend-code-input').value = '';
+      errEl.textContent = '';
+      alert('Friend added');
+      const friends = await api('/api/friends');
+      const ul = $('friends-list');
+      if (ul) {
+        ul.innerHTML = '';
+        for (const u of friends) {
+          const li = document.createElement('li');
+          li.textContent = u.username;
+          ul.appendChild(li);
+        }
+      }
+    } catch (err) {
+      errEl.textContent = err.message || 'Failed';
+    }
+  });
+}
 
-$('btn-close-friends').addEventListener('click', () => hide($('modal-friends')));
-$('modal-friends').addEventListener('click', (e) => {
-  if (e.target.id === 'modal-friends') hide($('modal-friends'));
-});
+const btnCloseFriends = $('btn-close-friends');
+if (btnCloseFriends) {
+  btnCloseFriends.addEventListener('click', () => hide($('modal-friends')));
+}
+
+const modalFriends = $('modal-friends');
+if (modalFriends) {
+  modalFriends.addEventListener('click', (e) => {
+    if (e.target.id === 'modal-friends') hide($('modal-friends'));
+  });
+}
 
 // ---- Delete account ----
-$('btn-delete-account').addEventListener('click', () => {
-  hide($('modal-friends'));
-  show($('modal-delete-confirm'));
-  $('delete-password').value = '';
-  $('delete-error').textContent = '';
-});
+const btnDeleteAccount = $('btn-delete-account');
+if (btnDeleteAccount) {
+  btnDeleteAccount.addEventListener('click', () => {
+    hide($('modal-friends'));
+    show($('modal-delete-confirm'));
+    const deletePassword = $('delete-password');
+    const deleteError = $('delete-error');
+    if (deletePassword) deletePassword.value = '';
+    if (deleteError) deleteError.textContent = '';
+  });
+}
 
-$('btn-cancel-delete').addEventListener('click', () => hide($('modal-delete-confirm')));
-$('modal-delete-confirm').addEventListener('click', (e) => {
-  if (e.target.id === 'modal-delete-confirm') hide($('modal-delete-confirm'));
-});
+const btnCancelDelete = $('btn-cancel-delete');
+if (btnCancelDelete) {
+  btnCancelDelete.addEventListener('click', () => hide($('modal-delete-confirm')));
+}
 
-$('btn-confirm-delete').addEventListener('click', async () => {
-  const password = $('delete-password').value;
-  const errEl = $('delete-error');
-  errEl.textContent = '';
-  if (!password) {
-    errEl.textContent = 'Enter your password';
-    return;
-  }
-  try {
-    await api('/api/account', {
-      method: 'DELETE',
-      body: JSON.stringify({ password }),
-    });
-    hide($('modal-delete-confirm'));
-    token = null;
-    currentUser = null;
-    localStorage.removeItem('token');
-    localStorage.removeItem('user');
-    currentConversationId = null;
-    renderScreen();
-  } catch (err) {
-    errEl.textContent = err.message || 'Failed';
-  }
-});
+const modalDeleteConfirm = $('modal-delete-confirm');
+if (modalDeleteConfirm) {
+  modalDeleteConfirm.addEventListener('click', (e) => {
+    if (e.target.id === 'modal-delete-confirm') hide($('modal-delete-confirm'));
+  });
+}
 
-// Инициализация
-addBackButtonToChat();
-setupScrollListener();
-renderScreen();
+const btnConfirmDelete = $('btn-confirm-delete');
+if (btnConfirmDelete) {
+  btnConfirmDelete.addEventListener('click', async () => {
+    const password = $('delete-password')?.value;
+    const errEl = $('delete-error');
+    if (!errEl) return;
+    
+    errEl.textContent = '';
+    if (!password) {
+      errEl.textContent = 'Enter your password';
+      return;
+    }
+    try {
+      await api('/api/account', {
+        method: 'DELETE',
+        body: JSON.stringify({ password }),
+      });
+      hide($('modal-delete-confirm'));
+      token = null;
+      currentUser = null;
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+      currentConversationId = null;
+      renderScreen();
+    } catch (err) {
+      errEl.textContent = err.message || 'Failed';
+    }
+  });
+}
+
+// Инициализация после загрузки DOM
+document.addEventListener('DOMContentLoaded', () => {
+  console.log('DOM loaded, initializing app');
+  
+  // Создаём кнопку прокрутки
+  scrollDownBtn = createScrollDownButton();
+  
+  // Добавляем кнопку назад
+  addBackButtonToChat();
+  
+  // Настраиваем слушатель скролла
+  setupScrollListener();
+  
+  // Рендерим экран
+  renderScreen();
+});
 
 // Обработка изменения размера окна
 window.addEventListener('resize', () => {
   if (!isMobile()) {
     const sidebar = $('sidebar');
     const chatArea = $('chat-area');
-    sidebar.classList.remove('mobile-hidden');
-    chatArea.classList.remove('mobile-hidden');
-    chatArea.classList.remove('mobile-visible');
+    if (sidebar && chatArea) {
+      sidebar.classList.remove('mobile-hidden');
+      chatArea.classList.remove('mobile-hidden');
+      chatArea.classList.remove('mobile-visible');
+    }
   } else {
     if (!currentConversationId) {
       showSidebar();
