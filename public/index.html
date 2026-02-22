@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <title>Messenger</title>
   <link rel="stylesheet" href="/style.css" />
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -37,21 +37,22 @@
         <button type="button" class="btn-logout" id="btn-logout">Sign out</button>
       </header>
       <div class="layout">
-        <aside class="sidebar">
+        <aside class="sidebar" id="sidebar">
           <div class="sidebar-actions">
             <button type="button" class="btn-primary" id="btn-new-dm">New message</button>
           </div>
           <div id="dm-list" class="dm-list"></div>
         </aside>
-        <main class="chat-area">
+        <main class="chat-area" id="chat-area">
           <div id="chat-placeholder" class="placeholder">
             <p>Select a conversation or start a new message</p>
           </div>
           <div id="chat-active" class="hidden">
-            <div class="chat-header">
+            <div class="chat-header" id="chat-header">
+              <button type="button" class="btn-back-mobile" id="btn-back-mobile">←</button>
               <span id="chat-with-name"></span>
             </div>
-            <div class="chat-messages-wrapper">
+            <div class="chat-messages-wrapper" id="chat-messages-wrapper">
               <div id="messages-container">
                 <div id="messages-list"></div>
               </div>

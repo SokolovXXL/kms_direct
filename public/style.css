@@ -244,23 +244,6 @@ body {
   filter: brightness(1.1);
 }
 
-/* Кнопка "Назад" */
-.btn-back {
-  display: none;
-  background: transparent;
-  border: none;
-  color: var(--text);
-  font-size: 1.5rem;
-  cursor: pointer;
-  padding: 0.25rem 0.5rem;
-  margin-right: 0.5rem;
-  line-height: 1;
-}
-
-.btn-back:hover {
-  color: var(--accent);
-}
-
 /* Кнопка "Прокрутить вниз" */
 .btn-scroll-down {
   position: absolute;
@@ -312,6 +295,7 @@ body {
   overflow: hidden;
   height: 100%;
   transition: transform 0.25s ease;
+  z-index: 5;
 }
 
 .sidebar-actions {
@@ -411,6 +395,7 @@ body {
   overflow: hidden;
   position: relative;
   transition: transform 0.25s ease;
+  z-index: 10;
 }
 
 .placeholder {
@@ -440,10 +425,6 @@ body {
   font-size: 1.1rem;
   display: flex;
   align-items: center;
-}
-
-.chat-header .btn-back {
-  display: none;
 }
 
 /* Контейнер сообщений */
@@ -694,12 +675,25 @@ body {
 
 /* ========== МОБИЛЬНАЯ ВЕРСИЯ ========== */
 @media (max-width: 768px) {
-  .btn-back {
+  /* Мобильная кнопка назад */
+  .btn-back-mobile {
     display: inline-block;
+    font-size: 24px;
+    background: none;
+    border: none;
+    color: var(--text);
+    margin-right: 10px;
+    cursor: pointer;
+    padding: 0 5px;
+    line-height: 1;
   }
   
-  .chat-header .btn-back {
-    display: inline-block;
+  .btn-back-mobile:hover {
+    color: var(--accent);
+  }
+  
+  .chat-header {
+    padding: 0.75rem 1rem;
   }
   
   .layout {
@@ -712,24 +706,31 @@ body {
     width: 100%;
     min-width: 100%;
     height: 100%;
-    z-index: 10;
+    z-index: 5;
     transform: translateX(0);
     border-right: none;
     background: var(--surface);
+    transition: transform 0.25s ease;
+    will-change: transform;
   }
   
   .chat-area {
     position: absolute;
     width: 100%;
     height: 100%;
-    z-index: 20;
+    z-index: 10;
     background: var(--bg);
     transform: translateX(100%);
+    transition: transform 0.25s ease;
+    display: flex;
+    flex-direction: column;
+    will-change: transform;
   }
   
   /* Когда чат открыт */
   .layout.chat-open .sidebar {
     transform: translateX(-100%);
+    pointer-events: none;
   }
   
   .layout.chat-open .chat-area {
@@ -737,12 +738,12 @@ body {
   }
   
   /* Убираем лишние отступы */
-  .chat-header {
+  .send-form {
     padding: 0.75rem 1rem;
   }
   
-  .send-form {
-    padding: 0.75rem 1rem;
+  .send-form input {
+    font-size: 16px; /* Предотвращает зум на iOS */
   }
   
   .message {
@@ -755,6 +756,7 @@ body {
     width: 36px;
     height: 36px;
     font-size: 1rem;
+    z-index: 30;
   }
   
   /* Шапка на мобильных */
@@ -770,6 +772,11 @@ body {
     padding: 0.4rem 0.6rem;
     font-size: 0.9rem;
   }
+}
+
+/* Для десктопа скрываем мобильную кнопку */
+.btn-back-mobile {
+  display: none;
 }
 
 /* Анимации */

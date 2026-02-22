@@ -86,36 +86,12 @@ function showChat() {
   layout.classList.add('chat-open');
 }
 
-// Добавляем кнопку "Назад" в шапку чата
-function addBackButtonToChat() {
-  const chatHeader = $('chat-header');
-  if (!chatHeader) return;
-  
-  // Проверяем, не добавлена ли уже кнопка
-  if (chatHeader.querySelector('.btn-back')) return;
-  
-  const backBtn = document.createElement('button');
-  backBtn.className = 'btn-back';
-  backBtn.innerHTML = '←';
-  backBtn.setAttribute('aria-label', 'Back');
-  backBtn.addEventListener('click', () => {
-    showSidebar();
-  });
-  
-  // Вставляем кнопку в начало заголовка
-  chatHeader.prepend(backBtn);
-}
-
 // Создаём кнопку "Прокрутить вниз"
 function createScrollDownButton() {
-  // Проверяем, не создана ли уже кнопка
   if (document.querySelector('.btn-scroll-down')) return document.querySelector('.btn-scroll-down');
   
   const chatArea = $('chat-area');
-  if (!chatArea) {
-    console.log('Chat area not found yet, will create button later');
-    return null;
-  }
+  if (!chatArea) return null;
   
   const btn = document.createElement('button');
   btn.className = 'btn-scroll-down hidden';
@@ -129,7 +105,6 @@ function createScrollDownButton() {
   return btn;
 }
 
-// Инициализируем кнопку после загрузки DOM
 let scrollDownBtn = null;
 
 // Отслеживаем скролл
@@ -138,7 +113,6 @@ function setupScrollListener() {
   if (!container) return;
   
   container.addEventListener('scroll', () => {
-    // Используем порог в 5px для более точного определения
     const bottom = container.scrollHeight - container.scrollTop - container.clientHeight <= 5;
     isAtBottom = bottom;
     
@@ -262,12 +236,10 @@ function startNotificationStream() {
         if (currentConversationId === convId && message) {
           appendMessageToChat(message);
           
-          // Используем requestAnimationFrame для гарантии после обновления DOM
           requestAnimationFrame(() => {
             const container = $('chat-messages-wrapper');
             if (!container) return;
 
-            // Проверяем с минимальным порогом в 5px
             const isNearBottom = container.scrollHeight - container.scrollTop - container.clientHeight <= 5;
 
             if (isNearBottom) {
@@ -293,17 +265,13 @@ function stopNotificationStream() {
 
 function updateBadgeFromCache() {
   const total = Object.values(unreadByConvo).reduce((a, b) => a + b, 0);
-  if (total > 0) {
-    document.title = `(${total}) Messenger`;
-  } else {
-    document.title = 'Messenger';
-  }
+  document.title = total > 0 ? `(${total}) Messenger` : 'Messenger';
 }
 
 async function loadNotificationCount() {
   if (!token) return;
   try {
-    const data = await api('/api/notifications/count');
+    await api('/api/notifications/count');
     const byConvo = await api('/api/notifications');
     unreadByConvo = byConvo;
     updateBadgeFromCache();
@@ -388,11 +356,10 @@ async function loadDmList() {
         </div>
         ${unread > 0 ? `<span class="dm-unread">${unread > 99 ? '99+' : unread}</span>` : ''}
       `;
-      // Обработчик клика
+      
       item.addEventListener('click', () => {
         selectConversation(dm.id);
         if (isMobile()) {
-          // Небольшая задержка для обновления DOM
           setTimeout(() => showChat(), 10);
         }
       });
@@ -413,6 +380,7 @@ async function selectConversation(convId) {
   unreadByConvo[convId] = 0;
   updateBadgeFromCache();
   updateSidebarRow(convId, null);
+  
   let dm = dmListCache.find(d => d.id === convId);
   if (!dm) {
     await loadDmList();
@@ -430,6 +398,7 @@ async function selectConversation(convId) {
   document.querySelectorAll('.dm-item').forEach(el => {
     el.classList.toggle('active', parseInt(el.dataset.id, 10) === convId);
   });
+  
   loadMessages(convId);
   
   setTimeout(() => {
@@ -454,7 +423,6 @@ async function loadMessages(convId) {
       `;
       list.appendChild(div);
     }
-    // Используем requestAnimationFrame для прокрутки после полной отрисовки
     requestAnimationFrame(() => {
       scrollMessagesToBottom();
     });
@@ -480,7 +448,6 @@ if (sendForm) {
         body: JSON.stringify({ body }),
       });
       appendMessageToChat(msg);
-      // Прокрутка после отправки
       requestAnimationFrame(() => {
         scrollMessagesToBottom();
       });
@@ -494,7 +461,7 @@ if (sendForm) {
   });
 }
 
-// ---- New DM modal (friends only) ----
+// ---- New DM modal ----
 const btnNewDm = $('btn-new-dm');
 if (btnNewDm) {
   btnNewDm.addEventListener('click', async () => {
@@ -696,16 +663,22 @@ if (btnConfirmDelete) {
   });
 }
 
+// ---- Mobile back button ----
+const backMobileBtn = $('btn-back-mobile');
+if (backMobileBtn) {
+  backMobileBtn.addEventListener('click', () => {
+    showSidebar();
+  });
+}
+
 // Обработка изменения размера окна
 window.addEventListener('resize', () => {
   const layout = document.querySelector('.layout');
   if (!layout) return;
   
   if (!isMobile()) {
-    // На десктопе убираем мобильные классы
     layout.classList.remove('chat-open');
   } else {
-    // На мобильных восстанавливаем правильное состояние
     if (!currentConversationId) {
       showSidebar();
     } else {
@@ -718,15 +691,7 @@ window.addEventListener('resize', () => {
 document.addEventListener('DOMContentLoaded', () => {
   console.log('DOM loaded, initializing app');
   
-  // Создаём кнопку прокрутки
   scrollDownBtn = createScrollDownButton();
-  
-  // Добавляем кнопку назад
-  addBackButtonToChat();
-  
-  // Настраиваем слушатель скролла
   setupScrollListener();
-  
-  // Рендерим экран
   renderScreen();
 });
