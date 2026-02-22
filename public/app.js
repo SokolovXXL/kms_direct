@@ -9,6 +9,9 @@ let dmListCache = [];
 
 const $ = (id) => document.getElementById(id);
 
+// Определяем мобильное устройство
+const isMobile = () => window.innerWidth <= 768;
+
 function show(el) {
   el.classList.remove('hidden');
 }
@@ -48,11 +51,54 @@ function renderScreen() {
     startNotificationStream();
     loadDmList();
     loadNotificationCount();
+    
+    // На мобильных показываем список чатов по умолчанию
+    if (isMobile()) {
+      showSidebar();
+    }
   } else {
     show($('auth-screen'));
     hide($('main-screen'));
     stopNotificationStream();
   }
+}
+
+// Функции для мобильной навигации
+function showSidebar() {
+  const sidebar = $('sidebar');
+  const chatArea = $('chat-area');
+  if (isMobile()) {
+    sidebar.classList.remove('mobile-hidden');
+    chatArea.classList.add('mobile-hidden');
+  }
+}
+
+function showChat() {
+  const sidebar = $('sidebar');
+  const chatArea = $('chat-area');
+  if (isMobile()) {
+    sidebar.classList.add('mobile-hidden');
+    chatArea.classList.remove('mobile-hidden');
+  }
+}
+
+// Добавляем кнопку "Назад" в шапку чата
+function addBackButtonToChat() {
+  const chatHeader = $('chat-header');
+  const backBtn = document.createElement('button');
+  backBtn.className = 'btn-back';
+  backBtn.innerHTML = '←';
+  backBtn.setAttribute('aria-label', 'Back');
+  backBtn.addEventListener('click', () => {
+    showSidebar();
+    // На мобильных сбрасываем активный чат
+    if (isMobile()) {
+      currentConversationId = null;
+    }
+  });
+  
+  // Вставляем кнопку в начало заголовка
+  chatHeader.prepend(backBtn);
 }
 
 async function fetchMe() {
@@ -136,7 +182,7 @@ $('btn-logout').addEventListener('click', () => {
   renderScreen();
 });
 
-// ---- Notifications (SSE): incremental updates, no full reload ----
+// ---- Notifications (SSE) ----
 function startNotificationStream() {
   stopNotificationStream();
   if (!token) return;
@@ -299,6 +345,11 @@ async function selectConversation(convId) {
     el.classList.toggle('active', parseInt(el.dataset.id, 10) === convId);
   });
   loadMessages(convId);
+  
+  // На мобильных показываем чат
+  if (isMobile()) {
+    showChat();
+  }
 }
 
 async function loadMessages(convId) {
@@ -390,10 +441,9 @@ $('btn-friends').addEventListener('click', async () => {
   ul.innerHTML = '';
   try {
     const friends = await api('/api/friends');
-    // Убираем дублирование - просто выводим имена
     for (const u of friends) {
       const li = document.createElement('li');
-      li.textContent = u.username; // Только имя, без дублирования
+      li.textContent = u.username;
       ul.appendChild(li);
     }
     if (friends.length === 0) {
@@ -411,6 +461,7 @@ $('btn-friends').addEventListener('click', async () => {
     ul.appendChild(li);
   }
 });
+
 $('btn-copy-code').addEventListener('click', () => {
   const code = currentUser.friend_code;
   if (code && navigator.clipboard) {
@@ -488,4 +539,22 @@ $('btn-confirm-delete').addEventListener('click', async () => {
   }
 });
 
+// Инициализация
+addBackButtonToChat();
 renderScreen();
+
+// Обработка изменения размера окна
+window.addEventListener('resize', () => {
+  if (!isMobile()) {
+    // На десктопе показываем всё
+    const sidebar = $('sidebar');
+    const chatArea = $('chat-area');
+    sidebar.classList.remove('mobile-hidden');
+    chatArea.classList.remove('mobile-hidden');
+  } else {
+    // На мобильных возвращаемся к списку чатов если нет выбранного
+    if (!currentConversationId) {
+      showSidebar();
+    }
+  }
+});

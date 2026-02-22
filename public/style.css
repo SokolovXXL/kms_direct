@@ -23,7 +23,7 @@ body {
   background: var(--bg);
   color: var(--text);
   height: 100vh;
-  overflow: hidden; /* Запрещаем скролл всей страницы */
+  overflow: hidden;
 }
 
 .hidden { display: none !important; }
@@ -43,7 +43,7 @@ body {
   justify-content: center;
   padding: 1rem;
   background: radial-gradient(ellipse 80% 60% at 50% 0%, rgba(99, 102, 241, 0.12), transparent);
-  overflow-y: auto; /* Только окно авторизации может скроллиться при необходимости */
+  overflow-y: auto;
 }
 
 .auth-card {
@@ -109,7 +109,7 @@ body {
   min-height: 1.25rem;
 }
 
-/* Main app - как Telegram */
+/* Main app */
 #main-screen {
   height: 100vh;
   display: flex;
@@ -244,12 +244,29 @@ body {
   filter: brightness(1.1);
 }
 
-/* Основной лэйаут как в Telegram */
+/* Кнопка "Назад" для мобильной версии */
+.btn-back {
+  display: none;
+  background: transparent;
+  border: none;
+  color: var(--text);
+  font-size: 1.5rem;
+  cursor: pointer;
+  padding: 0.25rem 0.5rem;
+  margin-right: 0.5rem;
+  line-height: 1;
+}
+
+.btn-back:hover {
+  color: var(--accent);
+}
+
+/* Основной лэйаут */
 .layout {
   flex: 1;
   display: flex;
-  min-height: 0; /* Важно для flex-детей */
-  height: calc(100vh - 57px); /* Вычитаем высоту хедера */
+  min-height: 0;
+  height: calc(100vh - 57px);
   overflow: hidden;
 }
 
@@ -287,7 +304,7 @@ body {
   background: var(--accent-hover);
 }
 
-/* Список чатов - прокручивается */
+/* Список чатов */
 .dm-list {
   flex: 1;
   overflow-y: auto;
@@ -387,9 +404,15 @@ body {
   border-bottom: 1px solid var(--border);
   font-weight: 600;
   font-size: 1.1rem;
+  display: flex;
+  align-items: center;
 }
 
-/* Контейнер сообщений - прокручивается как в Telegram */
+.chat-header .btn-back {
+  display: none; /* По умолчанию скрыта */
+}
+
+/* Контейнер сообщений */
 .chat-messages-wrapper {
   flex: 1;
   overflow-y: auto;
@@ -437,7 +460,7 @@ body {
   text-align: right;
 }
 
-/* Форма отправки - прикреплена к низу */
+/* Форма отправки */
 .send-form {
   display: flex;
   gap: 0.5rem;
@@ -523,7 +546,7 @@ body {
   font-size: 0.9rem;
 }
 
-/* Список друзей без дублирования */
+/* Список друзей */
 .user-list {
   list-style: none;
   margin: 0 0 1rem;
@@ -560,7 +583,6 @@ body {
   background: var(--surface-hover);
 }
 
-/* Простой список друзей (без кнопок) */
 #friends-list {
   list-style: none;
   margin: 1rem 0;
@@ -653,43 +675,99 @@ body {
   display: none;
 }
 
-/* Мобильная версия */
+/* ========== МОБИЛЬНАЯ ВЕРСИЯ (как в Telegram) ========== */
 @media (max-width: 768px) {
+  /* Кнопка "Назад" показывается только на мобильных */
+  .btn-back {
+    display: inline-block;
+  }
+  
+  .chat-header .btn-back {
+    display: inline-block;
+  }
+  
+  /* На мобильных либо список чатов, либо чат (не одновременно) */
   .layout {
-    flex-direction: column;
+    position: relative;
   }
   
   .sidebar {
+    position: absolute;
+    top: 0;
+    left: 0;
     width: 100%;
-    min-width: 0;
-    height: 40%;
+    height: 100%;
+    z-index: 10;
+    transition: transform 0.3s ease;
     border-right: none;
-    border-bottom: 1px solid var(--border);
+  }
+  
+  /* Скрываем сайдбар когда открыт чат */
+  .sidebar.mobile-hidden {
+    transform: translateX(-100%);
   }
   
   .chat-area {
-    height: 60%;
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 20;
+    background: var(--bg);
+    transition: transform 0.3s ease;
   }
   
-  .badge {
-    top: 0.5rem;
-    right: 5rem;
+  /* Чат скрыт когда не выбран */
+  .chat-area.mobile-hidden {
+    transform: translateX(100%);
   }
   
-  .message {
-    max-width: 85%;
+  /* Показываем нужный экран */
+  .chat-area:not(.mobile-hidden) {
+    transform: translateX(0);
+  }
+  
+  .sidebar:not(.mobile-hidden) {
+    transform: translateX(0);
+  }
+  
+  /* Скрываем плейсхолдер на мобильных когда нет чата */
+  .placeholder {
+    height: 100%;
+  }
+  
+  /* Убираем лишние отступы */
+  .chat-header {
+    padding: 0.75rem 1rem;
   }
   
   .send-form {
     padding: 0.75rem 1rem;
   }
   
-  .send-form input {
-    padding: 0.6rem 1rem;
+  .message {
+    max-width: 85%;
   }
   
-  .send-form button {
-    padding: 0.6rem 1.2rem;
+  /* Фикс для бейджа уведомлений */
+  .badge {
+    top: 0.5rem;
+    right: 1rem;
+  }
+  
+  /* Шапка на мобильных */
+  .header {
+    padding: 0.5rem 1rem;
+  }
+  
+  .logo {
+    font-size: 1rem;
+  }
+  
+  .btn-header, .btn-logout {
+    padding: 0.4rem 0.6rem;
+    font-size: 0.9rem;
   }
 }
 
