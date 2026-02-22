@@ -267,13 +267,23 @@ function startNotificationStream() {
         const convId = data.conversationId;
         const message = data.message;
         unreadByConvo[convId] = (unreadByConvo[convId] || 0) + 1;
+        
         if (currentConversationId === convId && message) {
           appendMessageToChat(message);
           
-          if (isAtBottom) {
-            scrollMessagesToBottom();
-          } else {
-            if (scrollDownBtn) scrollDownBtn.classList.remove('hidden');
+          // Проверяем, находится ли пользователь внизу чата
+          const container = $('chat-messages-wrapper');
+          if (container) {
+            const threshold = 50; // Небольшой порог для определения "внизу"
+            const bottom = container.scrollHeight - container.scrollTop - container.clientHeight < threshold;
+            
+            if (bottom) {
+              // Если пользователь внизу, прокручиваем вниз
+              scrollMessagesToBottom();
+            } else {
+              // Если не внизу, показываем кнопку прокрутки
+              if (scrollDownBtn) scrollDownBtn.classList.remove('hidden');
+            }
           }
         } else {
           updateSidebarRow(convId, message ? message.body : null);
