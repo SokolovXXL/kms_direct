@@ -44,6 +44,7 @@ async function api(path, options = {}) {
 }
 
 function renderScreen() {
+  console.log('renderScreen called', { token, currentUser }); // Для отладки
   if (token && currentUser) {
     hide($('auth-screen'));
     show($('main-screen'));
@@ -88,6 +89,9 @@ function showChat() {
 // Добавляем кнопку "Назад" в шапку чата
 function addBackButtonToChat() {
   const chatHeader = $('chat-header');
+  // Проверяем, не добавлена ли уже кнопка
+  if (chatHeader.querySelector('.btn-back')) return;
+  
   const backBtn = document.createElement('button');
   backBtn.className = 'btn-back';
   backBtn.innerHTML = '←';
@@ -106,6 +110,9 @@ function addBackButtonToChat() {
 
 // Создаём кнопку "Прокрутить вниз"
 function createScrollDownButton() {
+  // Проверяем, не создана ли уже кнопка
+  if (document.querySelector('.btn-scroll-down')) return document.querySelector('.btn-scroll-down');
+  
   const chatArea = $('chat-area');
   const btn = document.createElement('button');
   btn.className = 'btn-scroll-down hidden';
@@ -148,7 +155,7 @@ async function fetchMe() {
   } catch (_) {}
 }
 
-// ---- Sound notification (убрали toast) ----
+// ---- Sound notification ----
 let audioCtx = null;
 function playNotificationSound() {
   try {
@@ -169,7 +176,8 @@ function playNotificationSound() {
 
 // ---- Auth ----
 $('login-form').addEventListener('submit', async (e) => {
-  e.preventDefault();
+  e.preventDefault(); // Важно! Предотвращаем перезагрузку страницы
+  console.log('Login form submitted'); // Для отладки
   showAuthError('');
   try {
     const data = await api('/api/login', {
@@ -179,6 +187,7 @@ $('login-form').addEventListener('submit', async (e) => {
         password: $('login-password').value,
       }),
     });
+    console.log('Login response:', data); // Для отладки
     token = data.token;
     currentUser = data.user;
     localStorage.setItem('token', token);
@@ -186,12 +195,14 @@ $('login-form').addEventListener('submit', async (e) => {
     $('login-password').value = '';
     renderScreen();
   } catch (err) {
+    console.error('Login error:', err); // Для отладки
     showAuthError(err.message);
   }
 });
 
 $('register-form').addEventListener('submit', async (e) => {
-  e.preventDefault();
+  e.preventDefault(); // Важно! Предотвращаем перезагрузку страницы
+  console.log('Register form submitted'); // Для отладки
   showAuthError('');
   try {
     const data = await api('/api/register', {
@@ -201,6 +212,7 @@ $('register-form').addEventListener('submit', async (e) => {
         password: $('register-password').value,
       }),
     });
+    console.log('Register response:', data); // Для отладки
     token = data.token;
     currentUser = data.user;
     localStorage.setItem('token', token);
@@ -208,6 +220,7 @@ $('register-form').addEventListener('submit', async (e) => {
     $('register-password').value = '';
     renderScreen();
   } catch (err) {
+    console.error('Register error:', err); // Для отладки
     showAuthError(err.message);
   }
 });
@@ -231,7 +244,7 @@ function startNotificationStream() {
     try {
       const data = JSON.parse(e.data);
       if (data.type === 'new_message') {
-        playNotificationSound(); // Только звук, без toast
+        playNotificationSound();
         const convId = data.conversationId;
         const message = data.message;
         unreadByConvo[convId] = (unreadByConvo[convId] || 0) + 1;
@@ -259,8 +272,6 @@ function stopNotificationStream() {
     eventSource = null;
   }
 }
-
-// Убираем функцию showNotificationToast, она больше не нужна
 
 function updateBadgeFromCache() {
   // Обновляем только уведомления в списке чатов
@@ -416,7 +427,7 @@ async function loadMessages(convId) {
 }
 
 $('send-form').addEventListener('submit', async (e) => {
-  e.preventDefault();
+  e.preventDefault(); // Важно! Предотвращаем перезагрузку страницы
   if (!currentConversationId) return;
   const input = $('message-input');
   const body = input.value.trim();
@@ -434,8 +445,8 @@ $('send-form').addEventListener('submit', async (e) => {
     if (dm) dm.lastMessage = body;
   } catch (err) {
     input.value = body;
-    // Вместо toast показываем ошибку в консоли или можно добавить другое уведомление
     console.error(err.message);
+    alert('Failed to send message: ' + err.message);
   }
 });
 
@@ -458,6 +469,7 @@ $('btn-new-dm').addEventListener('click', async () => {
           selectConversation(data.conversationId);
         } catch (err) {
           console.error(err.message);
+          alert('Failed to create conversation: ' + err.message);
         }
       });
       li.appendChild(btn);
@@ -510,7 +522,6 @@ $('btn-copy-code').addEventListener('click', () => {
   const code = currentUser.friend_code;
   if (code && navigator.clipboard) {
     navigator.clipboard.writeText(code);
-    // Короткое всплывающее сообщение (можно заменить на что-то другое)
     alert('Copied!');
   }
 });
@@ -587,6 +598,9 @@ $('btn-confirm-delete').addEventListener('click', async () => {
 // Инициализация
 addBackButtonToChat();
 setupScrollListener();
+
+// Проверяем, есть ли уже токен при загрузке страницы
+console.log('Initial state:', { token, currentUser });
 renderScreen();
 
 // Обработка изменения размера окна
