@@ -390,17 +390,27 @@ $('btn-friends').addEventListener('click', async () => {
   ul.innerHTML = '';
   try {
     const friends = await api('/api/friends');
+    // Убираем дублирование - просто выводим имена
     for (const u of friends) {
       const li = document.createElement('li');
-      li.textContent = u.username;
+      li.textContent = u.username; // Только имя, без дублирования
       ul.appendChild(li);
     }
-    if (friends.length === 0) ul.innerHTML = '<li style="color:var(--text-muted)">No friends yet. Share your code or add someone else\'s.</li>';
+    if (friends.length === 0) {
+      const li = document.createElement('li');
+      li.textContent = 'No friends yet. Share your code or add someone else\'s.';
+      li.style.color = 'var(--text-muted)';
+      li.style.fontStyle = 'italic';
+      ul.appendChild(li);
+    }
   } catch (_) {
-    ul.innerHTML = '<li style="color:var(--text-muted)">Could not load</li>';
+    const li = document.createElement('li');
+    li.textContent = 'Could not load friends';
+    li.style.color = 'var(--text-muted)';
+    li.style.fontStyle = 'italic';
+    ul.appendChild(li);
   }
 });
-
 $('btn-copy-code').addEventListener('click', () => {
   const code = currentUser.friend_code;
   if (code && navigator.clipboard) {

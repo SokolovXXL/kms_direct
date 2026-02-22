@@ -14,32 +14,36 @@
 
 * {
   box-sizing: border-box;
+  margin: 0;
+  padding: 0;
 }
 
 body {
-  margin: 0;
   font-family: var(--font);
   background: var(--bg);
   color: var(--text);
-  min-height: 100vh;
+  height: 100vh;
+  overflow: hidden; /* Запрещаем скролл всей страницы */
 }
 
 .hidden { display: none !important; }
 
 #app {
-  min-height: 100vh;
+  height: 100vh;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
 }
 
 /* Auth */
 #auth-screen {
-  flex: 1;
+  height: 100vh;
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 1rem;
   background: radial-gradient(ellipse 80% 60% at 50% 0%, rgba(99, 102, 241, 0.12), transparent);
+  overflow-y: auto; /* Только окно авторизации может скроллиться при необходимости */
 }
 
 .auth-card {
@@ -105,12 +109,11 @@ body {
   min-height: 1.25rem;
 }
 
-/* Main app */
+/* Main app - как Telegram */
 #main-screen {
-  flex: 1;
+  height: 100vh;
   display: flex;
   flex-direction: column;
-  height: 100vh;
   overflow: hidden;
 }
 
@@ -185,6 +188,15 @@ body {
   align-items: center;
   gap: 0.5rem;
   margin: 0 0 1rem;
+  flex-wrap: wrap;
+}
+
+.friend-code-row strong {
+  background: var(--surface-hover);
+  padding: 0.25rem 0.75rem;
+  border-radius: 4px;
+  font-family: monospace;
+  font-size: 1rem;
 }
 
 .add-friend-label {
@@ -215,6 +227,7 @@ body {
   gap: 0.5rem;
   margin-top: 1rem;
   flex-wrap: wrap;
+  justify-content: flex-end;
 }
 
 .btn-danger {
@@ -231,17 +244,19 @@ body {
   filter: brightness(1.1);
 }
 
+/* Основной лэйаут как в Telegram */
 .layout {
   flex: 1;
   display: flex;
-  min-height: 0;
+  min-height: 0; /* Важно для flex-детей */
   height: calc(100vh - 57px); /* Вычитаем высоту хедера */
   overflow: hidden;
 }
 
+/* Левая панель - чаты */
 .sidebar {
-  width: 280px;
-  min-width: 280px;
+  width: 320px;
+  min-width: 320px;
   background: var(--surface);
   border-right: 1px solid var(--border);
   display: flex;
@@ -272,17 +287,19 @@ body {
   background: var(--accent-hover);
 }
 
+/* Список чатов - прокручивается */
 .dm-list {
   flex: 1;
   overflow-y: auto;
-  height: 100%;
+  overflow-x: hidden;
+  padding: 0.5rem 0;
 }
 
 .dm-item {
   display: flex;
   align-items: center;
   gap: 0.75rem;
-  padding: 1rem 1.25rem;
+  padding: 0.75rem 1rem;
   border: none;
   width: 100%;
   background: transparent;
@@ -290,8 +307,9 @@ body {
   font: inherit;
   text-align: left;
   cursor: pointer;
-  border-bottom: 1px solid var(--border);
   position: relative;
+  border-radius: 0;
+  transition: background 0.1s ease;
 }
 
 .dm-item:hover {
@@ -300,13 +318,9 @@ body {
 
 .dm-item.active {
   background: rgba(99, 102, 241, 0.15);
-  border-left: 3px solid var(--accent);
 }
 
 .dm-item .dm-unread {
-  position: absolute;
-  top: 0.75rem;
-  right: 1rem;
   min-width: 20px;
   height: 20px;
   padding: 0 6px;
@@ -318,25 +332,26 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
+  margin-left: auto;
 }
 
 .dm-item .dm-name {
   font-weight: 500;
-  flex: 1;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  display: block;
+  margin-bottom: 0.2rem;
 }
 
 .dm-item .dm-preview {
   font-size: 0.8rem;
   color: var(--text-muted);
+  display: block;
+  white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
-  max-width: 100%;
+  max-width: 180px;
 }
 
+/* Правая панель - чат */
 .chat-area {
   flex: 1;
   display: flex;
@@ -367,57 +382,66 @@ body {
 
 .chat-header {
   flex-shrink: 0;
-  padding: 1rem 1.25rem;
+  padding: 1rem 1.5rem;
   background: var(--surface);
   border-bottom: 1px solid var(--border);
   font-weight: 600;
+  font-size: 1.1rem;
 }
 
+/* Контейнер сообщений - прокручивается как в Telegram */
 .chat-messages-wrapper {
   flex: 1;
-  min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
   padding: 1rem;
   background: var(--bg);
+  display: flex;
+  flex-direction: column;
 }
 
 #messages-list {
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
+  min-height: min-content;
 }
 
 .message {
   max-width: 75%;
   padding: 0.6rem 1rem;
-  border-radius: 12px;
+  border-radius: 18px;
   font-size: 0.95rem;
   word-break: break-word;
+  line-height: 1.4;
 }
 
 .message.mine {
   align-self: flex-end;
   background: var(--accent);
   color: white;
+  border-bottom-right-radius: 4px;
 }
 
 .message.theirs {
   align-self: flex-start;
   background: var(--surface);
   border: 1px solid var(--border);
+  border-bottom-left-radius: 4px;
 }
 
 .message .message-meta {
-  font-size: 0.7rem;
-  opacity: 0.85;
+  font-size: 0.65rem;
+  opacity: 0.7;
   margin-top: 0.25rem;
+  text-align: right;
 }
 
+/* Форма отправки - прикреплена к низу */
 .send-form {
   display: flex;
   gap: 0.5rem;
-  padding: 1rem;
+  padding: 1rem 1.5rem;
   background: var(--surface);
   border-top: 1px solid var(--border);
   flex-shrink: 0;
@@ -427,10 +451,16 @@ body {
   flex: 1;
   padding: 0.75rem 1rem;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: 24px;
   background: var(--bg);
   color: var(--text);
   font: inherit;
+  outline: none;
+  transition: border-color 0.1s ease;
+}
+
+.send-form input:focus {
+  border-color: var(--accent);
 }
 
 .send-form input::placeholder {
@@ -438,30 +468,36 @@ body {
 }
 
 .send-form button {
-  padding: 0.75rem 1.25rem;
+  padding: 0.75rem 1.5rem;
   border: none;
-  border-radius: 8px;
+  border-radius: 24px;
   background: var(--accent);
   color: white;
   font: inherit;
   font-weight: 600;
   cursor: pointer;
+  transition: background 0.1s ease;
 }
 
 .send-form button:hover {
   background: var(--accent-hover);
 }
 
+.send-form button:active {
+  transform: scale(0.98);
+}
+
 /* Modal */
 .modal {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.6);
+  background: rgba(0, 0, 0, 0.7);
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 100;
+  z-index: 1000;
   padding: 1rem;
+  backdrop-filter: blur(4px);
 }
 
 .modal-content {
@@ -473,6 +509,7 @@ body {
   width: 100%;
   max-height: 90vh;
   overflow-y: auto;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
 }
 
 .modal-content h2 {
@@ -486,32 +523,63 @@ body {
   font-size: 0.9rem;
 }
 
+/* Список друзей без дублирования */
 .user-list {
   list-style: none;
   margin: 0 0 1rem;
   padding: 0;
   max-height: 240px;
   overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
 }
 
 .user-list li {
   margin: 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.user-list li:last-child {
+  border-bottom: none;
 }
 
 .user-list button {
   width: 100%;
   padding: 0.75rem 1rem;
   border: none;
-  border-radius: 8px;
   background: transparent;
   color: var(--text);
   font: inherit;
   text-align: left;
   cursor: pointer;
+  transition: background 0.1s ease;
 }
 
 .user-list button:hover {
   background: var(--surface-hover);
+}
+
+/* Простой список друзей (без кнопок) */
+#friends-list {
+  list-style: none;
+  margin: 1rem 0;
+  padding: 0;
+  max-height: 200px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+}
+
+#friends-list li {
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
+}
+
+#friends-list li:last-child {
+  border-bottom: none;
 }
 
 .btn-close-modal {
@@ -522,6 +590,7 @@ body {
   color: var(--text-muted);
   font: inherit;
   cursor: pointer;
+  transition: all 0.1s ease;
 }
 
 .btn-close-modal:hover {
@@ -532,16 +601,18 @@ body {
 /* Toast & badge */
 .toast {
   position: fixed;
-  bottom: 1.5rem;
+  bottom: 2rem;
   left: 50%;
   transform: translateX(-50%);
-  padding: 0.75rem 1.25rem;
+  padding: 0.75rem 1.5rem;
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 8px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
-  z-index: 200;
-  animation: toastIn 0.25s ease;
+  border-radius: 30px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+  z-index: 2000;
+  animation: toastIn 0.2s ease;
+  font-weight: 500;
+  backdrop-filter: blur(8px);
 }
 
 .toast.hidden {
@@ -551,7 +622,7 @@ body {
 @keyframes toastIn {
   from {
     opacity: 0;
-    transform: translateX(-50%) translateY(10px);
+    transform: translateX(-50%) translateY(20px);
   }
   to {
     opacity: 1;
@@ -574,14 +645,16 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 50;
+  z-index: 100;
+  border: 2px solid var(--surface);
 }
 
 .badge.hidden {
   display: none;
 }
 
-@media (max-width: 640px) {
+/* Мобильная версия */
+@media (max-width: 768px) {
   .layout {
     flex-direction: column;
   }
@@ -597,4 +670,49 @@ body {
   .chat-area {
     height: 60%;
   }
+  
+  .badge {
+    top: 0.5rem;
+    right: 5rem;
+  }
+  
+  .message {
+    max-width: 85%;
+  }
+  
+  .send-form {
+    padding: 0.75rem 1rem;
+  }
+  
+  .send-form input {
+    padding: 0.6rem 1rem;
+  }
+  
+  .send-form button {
+    padding: 0.6rem 1.2rem;
+  }
+}
+
+/* Анимации */
+.dm-item, .message, button {
+  transition: all 0.1s ease;
+}
+
+/* Кастомный скроллбар */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-muted);
 }
