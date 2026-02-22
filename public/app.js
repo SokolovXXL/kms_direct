@@ -137,21 +137,16 @@ async function fetchMe() {
 }
 
 // ---- Sound notification ----
-let audioCtx = null;
-function playNotificationSound() {
+// Создаём аудио объект для уведомлений
+const notificationAudio = new Audio('/notification.mp3');
+
+function playNotificationSound(conversationId) {
+  // Не играем звук, если чат с этим собеседником открыт
+  if (conversationId && conversationId === currentConversationId) return;
+  
   try {
-    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    if (audioCtx.state === 'suspended') audioCtx.resume();
-    const osc = audioCtx.createOscillator();
-    const gain = audioCtx.createGain();
-    osc.connect(gain);
-    gain.connect(audioCtx.destination);
-    osc.frequency.value = 880;
-    osc.type = 'sine';
-    gain.gain.setValueAtTime(0.15, audioCtx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.15);
-    osc.start(audioCtx.currentTime);
-    osc.stop(audioCtx.currentTime + 0.15);
+    notificationAudio.currentTime = 0;
+    notificationAudio.play().catch(() => {});
   } catch (_) {}
 }
 
@@ -228,13 +223,14 @@ function startNotificationStream() {
     try {
       const data = JSON.parse(e.data);
       if (data.type === 'new_message') {
-        playNotificationSound();
         const convId = data.conversationId;
         const message = data.message;
         unreadByConvo[convId] = (unreadByConvo[convId] || 0) + 1;
         
+        // Играем звук для нового сообщения
+        playNotificationSound(convId);
+        
         if (currentConversationId === convId && message) {
-          // Просто добавляем сообщение, прокрутка внутри appendMessageToChat
           appendMessageToChat(message);
         } else {
           updateSidebarRow(convId, message ? message.body : null);
@@ -273,7 +269,7 @@ function escapeHtml(s) {
   return div.innerHTML;
 }
 
-// ИСПРАВЛЕННАЯ функция добавления сообщения с авто-прокруткой
+// Функция добавления сообщения с авто-прокруткой
 function appendMessageToChat(message) {
   const list = $('messages-list');
   if (!list) return;
@@ -435,26 +431,44 @@ async function loadMessages(convId) {
   }
 }
 
+// ИСПРАВЛЕННЫЙ обработчик отправки сообщений
 const sendForm = $('send-form');
 if (sendForm) {
   sendForm.addEventListener('submit', async (e) => {
     e.preventDefault();
+
     if (!currentConversationId) return;
+
     const input = $('message-input');
     if (!input) return;
-    
+
     const body = input.value.trim();
     if (!body) return;
-    input.value = '';
+
     try {
       const msg = await api(`/api/dms/${currentConversationId}/messages`, {
         method: 'POST',
         body: JSON.stringify({ body }),
       });
+
       appendMessageToChat(msg);
+
+      // Очищаем input
+      input.value = '';
+
+      // ВАЖНО - возвращаем фокус обратно в input
+      input.focus();
+
+      // Прокручиваем вниз
+      requestAnimationFrame(() => {
+        scrollMessagesToBottom();
+      });
+
       updateSidebarRow(currentConversationId, body);
+      
       const dm = dmListCache.find(d => d.id === currentConversationId);
       if (dm) dm.lastMessage = body;
+      
     } catch (err) {
       input.value = body;
       alert('Failed to send message: ' + err.message);
@@ -703,6 +717,8 @@ document.addEventListener('DOMContentLoaded', () => {
     btn.style.color = 'var(--text)';
     btn.style.zIndex = '999';
     btn.style.padding = '0 5px';
+    btn.style.minWidth = '44px';
+    btn.style.minHeight = '44px';
     
     btn.onclick = () => {
       showSidebar();
