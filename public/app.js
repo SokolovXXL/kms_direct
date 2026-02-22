@@ -66,33 +66,24 @@ function renderScreen() {
   }
 }
 
-// Функции для мобильной навигации - ИСПРАВЛЕНЫ
+// Функции для мобильной навигации
 function showSidebar() {
-  const sidebar = $('sidebar');
-  const chatArea = $('chat-area');
-
-  if (!sidebar || !chatArea) return;
-
-  sidebar.style.display = 'flex';
-  chatArea.style.display = 'none';
-
-  sidebar.classList.remove('mobile-hidden');
-  chatArea.classList.remove('mobile-visible');
-  chatArea.classList.add('mobile-hidden');
+  const layout = document.querySelector('.layout');
+  if (!layout) return;
+  
+  layout.classList.remove('chat-open');
+  
+  // Сбрасываем активный чат на мобильных
+  if (isMobile()) {
+    currentConversationId = null;
+  }
 }
 
 function showChat() {
-  const sidebar = $('sidebar');
-  const chatArea = $('chat-area');
-
-  if (!sidebar || !chatArea) return;
-
-  sidebar.style.display = 'none';
-  chatArea.style.display = 'flex';
-
-  sidebar.classList.add('mobile-hidden');
-  chatArea.classList.remove('mobile-hidden');
-  chatArea.classList.add('mobile-visible');
+  const layout = document.querySelector('.layout');
+  if (!layout) return;
+  
+  layout.classList.add('chat-open');
 }
 
 // Добавляем кнопку "Назад" в шапку чата
@@ -109,10 +100,6 @@ function addBackButtonToChat() {
   backBtn.setAttribute('aria-label', 'Back');
   backBtn.addEventListener('click', () => {
     showSidebar();
-    // На мобильных сбрасываем активный чат
-    if (isMobile()) {
-      currentConversationId = null;
-    }
   });
   
   // Вставляем кнопку в начало заголовка
@@ -401,12 +388,13 @@ async function loadDmList() {
         </div>
         ${unread > 0 ? `<span class="dm-unread">${unread > 99 ? '99+' : unread}</span>` : ''}
       `;
-      // ИСПРАВЛЕНО: мобильная навигация сразу при клике
+      // Обработчик клика
       item.addEventListener('click', () => {
-        if (isMobile()) {
-          showChat(); // переключаем на чат мгновенно
-        }
         selectConversation(dm.id);
+        if (isMobile()) {
+          // Небольшая задержка для обновления DOM
+          setTimeout(() => showChat(), 10);
+        }
       });
       list.appendChild(item);
     }
@@ -443,8 +431,6 @@ async function selectConversation(convId) {
     el.classList.toggle('active', parseInt(el.dataset.id, 10) === convId);
   });
   loadMessages(convId);
-  
-  // УДАЛЕНО: вызов showChat() отсюда - теперь он вызывается сразу при клике
   
   setTimeout(() => {
     isAtBottom = true;
@@ -529,6 +515,9 @@ if (btnNewDm) {
             const data = await api('/api/dms', { method: 'POST', body: JSON.stringify({ otherUserId: u.id }) });
             hide($('modal-new-dm'));
             selectConversation(data.conversationId);
+            if (isMobile()) {
+              setTimeout(() => showChat(), 10);
+            }
           } catch (err) {
             alert('Failed to create conversation: ' + err.message);
           }
@@ -707,6 +696,24 @@ if (btnConfirmDelete) {
   });
 }
 
+// Обработка изменения размера окна
+window.addEventListener('resize', () => {
+  const layout = document.querySelector('.layout');
+  if (!layout) return;
+  
+  if (!isMobile()) {
+    // На десктопе убираем мобильные классы
+    layout.classList.remove('chat-open');
+  } else {
+    // На мобильных восстанавливаем правильное состояние
+    if (!currentConversationId) {
+      showSidebar();
+    } else {
+      showChat();
+    }
+  }
+});
+
 // Инициализация после загрузки DOM
 document.addEventListener('DOMContentLoaded', () => {
   console.log('DOM loaded, initializing app');
@@ -722,25 +729,4 @@ document.addEventListener('DOMContentLoaded', () => {
   
   // Рендерим экран
   renderScreen();
-});
-
-// Обработка изменения размера окна
-window.addEventListener('resize', () => {
-  if (!isMobile()) {
-    const sidebar = $('sidebar');
-    const chatArea = $('chat-area');
-    if (sidebar && chatArea) {
-      sidebar.style.display = 'flex';
-      chatArea.style.display = 'flex';
-      sidebar.classList.remove('mobile-hidden');
-      chatArea.classList.remove('mobile-hidden');
-      chatArea.classList.remove('mobile-visible');
-    }
-  } else {
-    if (!currentConversationId) {
-      showSidebar();
-    } else {
-      showChat();
-    }
-  }
 });
