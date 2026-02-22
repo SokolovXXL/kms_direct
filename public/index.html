@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Messenger</title>
+  <link rel="stylesheet" href="/style.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&display=swap" rel="stylesheet">
+</head>
+<body>
+  <div id="app">
+    <div id="auth-screen">
+      <div class="auth-card">
+        <h1>Messenger</h1>
+        <p class="auth-sub">Sign in or create an account</p>
+        <form id="login-form">
+          <input type="text" id="login-username" placeholder="Username" autocomplete="username" required />
+          <input type="password" id="login-password" placeholder="Password" autocomplete="current-password" required />
+          <button type="submit">Sign in</button>
+        </form>
+        <form id="register-form">
+          <input type="text" id="register-username" placeholder="Username" autocomplete="username" required minlength="2" />
+          <input type="password" id="register-password" placeholder="Password" autocomplete="new-password" required />
+          <button type="submit">Create account</button>
+        </form>
+        <p id="auth-error" class="auth-error"></p>
+      </div>
+    </div>
+
+    <div id="main-screen" class="hidden">
+      <header class="header">
+        <span class="logo">Messenger</span>
+        <span class="user-name" id="header-username"></span>
+        <button type="button" class="btn-logout" id="btn-logout">Sign out</button>
+      </header>
+      <div class="layout">
+        <aside class="sidebar">
+          <div class="sidebar-actions">
+            <button type="button" class="btn-primary" id="btn-new-dm">New message</button>
+          </div>
+          <div id="dm-list" class="dm-list"></div>
+        </aside>
+        <main class="chat-area">
+          <div id="chat-placeholder" class="placeholder">
+            <p>Select a conversation or start a new message</p>
+          </div>
+          <div id="chat-active" class="hidden">
+            <div class="chat-header">
+              <span id="chat-with-name"></span>
+            </div>
+            <div id="messages-container">
+              <div id="messages-list"></div>
+            </div>
+            <form id="send-form" class="send-form">
+              <input type="text" id="message-input" placeholder="Type a message..." autocomplete="off" />
+              <button type="submit">Send</button>
+            </form>
+          </div>
+        </main>
+      </div>
+    </div>
+
+    <div id="modal-new-dm" class="modal hidden">
+      <div class="modal-content">
+        <h2>New message</h2>
+        <p>Choose a user to start a conversation</p>
+        <ul id="user-list" class="user-list"></ul>
+        <button type="button" class="btn-close-modal" id="btn-close-modal">Cancel</button>
+      </div>
+    </div>
+
+    <div id="notification-toast" class="toast hidden"></div>
+    <div id="notification-badge" class="badge hidden">0</div>
+  </div>
+  <script src="/app.js"></script>
+</body>
+</html>
