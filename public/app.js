@@ -7,7 +7,7 @@ let eventSource = null;
 let unreadByConvo = {};
 let dmListCache = [];
 let isAtBottom = true;
-let scrollThreshold = 300; // Увеличиваем порог для определения "внизу"
+let scrollThreshold = 30000; // Увеличиваем порог для определения "внизу"
 
 const $ = (id) => document.getElementById(id);
 
