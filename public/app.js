@@ -7,6 +7,7 @@ let eventSource = null;
 let unreadByConvo = {};
 let dmListCache = [];
 let isAtBottom = true;
+let scrollThreshold = 300; // Увеличиваем порог для определения "внизу"
 
 const $ = (id) => document.getElementById(id);
 
@@ -147,8 +148,7 @@ function setupScrollListener() {
   if (!container) return;
   
   container.addEventListener('scroll', () => {
-    const threshold = 100;
-    const bottom = container.scrollHeight - container.scrollTop - container.clientHeight < threshold;
+    const bottom = container.scrollHeight - container.scrollTop - container.clientHeight < scrollThreshold;
     isAtBottom = bottom;
     
     if (bottom) {
@@ -274,12 +274,14 @@ function startNotificationStream() {
           // Проверяем, находится ли пользователь внизу чата
           const container = $('chat-messages-wrapper');
           if (container) {
-            const threshold = 50; // Небольшой порог для определения "внизу"
-            const bottom = container.scrollHeight - container.scrollTop - container.clientHeight < threshold;
+            // Увеличиваем порог до 300px для более агрессивной прокрутки
+            const bottom = container.scrollHeight - container.scrollTop - container.clientHeight < scrollThreshold;
             
             if (bottom) {
-              // Если пользователь внизу, прокручиваем вниз
-              scrollMessagesToBottom();
+              // Если пользователь близко к низу, прокручиваем вниз
+              setTimeout(() => {
+                scrollMessagesToBottom();
+              }, 50); // Небольшая задержка для гарантии
             } else {
               // Если не внизу, показываем кнопку прокрутки
               if (scrollDownBtn) scrollDownBtn.classList.remove('hidden');
@@ -346,6 +348,15 @@ function scrollMessagesToBottom() {
       top: container.scrollHeight,
       behavior: 'smooth'
     });
+    isAtBottom = true;
+    if (scrollDownBtn) scrollDownBtn.classList.add('hidden');
+  }
+}
+
+function forceScrollToBottom() {
+  const container = $('chat-messages-wrapper');
+  if (container) {
+    container.scrollTop = container.scrollHeight;
     isAtBottom = true;
     if (scrollDownBtn) scrollDownBtn.classList.add('hidden');
   }
@@ -440,10 +451,11 @@ async function selectConversation(convId) {
     showChat();
   }
   
+  // Принудительная прокрутка вниз при выборе чата
   setTimeout(() => {
     isAtBottom = true;
-    scrollMessagesToBottom();
-  }, 100);
+    forceScrollToBottom();
+  }, 200);
 }
 
 async function loadMessages(convId) {
@@ -462,7 +474,10 @@ async function loadMessages(convId) {
       `;
       list.appendChild(div);
     }
-    scrollMessagesToBottom();
+    // Принудительная прокрутка вниз после загрузки сообщений
+    setTimeout(() => {
+      forceScrollToBottom();
+    }, 100);
   } catch (_) {
     list.innerHTML = '<p style="color:var(--text-muted)">Could not load messages</p>';
   }
@@ -485,7 +500,10 @@ if (sendForm) {
         body: JSON.stringify({ body }),
       });
       appendMessageToChat(msg);
-      scrollMessagesToBottom();
+      // Принудительная прокрутка вниз после отправки
+      setTimeout(() => {
+        forceScrollToBottom();
+      }, 50);
       updateSidebarRow(currentConversationId, body);
       const dm = dmListCache.find(d => d.id === currentConversationId);
       if (dm) dm.lastMessage = body;
