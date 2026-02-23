@@ -27,7 +27,7 @@ function showAuthError(msg) {
 // API функция с автоматической отправкой cookies
 async function api(path, options = {}) {
   const res = await fetch(API + path, {
-    credentials: 'include', // Критически важно для отправки cookies
+    credentials: 'include',
     ...options,
     headers: {
       'Content-Type': 'application/json',
@@ -43,19 +43,16 @@ async function api(path, options = {}) {
 
 // Попытка автоматического входа при загрузке
 async function tryAutoLogin() {
-  // Если есть сохраненный пользователь, показываем интерфейс сразу
   if (currentUser) {
     renderScreen();
   }
 
   try {
-    // Пытаемся получить актуальные данные пользователя через cookie
     const me = await api('/api/me');
     currentUser = me;
     localStorage.setItem('user', JSON.stringify(me));
     renderScreen();
   } catch (err) {
-    // Не авторизован - очищаем сохраненные данные
     currentUser = null;
     localStorage.removeItem('user');
     renderScreen();
@@ -78,7 +75,6 @@ function renderScreen() {
     loadDmList();
     loadNotificationCount();
     
-    // На мобильных показываем список чатов
     if (isMobile()) {
       showSidebar();
     }
@@ -89,14 +85,12 @@ function renderScreen() {
   }
 }
 
-// Функции для мобильной навигации
 function showSidebar() {
   const layout = document.querySelector('.layout');
   if (!layout) return;
   
   layout.classList.remove('chat-open');
   
-  // Сбрасываем активный чат на мобильных
   if (isMobile()) {
     currentConversationId = null;
   }
@@ -109,7 +103,6 @@ function showChat() {
   layout.classList.add('chat-open');
 }
 
-// Создаём кнопку "Прокрутить вниз"
 function createScrollDownButton() {
   if (document.querySelector('.btn-scroll-down')) return document.querySelector('.btn-scroll-down');
   
@@ -130,7 +123,6 @@ function createScrollDownButton() {
 
 let scrollDownBtn = null;
 
-// Отслеживаем скролл
 function setupScrollListener() {
   const container = $('chat-messages-wrapper');
   if (!container) return;
@@ -159,11 +151,9 @@ async function fetchMe() {
   } catch (_) {}
 }
 
-// ---- Sound notification ----
 const notificationAudio = new Audio('/notification.mp3');
 
 function playNotificationSound(conversationId) {
-  // Не играем звук, если чат с этим собеседником открыт
   if (conversationId && conversationId === currentConversationId) return;
   
   try {
@@ -241,11 +231,14 @@ if (logoutBtn) {
 
 // ---- Notifications (SSE) ----
 function startNotificationStream() {
-  stopNotificationStream();
+  // FIXED: Always close existing connection before creating new one
+  if (eventSource) {
+    eventSource.close();
+    eventSource = null;
+  }
+  
   if (!currentUser) return;
   
-  // SSE не поддерживает credentials автоматически, поэтому используем токен в URL
-  // Но можно также положить токен в cookie - он отправится автоматически
   const url = `${API}/api/notifications/stream`;
   eventSource = new EventSource(url, { withCredentials: true });
   
@@ -269,7 +262,7 @@ function startNotificationStream() {
   };
   
   eventSource.onerror = () => {
-    // Автоматически переподключается
+    // Auto-reconnect
   };
 }
 
@@ -309,7 +302,6 @@ function appendMessageToChat(message) {
 
   const container = $('chat-messages-wrapper');
   
-  // Проверяем, был ли пользователь внизу до добавления сообщения
   const wasAtBottom = container.scrollHeight - container.scrollTop - container.clientHeight <= 20;
 
   const div = document.createElement('div');
@@ -320,7 +312,6 @@ function appendMessageToChat(message) {
   `;
   list.appendChild(div);
 
-  // Прокручиваем вниз ТОЛЬКО если пользователь был внизу
   requestAnimationFrame(() => {
     if (wasAtBottom) {
       container.scrollTop = container.scrollHeight;
@@ -372,7 +363,7 @@ async function loadDmList() {
   
   try {
     const [dms, notifByConvoResp] = await Promise.all([
-      api('/api/dms'), 
+      api('/api/conversations'),
       api('/api/notifications')
     ]);
     
@@ -390,9 +381,17 @@ async function loadDmList() {
       item.type = 'button';
       item.className = 'dm-item' + (dm.id === currentConversationId ? ' active' : '');
       item.dataset.id = dm.id;
+      
+      let nameHtml = '';
+      if (dm.isGroup) {
+        nameHtml = `<span class="dm-name">👥 ${escapeHtml(dm.title)}</span>`;
+      } else {
+        nameHtml = `<span class="dm-name">${escapeHtml(dm.otherUser?.username || 'Unknown')}</span>`;
+      }
+      
       item.innerHTML = `
         <div style="flex:1;min-width:0;">
-          <span class="dm-name">${escapeHtml(dm.otherUser.username)}</span>
+          ${nameHtml}
           <span class="dm-preview">${escapeHtml(dm.lastMessage || 'No messages yet')}</span>
         </div>
         ${unread > 0 ? `<span class="dm-unread">${unread > 99 ? '99+' : unread}</span>` : ''}
@@ -400,20 +399,25 @@ async function loadDmList() {
       
       item.addEventListener('click', () => {
         selectConversation(dm.id);
-        if (isMobile()) {
-          setTimeout(() => showChat(), 10);
+        if (dm.isGroup) {
+          showGroupInfoButton(dm.id, dm.title);
+        } else {
+          hideGroupInfoButton();
         }
+        if (isMobile()) setTimeout(() => showChat(), 10);
       });
       list.appendChild(item);
     }
     updateBadgeFromCache();
   } catch (err) {
-    console.error('Failed to load DMs:', err);
+    console.error('Failed to load conversations:', err);
     list.innerHTML = '<p style="padding:1rem;color:var(--text-muted)">Could not load conversations</p>';
   }
 }
 
 async function selectConversation(convId) {
+  // FIXED: Ensure convId is a number
+  convId = parseInt(convId, 10);
   currentConversationId = convId;
   
   try {
@@ -439,7 +443,16 @@ async function selectConversation(convId) {
   
   if (chatPlaceholder) hide(chatPlaceholder);
   if (chatActive) show(chatActive);
-  if (chatWithName) chatWithName.textContent = dm ? dm.otherUser.username : '…';
+  
+  let displayName = '';
+  if (dm) {
+    if (dm.isGroup) {
+      displayName = dm.title || 'Group';
+    } else {
+      displayName = dm.otherUser?.username || '…';
+    }
+  }
+  if (chatWithName) chatWithName.textContent = displayName;
   
   document.querySelectorAll('.dm-item').forEach(el => {
     el.classList.toggle('active', parseInt(el.dataset.id, 10) === convId);
@@ -460,7 +473,7 @@ async function loadMessages(convId) {
   list.innerHTML = '';
   
   try {
-    const messages = await api(`/api/dms/${convId}/messages`);
+    const messages = await api(`/api/conversations/${convId}/messages`);
     
     for (const m of messages) {
       const div = document.createElement('div');
@@ -480,7 +493,6 @@ async function loadMessages(convId) {
   }
 }
 
-// Отправка сообщений
 const sendForm = $('send-form');
 if (sendForm) {
   sendForm.addEventListener('submit', async (e) => {
@@ -495,14 +507,13 @@ if (sendForm) {
     if (!body) return;
 
     try {
-      const msg = await api(`/api/dms/${currentConversationId}/messages`, {
+      const msg = await api(`/api/conversations/${currentConversationId}/messages`, {
         method: 'POST',
         body: JSON.stringify({ body }),
       });
 
       appendMessageToChat(msg);
 
-      // Очищаем input и возвращаем фокус
       input.value = '';
       input.focus();
 
@@ -744,58 +755,6 @@ if (btnConfirmDelete) {
   });
 }
 
-// Обработка изменения размера окна
-window.addEventListener('resize', () => {
-  const layout = document.querySelector('.layout');
-  if (!layout) return;
-  
-  if (!isMobile()) {
-    layout.classList.remove('chat-open');
-  } else {
-    if (!currentConversationId) {
-      showSidebar();
-    } else {
-      showChat();
-    }
-  }
-});
-
-// Инициализация после загрузки DOM
-document.addEventListener('DOMContentLoaded', () => {
-  console.log('DOM loaded, initializing app');
-  
-  scrollDownBtn = createScrollDownButton();
-  setupScrollListener();
-  
-  // Добавляем кнопку "Назад" на мобильных
-  const header = $('chat-header');
-  if (header && isMobile() && !$('mobile-back-btn')) {
-    const btn = document.createElement('button');
-    btn.innerHTML = '←';
-    btn.id = 'mobile-back-btn';
-    btn.setAttribute('aria-label', 'Back');
-    
-    btn.style.fontSize = '26px';
-    btn.style.marginRight = '12px';
-    btn.style.cursor = 'pointer';
-    btn.style.background = 'none';
-    btn.style.border = 'none';
-    btn.style.color = 'var(--text)';
-    btn.style.zIndex = '999';
-    btn.style.padding = '0 5px';
-    btn.style.minWidth = '44px';
-    btn.style.minHeight = '44px';
-    
-    btn.onclick = () => {
-      showSidebar();
-    };
-    
-    header.insertBefore(btn, header.firstChild);
-  }
-  
-  // Пытаемся автоматически войти
-  tryAutoLogin();
-});
 // ---- GROUPS ----
 const btnGroups = $('btn-groups');
 const btnCreateGroupBtn = $('btn-create-group-btn');
@@ -803,7 +762,6 @@ const modalCreateGroup = $('modal-create-group');
 const modalGroupInfo = $('modal-group-info');
 const modalAddMember = $('modal-add-member');
 
-// Open groups list modal
 if (btnGroups) {
   btnGroups.addEventListener('click', async () => {
     show($('modal-groups-list'));
@@ -811,7 +769,6 @@ if (btnGroups) {
   });
 }
 
-// Create group button in sidebar
 if (btnCreateGroupBtn) {
   btnCreateGroupBtn.addEventListener('click', async () => {
     show(modalCreateGroup);
@@ -819,7 +776,6 @@ if (btnCreateGroupBtn) {
   });
 }
 
-// Close group modal
 const btnCloseGroup = $('btn-close-group');
 if (btnCloseGroup) {
   btnCloseGroup.addEventListener('click', () => hide(modalCreateGroup));
@@ -831,7 +787,6 @@ if (modalCreateGroup) {
   });
 }
 
-// Load friends for group creation
 async function loadFriendsForGroup() {
   const list = $('group-friends-list');
   if (!list) return;
@@ -877,7 +832,6 @@ async function loadFriendsForGroup() {
   }
 }
 
-// Create group
 const btnCreateGroup = $('btn-create-group');
 if (btnCreateGroup) {
   btnCreateGroup.addEventListener('click', async () => {
@@ -903,9 +857,8 @@ if (btnCreateGroup) {
       });
       
       hide(modalCreateGroup);
-      await loadDmList(); // Reload conversations
+      await loadDmList();
       
-      // Open the new group
       selectConversation(data.conversationId);
       if (isMobile()) showChat();
       
@@ -915,119 +868,10 @@ if (btnCreateGroup) {
   });
 }
 
-// Update conversation list to show groups
-// Modify the render function in loadDmList
-// Find where you create dm-item and replace with:
-
-// In loadDmList function, replace the item creation part with:
-/*
-for (const dm of dms) {
-  const unread = notifByConvoResp[dm.id] || 0;
-  const item = document.createElement('button');
-  item.type = 'button';
-  item.className = 'dm-item' + (dm.id === currentConversationId ? ' active' : '');
-  item.dataset.id = dm.id;
-  
-  let nameHtml = '';
-  if (dm.isGroup) {
-    nameHtml = `<span class="dm-name">👥 ${escapeHtml(dm.title)}</span>`;
-  } else {
-    nameHtml = `<span class="dm-name">${escapeHtml(dm.otherUser?.username || 'Unknown')}</span>`;
-  }
-  
-  item.innerHTML = `
-    <div style="flex:1;min-width:0;">
-      ${nameHtml}
-      <span class="dm-preview">${escapeHtml(dm.lastMessage || 'No messages yet')}</span>
-    </div>
-    ${unread > 0 ? `<span class="dm-unread">${unread > 99 ? '99+' : unread}</span>` : ''}
-  `;
-  
-  item.addEventListener('click', () => {
-    selectConversation(dm.id);
-    if (dm.isGroup) {
-      // Show group info button in header
-      showGroupInfoButton(dm.id, dm.title);
-    } else {
-      hideGroupInfoButton();
-    }
-    if (isMobile()) setTimeout(() => showChat(), 10);
-  });
-  list.appendChild(item);
-}
-*/
-
-// But since we can't replace the whole function, let's add a patch
-// Add this after loadDmList function definition:
-
-// Patch the existing loadDmList function
-const originalLoadDmList = loadDmList;
-loadDmList = async function() {
-  const list = $('dm-list');
-  if (!list) return;
-  
-  list.innerHTML = '';
-  
-  try {
-    const [dms, notifByConvoResp] = await Promise.all([
-      api('/api/conversations'), // Use new endpoint that includes groups
-      api('/api/notifications')
-    ]);
-    
-    unreadByConvo = notifByConvoResp;
-    dmListCache = dms;
-    
-    if (dms.length === 0) {
-      list.innerHTML = '<p style="padding:1rem;color:var(--text-muted)">No conversations yet. Start a new message!</p>';
-      return;
-    }
-    
-    for (const dm of dms) {
-      const unread = notifByConvoResp[dm.id] || 0;
-      const item = document.createElement('button');
-      item.type = 'button';
-      item.className = 'dm-item' + (dm.id === currentConversationId ? ' active' : '');
-      item.dataset.id = dm.id;
-      
-      let nameHtml = '';
-      if (dm.isGroup) {
-        nameHtml = `<span class="dm-name">👥 ${escapeHtml(dm.title)}</span>`;
-      } else {
-        nameHtml = `<span class="dm-name">${escapeHtml(dm.otherUser?.username || 'Unknown')}</span>`;
-      }
-      
-      item.innerHTML = `
-        <div style="flex:1;min-width:0;">
-          ${nameHtml}
-          <span class="dm-preview">${escapeHtml(dm.lastMessage || 'No messages yet')}</span>
-        </div>
-        ${unread > 0 ? `<span class="dm-unread">${unread > 99 ? '99+' : unread}</span>` : ''}
-      `;
-      
-      item.addEventListener('click', () => {
-        selectConversation(dm.id);
-        if (dm.isGroup) {
-          showGroupInfoButton(dm.id, dm.title);
-        } else {
-          hideGroupInfoButton();
-        }
-        if (isMobile()) setTimeout(() => showChat(), 10);
-      });
-      list.appendChild(item);
-    }
-    updateBadgeFromCache();
-  } catch (err) {
-    console.error('Failed to load conversations:', err);
-    list.innerHTML = '<p style="padding:1rem;color:var(--text-muted)">Could not load conversations</p>';
-  }
-};
-
-// Group info button in chat header
 function showGroupInfoButton(groupId, groupTitle) {
   const header = $('chat-header');
   if (!header) return;
   
-  // Remove existing info button if any
   const oldBtn = document.getElementById('group-info-btn');
   if (oldBtn) oldBtn.remove();
   
@@ -1053,7 +897,6 @@ function hideGroupInfoButton() {
   if (btn) btn.remove();
 }
 
-// Show group info modal
 async function showGroupInfo(groupId, groupTitle) {
   const modal = $('modal-group-info');
   const titleEl = $('group-info-title');
@@ -1076,7 +919,6 @@ async function showGroupInfo(groupId, groupTitle) {
       listEl.appendChild(li);
     });
     
-    // Store groupId for add member button
     const addBtn = $('btn-add-member');
     if (addBtn) {
       addBtn.dataset.groupId = groupId;
@@ -1088,7 +930,6 @@ async function showGroupInfo(groupId, groupTitle) {
   }
 }
 
-// Close group info modal
 const btnCloseGroupInfo = $('btn-close-group-info');
 if (btnCloseGroupInfo) {
   btnCloseGroupInfo.addEventListener('click', () => hide(modalGroupInfo));
@@ -1100,7 +941,6 @@ if (modalGroupInfo) {
   });
 }
 
-// Add member button
 const btnAddMember = $('btn-add-member');
 if (btnAddMember) {
   btnAddMember.addEventListener('click', async () => {
@@ -1115,7 +955,6 @@ if (btnAddMember) {
   });
 }
 
-// Load friends that are not in group
 async function loadFriendsToAdd(groupId, groupTitle) {
   const list = $('add-member-list');
   if (!list) return;
@@ -1154,7 +993,7 @@ async function loadFriendsToAdd(groupId, groupTitle) {
           });
           
           hide(modalAddMember);
-          showGroupInfo(groupId, groupTitle); // Refresh info
+          showGroupInfo(groupId, groupTitle);
         } catch (err) {
           $('add-member-error').textContent = err.message;
         }
@@ -1169,7 +1008,6 @@ async function loadFriendsToAdd(groupId, groupTitle) {
   }
 }
 
-// Close add member modal
 const btnCloseAddMember = $('btn-close-add-member');
 if (btnCloseAddMember) {
   btnCloseAddMember.addEventListener('click', () => hide(modalAddMember));
@@ -1180,3 +1018,54 @@ if (modalAddMember) {
     if (e.target.id === 'modal-add-member') hide(modalAddMember);
   });
 }
+
+// ---- Window resize handling ----
+window.addEventListener('resize', () => {
+  const layout = document.querySelector('.layout');
+  if (!layout) return;
+  
+  if (!isMobile()) {
+    layout.classList.remove('chat-open');
+  } else {
+    if (!currentConversationId) {
+      showSidebar();
+    } else {
+      showChat();
+    }
+  }
+});
+
+// ---- Initialization ----
+document.addEventListener('DOMContentLoaded', () => {
+  console.log('DOM loaded, initializing app');
+  
+  scrollDownBtn = createScrollDownButton();
+  setupScrollListener();
+  
+  const header = $('chat-header');
+  if (header && isMobile() && !$('mobile-back-btn')) {
+    const btn = document.createElement('button');
+    btn.innerHTML = '←';
+    btn.id = 'mobile-back-btn';
+    btn.setAttribute('aria-label', 'Back');
+    
+    btn.style.fontSize = '26px';
+    btn.style.marginRight = '12px';
+    btn.style.cursor = 'pointer';
+    btn.style.background = 'none';
+    btn.style.border = 'none';
+    btn.style.color = 'var(--text)';
+    btn.style.zIndex = '999';
+    btn.style.padding = '0 5px';
+    btn.style.minWidth = '44px';
+    btn.style.minHeight = '44px';
+    
+    btn.onclick = () => {
+      showSidebar();
+    };
+    
+    header.insertBefore(btn, header.firstChild);
+  }
+  
+  tryAutoLogin();
+});

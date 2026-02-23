@@ -182,7 +182,6 @@ app.delete('/api/account', authMiddleware, async (req, res) => {
 });
 
 // ---- Friends (by friend code) ----
-// FIXED: No more duplicates - using single-direction lookup
 app.get('/api/friends', authMiddleware, async (req, res) => {
   const r = await pool.query(`
     SELECT u.id, u.username, u.friend_code
@@ -221,60 +220,122 @@ app.post('/api/friends', authMiddleware, async (req, res) => {
 });
 
 // ---- Conversations (DMs & Groups) ----
-// FIXED: No more duplicates, added group support
+// FIXED: No duplicates, one row per conversation
 app.get('/api/conversations', authMiddleware, async (req, res) => {
   const r = await pool.query(`
-    SELECT DISTINCT ON (c.id)
-           c.id,
-           c.created_at,
-           c.is_group,
-           c.title,
-           u.id AS other_user_id,
-           u.username AS other_username,
-           (
-             SELECT body FROM messages
-             WHERE conversation_id = c.id
-             ORDER BY created_at DESC
-             LIMIT 1
-           ) AS last_message,
-           (
-             SELECT created_at FROM messages
-             WHERE conversation_id = c.id
-             ORDER BY created_at DESC
-             LIMIT 1
-           ) AS last_at
+    SELECT
+      c.id,
+      c.created_at,
+      c.is_group,
+      c.title,
+      COALESCE(
+        (
+          SELECT json_agg(json_build_object('id', u.id, 'username', u.username))
+          FROM conversation_participants cp2
+          JOIN users u ON u.id = cp2.user_id
+          WHERE cp2.conversation_id = c.id AND u.id != $1
+        ),
+        '[]'::json
+      ) AS other_users,
+      (
+        SELECT body
+        FROM messages
+        WHERE conversation_id = c.id
+        ORDER BY created_at DESC
+        LIMIT 1
+      ) AS last_message,
+      (
+        SELECT created_at
+        FROM messages
+        WHERE conversation_id = c.id
+        ORDER BY created_at DESC
+        LIMIT 1
+      ) AS last_at
     FROM conversations c
-    JOIN conversation_participants cp1 
-         ON cp1.conversation_id = c.id AND cp1.user_id = $1
-    LEFT JOIN conversation_participants cp2 
-         ON cp2.conversation_id = c.id AND cp2.user_id != $1 AND c.is_group = false
-    LEFT JOIN users u ON u.id = cp2.user_id
-    ORDER BY c.id, last_at DESC NULLS LAST
+    WHERE EXISTS (
+      SELECT 1
+      FROM conversation_participants
+      WHERE conversation_id = c.id AND user_id = $1
+    )
+    ORDER BY last_at DESC NULLS LAST, c.id DESC
   `, [req.userId]);
 
   const convos = r.rows.map(row => ({
     id: row.id,
     isGroup: row.is_group || false,
     title: row.title,
-    otherUser: !row.is_group && row.other_user_id ? {
-      id: row.other_user_id,
-      username: row.other_username
-    } : null,
+    otherUsers: row.other_users,
     lastMessage: row.last_message,
     lastAt: row.last_at,
     createdAt: row.created_at
   }));
-  
+
   res.json(convos);
 });
 
-// Create DM (legacy endpoint for backward compatibility)
+// Legacy endpoint for backward compatibility
+app.get('/api/dms', authMiddleware, async (req, res) => {
+  const r = await pool.query(`
+    SELECT
+      c.id,
+      c.created_at,
+      c.is_group,
+      c.title,
+      COALESCE(
+        (
+          SELECT json_agg(json_build_object('id', u.id, 'username', u.username))
+          FROM conversation_participants cp2
+          JOIN users u ON u.id = cp2.user_id
+          WHERE cp2.conversation_id = c.id AND u.id != $1
+        ),
+        '[]'::json
+      ) AS other_users,
+      (
+        SELECT body
+        FROM messages
+        WHERE conversation_id = c.id
+        ORDER BY created_at DESC
+        LIMIT 1
+      ) AS last_message,
+      (
+        SELECT created_at
+        FROM messages
+        WHERE conversation_id = c.id
+        ORDER BY created_at DESC
+        LIMIT 1
+      ) AS last_at
+    FROM conversations c
+    WHERE EXISTS (
+      SELECT 1
+      FROM conversation_participants
+      WHERE conversation_id = c.id AND user_id = $1
+    )
+    ORDER BY last_at DESC NULLS LAST, c.id DESC
+  `, [req.userId]);
+
+  const convos = r.rows.map(row => ({
+    id: row.id,
+    isGroup: row.is_group || false,
+    title: row.title,
+    // For backward compatibility, provide the first other user as 'otherUser'
+    otherUser: !row.is_group && row.other_users && row.other_users.length > 0 ? row.other_users[0] : null,
+    otherUsers: row.other_users,
+    lastMessage: row.last_message,
+    lastAt: row.last_at,
+    createdAt: row.created_at
+  }));
+
+  res.json(convos);
+});
+
+// Create DM
 app.post('/api/dms', authMiddleware, async (req, res) => {
   const { otherUserId } = req.body || {};
   if (!otherUserId || otherUserId === req.userId) {
     return res.status(400).json({ error: 'Valid other user required' });
   }
   
+  // Check if they are friends
   const isFriend = await pool.query(
     'SELECT 1 FROM friends WHERE (user_id = $1 AND friend_id = $2) OR (user_id = $2 AND friend_id = $1)',
     [req.userId, otherUserId]
@@ -284,11 +345,23 @@ app.post('/api/dms', authMiddleware, async (req, res) => {
     return res.status(403).json({ error: 'Add this user as a friend first (using their friend code)' });
   }
   
+  // Check for existing conversation using a more reliable method
   const existing = await pool.query(`
-    SELECT c.id FROM conversations c
+    SELECT c.id 
+    FROM conversations c
     WHERE c.is_group = false
-    AND EXISTS (SELECT 1 FROM conversation_participants WHERE conversation_id = c.id AND user_id = $1)
-    AND EXISTS (SELECT 1 FROM conversation_participants WHERE conversation_id = c.id AND user_id = $2)
+    AND EXISTS (
+      SELECT 1 FROM conversation_participants 
+      WHERE conversation_id = c.id AND user_id = $1
+    )
+    AND EXISTS (
+      SELECT 1 FROM conversation_participants 
+      WHERE conversation_id = c.id AND user_id = $2
+    )
+    AND (
+      SELECT COUNT(*) FROM conversation_participants 
+      WHERE conversation_id = c.id
+    ) = 2
   `, [req.userId, otherUserId]);
   
   if (existing.rows.length > 0) {
@@ -558,109 +631,6 @@ app.post('/api/conversations/:id/messages', authMiddleware, async (req, res) => 
 });
 
 // Legacy endpoint for backward compatibility
-app.get('/api/dms', authMiddleware, async (req, res) => {
-  // Redirect to new endpoint but keep old name for compatibility
-  const r = await pool.query(`
-    SELECT DISTINCT ON (c.id)
-           c.id,
-           c.created_at,
-           c.is_group,
-           c.title,
-           u.id AS other_user_id,
-           u.username AS other_username,
-           (
-             SELECT body FROM messages
-             WHERE conversation_id = c.id
-             ORDER BY created_at DESC
-             LIMIT 1
-           ) AS last_message,
-           (
-             SELECT created_at FROM messages
-             WHERE conversation_id = c.id
-             ORDER BY created_at DESC
-             LIMIT 1
-           ) AS last_at
-    FROM conversations c
-    JOIN conversation_participants cp1 
-         ON cp1.conversation_id = c.id AND cp1.user_id = $1
-    LEFT JOIN conversation_participants cp2 
-         ON cp2.conversation_id = c.id AND cp2.user_id != $1 AND c.is_group = false
-    LEFT JOIN users u ON u.id = cp2.user_id
-    ORDER BY c.id, last_at DESC NULLS LAST
-  `, [req.userId]);
-
-  const convos = r.rows.map(row => ({
-    id: row.id,
-    isGroup: row.is_group || false,
-    title: row.title,
-    otherUser: !row.is_group && row.other_user_id ? {
-      id: row.other_user_id,
-      username: row.other_username
-    } : null,
-    lastMessage: row.last_message,
-    lastAt: row.last_at,
-    createdAt: row.created_at
-  }));
-  
-  res.json(convos);
-});
-
-// ---- Notifications ----
-app.get('/api/notifications/count', authMiddleware, async (req, res) => {
-  const r = await pool.query(
-    'SELECT COUNT(*)::int AS c FROM notifications WHERE user_id = $1',
-    [req.userId]
-  );
-  res.json({ count: r.rows[0].c });
-});
-
-app.get('/api/notifications', authMiddleware, async (req, res) => {
-  const r = await pool.query(
-    'SELECT conversation_id, COUNT(*)::int AS c FROM notifications WHERE user_id = $1 GROUP BY conversation_id',
-    [req.userId]
-  );
-  const byConvo = {};
-  r.rows.forEach(row => { byConvo[row.conversation_id] = row.c; });
-  res.json(byConvo);
-});
-
-app.get('/api/notifications/stream', streamAuthMiddleware, (req, res) => {
-  res.setHeader('Content-Type', 'text/event-stream');
-  res.setHeader('Cache-Control', 'no-cache');
-  res.setHeader('Connection', 'keep-alive');
-  res.flushHeaders();
-  
-  const userId = req.userId;
-  
-  if (!sseClients.has(userId)) sseClients.set(userId, []);
-  sseClients.get(userId).push(res);
-  
-  res.on('close', () => {
-    const list = sseClients.get(userId);
-    if (list) {
-      const i = list.indexOf(res);
-      if (i !== -1) list.splice(i, 1);
-      if (list.length === 0) sseClients.delete(userId);
-    }
-  });
-});
-
-app.post('/api/notifications/read', authMiddleware, async (req, res) => {
-  const { conversationId } = req.body || {};
-  
-  if (conversationId != null) {
-    await pool.query(
-      'DELETE FROM notifications WHERE user_id = $1 AND conversation_id = $2',
-      [req.userId, conversationId]
-    );
-  } else {
-    await pool.query('DELETE FROM notifications WHERE user_id = $1', [req.userId]);
-  }
-  
-  res.json({ ok: true });
-});
-// ---- Backward compatibility for old frontend ----
-// Keep old DM messages routes for frontend compatibility
 app.get('/api/dms/:id/messages', authMiddleware, async (req, res) => {
   const convId = parseInt(req.params.id, 10);
   
@@ -741,6 +711,61 @@ app.post('/api/dms/:id/messages', authMiddleware, async (req, res) => {
     created_at: msg.created_at, 
     sender_id: msg.sender_id 
   });
+});
+
+// ---- Notifications ----
+app.get('/api/notifications/count', authMiddleware, async (req, res) => {
+  const r = await pool.query(
+    'SELECT COUNT(*)::int AS c FROM notifications WHERE user_id = $1',
+    [req.userId]
+  );
+  res.json({ count: r.rows[0].c });
+});
+
+app.get('/api/notifications', authMiddleware, async (req, res) => {
+  const r = await pool.query(
+    'SELECT conversation_id, COUNT(*)::int AS c FROM notifications WHERE user_id = $1 GROUP BY conversation_id',
+    [req.userId]
+  );
+  const byConvo = {};
+  r.rows.forEach(row => { byConvo[row.conversation_id] = row.c; });
+  res.json(byConvo);
+});
+
+app.get('/api/notifications/stream', streamAuthMiddleware, (req, res) => {
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.flushHeaders();
+  
+  const userId = req.userId;
+  
+  if (!sseClients.has(userId)) sseClients.set(userId, []);
+  sseClients.get(userId).push(res);
+  
+  res.on('close', () => {
+    const list = sseClients.get(userId);
+    if (list) {
+      const i = list.indexOf(res);
+      if (i !== -1) list.splice(i, 1);
+      if (list.length === 0) sseClients.delete(userId);
+    }
+  });
+});
+
+app.post('/api/notifications/read', authMiddleware, async (req, res) => {
+  const { conversationId } = req.body || {};
+  
+  if (conversationId != null) {
+    await pool.query(
+      'DELETE FROM notifications WHERE user_id = $1 AND conversation_id = $2',
+      [req.userId, conversationId]
+    );
+  } else {
+    await pool.query('DELETE FROM notifications WHERE user_id = $1', [req.userId]);
+  }
+  
+  res.json({ ok: true });
 });
 
 app.get('*', (req, res) => {
