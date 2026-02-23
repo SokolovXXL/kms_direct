@@ -8,6 +8,25 @@ let conversationListCache = [];
 let isAtBottom = true;
 let currentConversationIsGroup = false;
 
+// ========== ЗВОНКИ ==========
+let callWS = null;
+let currentCallId = null;
+let callParticipants = [];
+let localStream = null;
+let peerConnections = new Map();
+let callActive = false;
+let selfMuted = false;
+let mutedUsers = new Set();
+let speakingUsers = new Set();
+let audioContext = null;
+let analysers = new Map();
+
+// ========== ФАЙЛЫ ==========
+let pendingFiles = [];
+let receivedFiles = new Map();
+const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100MB
+const SPEAKING_THRESHOLD = 0.3;
+
 const $ = (id) => document.getElementById(id);
 
 // Определяем мобильное устройство
@@ -75,6 +94,7 @@ function renderScreen() {
     startNotificationStream();
     loadConversationList();
     loadNotificationCount();
+    connectCallWS(); // Подключаем WebSocket для звонков
     
     if (isMobile()) {
       showSidebar();
@@ -83,6 +103,7 @@ function renderScreen() {
     show($('auth-screen'));
     hide($('main-screen'));
     stopNotificationStream();
+    if (callWS) callWS.close();
   }
 }
 
@@ -255,21 +276,17 @@ function startNotificationStream() {
         if (currentConversationId === convId && message) {
           appendMessageToChat(message);
         } else {
-          updateSidebarRow(convId, message ? message.body : null);
+          updateSidebarRow(convId, message.body || (message.file_name ? '📎 Файл' : null));
         }
       } else if (data.type === 'new_group') {
-        // Обновляем список разговоров при создании новой группы
         loadConversationList();
       } else if (data.type === 'added_to_group') {
-        // Обновляем список при добавлении в группу
         loadConversationList();
       }
     } catch (_) {}
   };
   
-  eventSource.onerror = () => {
-    // Auto-reconnect
-  };
+  eventSource.onerror = () => {};
 }
 
 function stopNotificationStream() {
@@ -302,7 +319,7 @@ function escapeHtml(s) {
   return div.innerHTML;
 }
 
-// Исправленная функция добавления сообщения с поддержкой групп
+// ---- Сообщения с поддержкой файлов ----
 function appendMessageToChat(message) {
   const list = $('messages-list');
   if (!list) return;
@@ -314,7 +331,7 @@ function appendMessageToChat(message) {
   const messageDiv = document.createElement('div');
   messageDiv.className = 'message ' + (message.sender_id === currentUser.id ? 'mine' : 'theirs');
   
-  // Для групп показываем имя отправителя (кроме своих сообщений)
+  // Для групп показываем имя отправителя
   if (currentConversationIsGroup && message.sender_id !== currentUser.id) {
     const nameSpan = document.createElement('div');
     nameSpan.className = 'message-sender';
@@ -322,9 +339,52 @@ function appendMessageToChat(message) {
     messageDiv.appendChild(nameSpan);
   }
   
-  const bodyDiv = document.createElement('div');
-  bodyDiv.textContent = message.body;
-  messageDiv.appendChild(bodyDiv);
+  // Текст сообщения
+  if (message.body) {
+    const bodyDiv = document.createElement('div');
+    bodyDiv.textContent = message.body;
+    messageDiv.appendChild(bodyDiv);
+  }
+  
+  // Файл
+  if (message.file_data) {
+    const fileId = 'file_' + Date.now() + Math.random();
+    const fileInfo = {
+      blob: base64ToBlob(message.file_data, message.file_type),
+      name: message.file_name,
+      type: message.file_type,
+      size: message.file_size
+    };
+    receivedFiles.set(fileId, fileInfo);
+    
+    if (message.file_type?.startsWith('image/')) {
+      const img = document.createElement('img');
+      img.className = 'image-preview';
+      img.src = URL.createObjectURL(fileInfo.blob);
+      img.onclick = () => showMedia(fileId, 'image');
+      messageDiv.appendChild(img);
+    } else if (message.file_type?.startsWith('video/')) {
+      const video = document.createElement('video');
+      video.className = 'video-preview';
+      video.src = URL.createObjectURL(fileInfo.blob);
+      video.controls = true;
+      messageDiv.appendChild(video);
+    } else {
+      const fileDiv = document.createElement('div');
+      fileDiv.className = 'file-message';
+      fileDiv.innerHTML = `
+        <div class="file-info">
+          <span class="file-icon">${getFileIcon(message.file_type)}</span>
+          <div class="file-details">
+            <div class="file-name">${escapeHtml(message.file_name)}</div>
+            <div class="file-size">${formatFileSize(message.file_size)}</div>
+          </div>
+        </div>
+        <button class="download-btn" onclick="downloadFile('${fileId}', '${escapeHtml(message.file_name).replace(/'/g, "\\'")}')">Скачать</button>
+      `;
+      messageDiv.appendChild(fileDiv);
+    }
+  }
   
   const metaDiv = document.createElement('div');
   metaDiv.className = 'message-meta';
@@ -407,10 +467,8 @@ async function loadConversationList() {
       let previewText = conv.lastMessage || 'No messages yet';
       
       if (conv.isGroup) {
-        // Для групп показываем иконку и название
         nameHtml = `<span class="dm-name">👥 ${escapeHtml(conv.title || 'Group')}</span>`;
       } else {
-        // Для личных чатов показываем имя собеседника
         const otherUserName = conv.otherUser?.username || 'Unknown';
         nameHtml = `<span class="dm-name">${escapeHtml(otherUserName)}</span>`;
       }
@@ -441,7 +499,6 @@ async function loadConversationList() {
   }
 }
 
-// Сохраняем для обратной совместимости
 const loadDmList = loadConversationList;
 
 async function selectConversation(convId) {
@@ -465,7 +522,6 @@ async function selectConversation(convId) {
     conversation = conversationListCache.find(c => c.id === convId);
   }
   
-  // Определяем, группа ли это
   currentConversationIsGroup = conversation ? conversation.isGroup : false;
   
   const chatPlaceholder = $('chat-placeholder');
@@ -491,13 +547,15 @@ async function selectConversation(convId) {
   
   loadMessages(convId);
   
+  // Добавляем кнопку звонка
+  updateCallButton();
+  
   setTimeout(() => {
     isAtBottom = true;
     scrollMessagesToBottom();
   }, 200);
 }
 
-// Исправленная функция загрузки сообщений
 async function loadMessages(convId) {
   const list = $('messages-list');
   if (!list) return;
@@ -508,27 +566,7 @@ async function loadMessages(convId) {
     const messages = await api(`/api/conversations/${convId}/messages`);
     
     for (const msg of messages) {
-      const messageDiv = document.createElement('div');
-      messageDiv.className = 'message ' + (msg.sender_id === currentUser.id ? 'mine' : 'theirs');
-      
-      // Для групп показываем имя отправителя (кроме своих сообщений)
-      if (currentConversationIsGroup && msg.sender_id !== currentUser.id) {
-        const nameSpan = document.createElement('div');
-        nameSpan.className = 'message-sender';
-        nameSpan.textContent = msg.sender_username || 'Unknown';
-        messageDiv.appendChild(nameSpan);
-      }
-      
-      const bodyDiv = document.createElement('div');
-      bodyDiv.textContent = msg.body;
-      messageDiv.appendChild(bodyDiv);
-      
-      const metaDiv = document.createElement('div');
-      metaDiv.className = 'message-meta';
-      metaDiv.textContent = new Date(msg.created_at).toLocaleString();
-      messageDiv.appendChild(metaDiv);
-      
-      list.appendChild(messageDiv);
+      appendMessageToChat(msg);
     }
     
     requestAnimationFrame(() => {
@@ -540,7 +578,7 @@ async function loadMessages(convId) {
   }
 }
 
-// Отправка сообщений
+// ---- Отправка сообщений с файлами ----
 const sendForm = $('send-form');
 if (sendForm) {
   sendForm.addEventListener('submit', async (e) => {
@@ -548,35 +586,47 @@ if (sendForm) {
 
     if (!currentConversationId) return;
 
-    const input = $('message-input');
-    if (!input) return;
-
-    const body = input.value.trim();
-    if (!body) return;
-
-    try {
-      const msg = await api(`/api/conversations/${currentConversationId}/messages`, {
-        method: 'POST',
-        body: JSON.stringify({ body }),
-      });
-
-      appendMessageToChat(msg);
-
-      input.value = '';
-      input.focus();
-
-      requestAnimationFrame(() => {
-        scrollMessagesToBottom();
-      });
-
-      updateSidebarRow(currentConversationId, body);
-      
-      const conversation = conversationListCache.find(c => c.id === currentConversationId);
-      if (conversation) conversation.lastMessage = body;
-      
-    } catch (err) {
-      input.value = body;
-      alert('Failed to send message: ' + err.message);
+    const textInput = $('message-input');
+    const text = textInput.value.trim();
+    
+    // Отправляем текстовое сообщение
+    if (text) {
+      try {
+        await api(`/api/conversations/${currentConversationId}/messages`, {
+          method: 'POST',
+          body: JSON.stringify({ body: text }),
+        });
+        textInput.value = '';
+      } catch (err) {
+        alert('Failed to send message: ' + err.message);
+      }
+    }
+    
+    // Отправляем файлы
+    if (pendingFiles.length > 0) {
+      show($('upload-progress'));
+      for (let i = 0; i < pendingFiles.length; i++) {
+        const file = pendingFiles[i];
+        $('progress-bar').style.width = ((i + 1) / pendingFiles.length * 100) + '%';
+        try {
+          const base64 = await fileToBase64(file);
+          const base64Data = base64.split(',')[1] || base64;
+          await api(`/api/conversations/${currentConversationId}/messages`, {
+            method: 'POST',
+            body: JSON.stringify({
+              fileData: base64Data,
+              fileName: file.name,
+              fileType: file.type,
+              fileSize: file.size
+            }),
+          });
+        } catch (err) {
+          alert(`Failed to send file ${file.name}: ${err.message}`);
+        }
+      }
+      pendingFiles = [];
+      hide($('upload-progress'));
+      $('progress-bar').style.width = '0%';
     }
   });
 }
@@ -607,7 +657,7 @@ if (btnNewDm) {
             });
             hide($('modal-new-dm'));
             selectConversation(data.conversationId);
-            hideGroupInfoButton(); // Личные чаты не имеют кнопки информации
+            hideGroupInfoButton();
             if (isMobile()) {
               setTimeout(() => showChat(), 10);
             }
@@ -811,7 +861,6 @@ const modalCreateGroup = $('modal-create-group');
 const modalGroupInfo = $('modal-group-info');
 const modalAddMember = $('modal-add-member');
 
-// Функция для загрузки списка групп (для модального окна списка групп)
 async function loadGroupsList() {
   const list = $('groups-list');
   if (!list) return;
@@ -1148,6 +1197,426 @@ window.addEventListener('resize', () => {
   }
 });
 
+// ========== ФУНКЦИИ ДЛЯ ФАЙЛОВ ==========
+function handleFileSelect() {
+  const fileInput = $('file-input');
+  if (!fileInput) return;
+  
+  const files = Array.from(fileInput.files);
+  const tooBig = files.some(f => f.size > MAX_FILE_SIZE);
+  if (tooBig) {
+    alert(`Files larger than ${MAX_FILE_SIZE/1024/1024}MB are not supported`);
+    fileInput.value = '';
+    return;
+  }
+  pendingFiles = pendingFiles.concat(files);
+  if (files.length > 0) {
+    addSystemMessage(`📎 Selected ${files.length} file(s). Click Send to upload.`);
+  }
+  fileInput.value = '';
+}
+
+function fileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+function base64ToBlob(base64, mimeType) {
+  try {
+    const byteCharacters = atob(base64);
+    const byteArrays = [];
+    for (let offset = 0; offset < byteCharacters.length; offset += 512) {
+      const slice = byteCharacters.slice(offset, offset + 512);
+      const byteNumbers = new Array(slice.length);
+      for (let i = 0; i < slice.length; i++) byteNumbers[i] = slice.charCodeAt(i);
+      byteArrays.push(new Uint8Array(byteNumbers));
+    }
+    return new Blob(byteArrays, { type: mimeType || 'application/octet-stream' });
+  } catch (e) {
+    console.error('Base64 decode error:', e);
+    return new Blob([], { type: mimeType });
+  }
+}
+
+function getFileIcon(mimeType) {
+  if (!mimeType) return '📎';
+  if (mimeType.startsWith('image/')) return '🖼️';
+  if (mimeType.startsWith('video/')) return '🎬';
+  if (mimeType.startsWith('audio/')) return '🎵';
+  if (mimeType.includes('pdf')) return '📕';
+  if (mimeType.includes('word') || mimeType.includes('document')) return '📘';
+  if (mimeType.includes('excel') || mimeType.includes('sheet')) return '📗';
+  if (mimeType.includes('zip') || mimeType.includes('archive')) return '🗜️';
+  return '📎';
+}
+
+function formatFileSize(bytes) {
+  if (bytes === 0) return '0 B';
+  const k = 1024;
+  const sizes = ['B', 'KB', 'MB', 'GB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+}
+
+window.downloadFile = function(fileId, fileName) {
+  const fileInfo = receivedFiles.get(fileId);
+  if (!fileInfo || !fileInfo.blob) {
+    alert('File not found');
+    return;
+  }
+  const url = URL.createObjectURL(fileInfo.blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = fileName;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+};
+
+window.showMedia = function(fileId, type) {
+  const fileInfo = receivedFiles.get(fileId);
+  if (!fileInfo || !fileInfo.blob) {
+    alert('Media not found');
+    return;
+  }
+  const modal = $('media-modal');
+  const content = $('modal-content');
+  const url = URL.createObjectURL(fileInfo.blob);
+  if (type === 'image') {
+    content.innerHTML = `<img src="${url}" style="max-width:90vw; max-height:90vh;">`;
+  } else if (type === 'video') {
+    content.innerHTML = `<video src="${url}" controls autoplay style="max-width:90vw; max-height:90vh;"></video>`;
+  }
+  modal.classList.remove('hidden');
+};
+
+function addSystemMessage(text) {
+  const list = $('messages-list');
+  if (!list) return;
+  const div = document.createElement('div');
+  div.style.textAlign = 'center';
+  div.style.color = 'var(--text-muted)';
+  div.style.fontSize = '0.85rem';
+  div.style.padding = '0.5rem';
+  div.textContent = text;
+  list.appendChild(div);
+  $('chat-messages-wrapper').scrollTop = $('chat-messages-wrapper').scrollHeight;
+}
+
+// ========== ЗВОНКИ (WebSocket и WebRTC) ==========
+function connectCallWS() {
+  const token = document.cookie.split('; ').find(row => row.startsWith('token='))?.split('=')[1];
+  if (!token) return;
+  const wsUrl = API.replace('http', 'ws') + '/ws';
+  callWS = new WebSocket(wsUrl);
+  
+  callWS.onopen = () => {
+    callWS.send(JSON.stringify({ type: 'auth', token: token }));
+  };
+  
+  callWS.onmessage = (event) => {
+    const data = JSON.parse(event.data);
+    handleCallMessage(data);
+  };
+  
+  callWS.onclose = () => {
+    if (callActive) endCall();
+  };
+}
+
+function handleCallMessage(data) {
+  switch(data.type) {
+    case 'auth_success':
+      console.log('Call WS ready');
+      break;
+    case 'call_joined':
+      callParticipants = data.participants || [];
+      updateCallParticipantsList();
+      break;
+    case 'user_joined':
+      callParticipants.push(data.userId);
+      addSystemMessage(`🎤 ${data.username || 'User'} joined the call`);
+      updateCallParticipantsList();
+      if (callActive && localStream) createOffer(data.userId);
+      break;
+    case 'user_left':
+      callParticipants = callParticipants.filter(id => id !== data.userId);
+      addSystemMessage(`👋 A participant left`);
+      updateCallParticipantsList();
+      closePeerConnection(data.userId);
+      mutedUsers.delete(data.userId);
+      speakingUsers.delete(data.userId);
+      break;
+    case 'offer':
+      handleOffer(data);
+      break;
+    case 'answer':
+      handleAnswer(data);
+      break;
+    case 'candidate':
+      handleCandidate(data);
+      break;
+    case 'user_muted':
+      if (data.muted) mutedUsers.add(data.userId);
+      else mutedUsers.delete(data.userId);
+      updateCallParticipantsList();
+      break;
+    case 'error':
+      alert(data.message);
+      if (data.message.includes('full')) endCall();
+      break;
+  }
+}
+
+window.startCall = async function() {
+  if (!currentConversationId) return;
+  
+  try {
+    $('call-status').textContent = '⏳ Requesting microphone...';
+    show($('call-panel'));
+    
+    localStream = await navigator.mediaDevices.getUserMedia({ 
+      audio: { echoCancellation: true, noiseSuppression: true }
+    });
+    
+    callActive = true;
+    selfMuted = false;
+    
+    currentCallId = `call_${currentConversationId}`;
+    
+    callWS.send(JSON.stringify({
+      type: 'join_call',
+      callId: currentCallId,
+      conversationId: currentConversationId
+    }));
+    
+    $('btn-mute-call').textContent = '🔇 Mute';
+    $('call-status').textContent = '🎤 In call';
+    
+    addSystemMessage('🎤 Call started');
+    
+  } catch (err) {
+    alert('Could not access microphone: ' + err.message);
+    hide($('call-panel'));
+  }
+};
+
+window.endCall = function() {
+  if (callWS && currentCallId) {
+    callWS.send(JSON.stringify({ type: 'leave_call' }));
+  }
+  
+  peerConnections.forEach((pc, id) => {
+    try { pc.close(); } catch (e) {}
+    const audio = document.getElementById(`call-audio-${id}`);
+    if (audio) audio.remove();
+  });
+  peerConnections.clear();
+  
+  if (localStream) {
+    localStream.getAudioTracks().forEach(track => track.stop());
+    localStream = null;
+  }
+  
+  if (audioContext) {
+    audioContext.close();
+    audioContext = null;
+  }
+  
+  analysers.clear();
+  callActive = false;
+  selfMuted = false;
+  mutedUsers.clear();
+  speakingUsers.clear();
+  currentCallId = null;
+  callParticipants = [];
+  
+  hide($('call-panel'));
+  addSystemMessage('🔇 Call ended');
+};
+
+window.toggleMute = function() {
+  if (!localStream) return;
+  selfMuted = !selfMuted;
+  localStream.getAudioTracks().forEach(track => track.enabled = !selfMuted);
+  $('btn-mute-call').textContent = selfMuted ? '🎤 Unmute' : '🔇 Mute';
+  
+  if (callWS && currentCallId) {
+    callWS.send(JSON.stringify({ type: 'mute_toggle', muted: selfMuted }));
+  }
+};
+
+async function createPeerConnection(targetUserId) {
+  if (peerConnections.has(targetUserId)) return peerConnections.get(targetUserId);
+  
+  const config = {
+    iceServers: [
+      { urls: 'stun:stun.l.google.com:19302' },
+      { urls: 'stun:stun1.l.google.com:19302' },
+      { urls: 'turn:openrelay.metered.ca:80', username: 'openrelayproject', credential: 'openrelayproject' }
+    ]
+  };
+  
+  const pc = new RTCPeerConnection(config);
+  
+  if (localStream) {
+    localStream.getAudioTracks().forEach(track => pc.addTrack(track, localStream));
+  }
+  
+  pc.onicecandidate = (event) => {
+    if (event.candidate && callWS) {
+      callWS.send(JSON.stringify({
+        type: 'candidate',
+        targetUserId: targetUserId,
+        candidate: event.candidate
+      }));
+    }
+  };
+  
+  pc.ontrack = (event) => {
+    let audio = document.getElementById(`call-audio-${targetUserId}`);
+    if (!audio) {
+      audio = document.createElement('audio');
+      audio.id = `call-audio-${targetUserId}`;
+      audio.autoplay = true;
+      document.body.appendChild(audio);
+      setupAudioAnalyser(targetUserId);
+    }
+    audio.srcObject = event.streams[0];
+    if (mutedUsers.has(targetUserId)) audio.volume = 0;
+  };
+  
+  peerConnections.set(targetUserId, pc);
+  return pc;
+}
+
+function closePeerConnection(userId) {
+  if (peerConnections.has(userId)) {
+    try { peerConnections.get(userId).close(); } catch (e) {}
+    peerConnections.delete(userId);
+  }
+  const audio = document.getElementById(`call-audio-${userId}`);
+  if (audio) audio.remove();
+}
+
+async function createOffer(targetUserId) {
+  try {
+    const pc = await createPeerConnection(targetUserId);
+    const offer = await pc.createOffer({ offerToReceiveAudio: true });
+    await pc.setLocalDescription(offer);
+    callWS.send(JSON.stringify({ type: 'offer', targetUserId, offer }));
+  } catch (err) { console.error('Offer error:', err); }
+}
+
+async function handleOffer(data) {
+  try {
+    const pc = await createPeerConnection(data.senderId);
+    await pc.setRemoteDescription(new RTCSessionDescription(data.offer));
+    const answer = await pc.createAnswer();
+    await pc.setLocalDescription(answer);
+    callWS.send(JSON.stringify({ type: 'answer', targetUserId: data.senderId, answer }));
+  } catch (err) { console.error('Answer error:', err); }
+}
+
+async function handleAnswer(data) {
+  try {
+    const pc = peerConnections.get(data.senderId);
+    if (pc && pc.signalingState === 'have-local-offer') {
+      await pc.setRemoteDescription(new RTCSessionDescription(data.answer));
+    }
+  } catch (err) { console.error('Answer error:', err); }
+}
+
+async function handleCandidate(data) {
+  try {
+    const pc = peerConnections.get(data.senderId);
+    if (pc) await pc.addIceCandidate(new RTCIceCandidate(data.candidate));
+  } catch (err) { console.error('Candidate error:', err); }
+}
+
+function setupAudioAnalyser(userId) {
+  if (!audioContext) audioContext = new (window.AudioContext || window.webkitAudioContext)();
+  const audio = document.getElementById(`call-audio-${userId}`);
+  if (!audio) return;
+  try {
+    const source = audioContext.createMediaElementSource(audio);
+    const analyser = audioContext.createAnalyser();
+    analyser.fftSize = 256;
+    source.connect(analyser);
+    analyser.connect(audioContext.destination);
+    analysers.set(userId, analyser);
+    monitorVolume(userId);
+  } catch (e) { console.log('Analyser error:', e); }
+}
+
+function monitorVolume(userId) {
+  const analyser = analysers.get(userId);
+  if (!analyser) return;
+  const dataArray = new Uint8Array(analyser.frequencyBinCount);
+  function check() {
+    if (!callActive || mutedUsers.has(userId)) {
+      if (speakingUsers.has(userId)) {
+        speakingUsers.delete(userId);
+        updateCallParticipantsList();
+      }
+      requestAnimationFrame(check);
+      return;
+    }
+    analyser.getByteFrequencyData(dataArray);
+    let sum = 0;
+    for (let i = 0; i < dataArray.length; i++) sum += dataArray[i];
+    const avg = sum / dataArray.length / 255;
+    const wasSpeaking = speakingUsers.has(userId);
+    if (avg > SPEAKING_THRESHOLD && !wasSpeaking) {
+      speakingUsers.add(userId);
+      updateCallParticipantsList();
+    } else if (avg <= SPEAKING_THRESHOLD && wasSpeaking) {
+      speakingUsers.delete(userId);
+      updateCallParticipantsList();
+    }
+    requestAnimationFrame(check);
+  }
+  check();
+}
+
+function updateCallParticipantsList() {
+  const list = $('call-participants');
+  if (!list) return;
+  const otherParticipants = callParticipants.filter(id => id !== currentUser?.id);
+  list.innerHTML = otherParticipants.map(userId => {
+    const user = conversationListCache.flatMap(c => c.participants || []).find(p => p.id === userId);
+    const username = user?.username || 'User';
+    const isSpeaking = speakingUsers.has(userId) && !mutedUsers.has(userId);
+    const isMuted = mutedUsers.has(userId);
+    return `
+      <div class="call-participant ${isSpeaking ? 'speaking' : ''}">
+        <span class="participant-name">${escapeHtml(username)}</span>
+        <span class="participant-status">${isMuted ? '🔇' : (isSpeaking ? '🎤' : '')}</span>
+      </div>
+    `;
+  }).join('');
+}
+
+function updateCallButton() {
+  const chatHeader = $('chat-header');
+  if (!chatHeader) return;
+  let callBtn = document.getElementById('call-button');
+  if (!callBtn) {
+    callBtn = document.createElement('button');
+    callBtn.id = 'call-button';
+    callBtn.innerHTML = '🎤';
+    callBtn.className = 'call-header-btn';
+    callBtn.title = 'Start call';
+    callBtn.onclick = startCall;
+    chatHeader.appendChild(callBtn);
+  }
+}
+
 // ---- Initialization ----
 document.addEventListener('DOMContentLoaded', () => {
   console.log('DOM loaded, initializing app');
@@ -1180,374 +1649,11 @@ document.addEventListener('DOMContentLoaded', () => {
     header.insertBefore(btn, header.firstChild);
   }
   
+  // Добавляем обработчик для file-input
+  const fileInput = $('file-input');
+  if (fileInput) {
+    fileInput.addEventListener('change', handleFileSelect);
+  }
+  
   tryAutoLogin();
-});
-// ========== ЗВОНКИ ==========
-let callWS = null;
-let currentCallId = null;
-let callParticipants = [];
-let localStream = null;
-let peerConnections = new Map();
-let callActive = false;
-let selfMuted = false;
-let mutedUsers = new Set();
-let speakingUsers = new Set();
-
-// DOM элементы для звонков (добавить в разметку)
-const callPanel = document.getElementById('call-panel');
-const callParticipantsList = document.getElementById('call-participants');
-const startCallBtn = document.getElementById('btn-start-call');
-const endCallBtn = document.getElementById('btn-end-call');
-const muteCallBtn = document.getElementById('btn-mute-call');
-const callStatus = document.getElementById('call-status');
-
-// Подключение к WebSocket для звонков
-function connectCallWS() {
-  const token = document.cookie.split('; ').find(row => row.startsWith('token='))?.split('=')[1];
-  if (!token) return;
-  
-  const wsUrl = API.replace('http', 'ws') + '/ws';
-  callWS = new WebSocket(wsUrl);
-  
-  callWS.onopen = () => {
-    callWS.send(JSON.stringify({ type: 'auth', token: token }));
-  };
-  
-  callWS.onmessage = (event) => {
-    const data = JSON.parse(event.data);
-    handleCallMessage(data);
-  };
-  
-  callWS.onclose = () => {
-    if (callActive) endCall();
-  };
-}
-
-function handleCallMessage(data) {
-  switch(data.type) {
-    case 'auth_success':
-      console.log('Call WebSocket authenticated');
-      break;
-      
-    case 'call_joined':
-      callParticipants = data.participants || [];
-      updateCallParticipantsList();
-      break;
-      
-    case 'user_joined':
-      callParticipants.push(data.userId);
-      addSystemMessage(`🎤 ${data.username} присоединился к звонку`);
-      updateCallParticipantsList();
-      
-      if (callActive && localStream) {
-        createOffer(data.userId);
-      }
-      break;
-      
-    case 'user_left':
-      callParticipants = callParticipants.filter(id => id !== data.userId);
-      addSystemMessage(`👋 Участник покинул звонок`);
-      updateCallParticipantsList();
-      
-      closePeerConnection(data.userId);
-      mutedUsers.delete(data.userId);
-      speakingUsers.delete(data.userId);
-      break;
-      
-    case 'offer':
-      handleOffer(data);
-      break;
-      
-    case 'answer':
-      handleAnswer(data);
-      break;
-      
-    case 'candidate':
-      handleCandidate(data);
-      break;
-      
-    case 'user_muted':
-      if (data.muted) {
-        mutedUsers.add(data.userId);
-      } else {
-        mutedUsers.delete(data.userId);
-      }
-      updateCallParticipantsList();
-      break;
-      
-    case 'error':
-      alert(data.message);
-      if (data.message.includes('full')) {
-        endCall();
-      }
-      break;
-  }
-}
-
-// Начать звонок в группе
-async function startCall() {
-  if (!currentConversationId) return;
-  
-  // Находим группу
-  const conversation = conversationListCache.find(c => c.id === currentConversationId);
-  if (!conversation || !conversation.isGroup) {
-    alert('Звонки доступны только в группах');
-    return;
-  }
-  
-  try {
-    callStatus.textContent = '⏳ Запрос микрофона...';
-    show(callPanel);
-    
-    localStream = await navigator.mediaDevices.getUserMedia({ 
-      audio: { echoCancellation: true, noiseSuppression: true }
-    });
-    
-    callActive = true;
-    selfMuted = false;
-    
-    // Генерируем ID звонка на основе ID группы
-    currentCallId = `call_${currentConversationId}`;
-    
-    callWS.send(JSON.stringify({
-      type: 'join_call',
-      callId: currentCallId,
-      groupId: currentConversationId
-    }));
-    
-    // Обновляем UI
-    if (startCallBtn) startCallBtn.disabled = true;
-    if (endCallBtn) endCallBtn.disabled = false;
-    if (muteCallBtn) muteCallBtn.textContent = '🔇 Заглушить';
-    callStatus.textContent = '🎤 В звонке';
-    callStatus.className = 'call-status active';
-    
-    addSystemMessage('🎤 Звонок начат');
-    
-  } catch (err) {
-    alert('Не удалось получить доступ к микрофону');
-    hide(callPanel);
-  }
-}
-
-function endCall() {
-  if (callWS && currentCallId) {
-    callWS.send(JSON.stringify({
-      type: 'leave_call'
-    }));
-  }
-  
-  // Закрываем все peer connection
-  peerConnections.forEach((pc, id) => {
-    try { pc.close(); } catch (e) {}
-    const audio = document.getElementById(`call-audio-${id}`);
-    if (audio) audio.remove();
-  });
-  peerConnections.clear();
-  
-  if (localStream) {
-    localStream.getAudioTracks().forEach(track => track.stop());
-    localStream = null;
-  }
-  
-  callActive = false;
-  selfMuted = false;
-  mutedUsers.clear();
-  speakingUsers.clear();
-  currentCallId = null;
-  callParticipants = [];
-  
-  // Обновляем UI
-  if (startCallBtn) startCallBtn.disabled = false;
-  if (endCallBtn) endCallBtn.disabled = true;
-  hide(callPanel);
-  
-  addSystemMessage('🔇 Звонок завершен');
-}
-
-function toggleMute() {
-  if (!localStream) return;
-  
-  selfMuted = !selfMuted;
-  localStream.getAudioTracks().forEach(track => {
-    track.enabled = !selfMuted;
-  });
-  
-  if (muteCallBtn) {
-    muteCallBtn.textContent = selfMuted ? '🎤 Включить' : '🔇 Заглушить';
-  }
-  
-  if (callWS && currentCallId) {
-    callWS.send(JSON.stringify({
-      type: 'mute_toggle',
-      muted: selfMuted
-    }));
-  }
-}
-
-// WebRTC функции
-async function createPeerConnection(targetUserId) {
-  if (peerConnections.has(targetUserId)) {
-    return peerConnections.get(targetUserId);
-  }
-  
-  const configuration = {
-    iceServers: [
-      { urls: 'stun:stun.l.google.com:19302' },
-      { urls: 'stun:stun1.l.google.com:19302' },
-      { urls: 'turn:openrelay.metered.ca:80', username: 'openrelayproject', credential: 'openrelayproject' }
-    ]
-  };
-  
-  const pc = new RTCPeerConnection(configuration);
-  
-  if (localStream) {
-    localStream.getAudioTracks().forEach(track => pc.addTrack(track, localStream));
-  }
-  
-  pc.onicecandidate = (event) => {
-    if (event.candidate && callWS) {
-      callWS.send(JSON.stringify({
-        type: 'candidate',
-        targetUserId: targetUserId,
-        candidate: event.candidate
-      }));
-    }
-  };
-  
-  pc.ontrack = (event) => {
-    let audio = document.getElementById(`call-audio-${targetUserId}`);
-    if (!audio) {
-      audio = document.createElement('audio');
-      audio.id = `call-audio-${targetUserId}`;
-      audio.autoplay = true;
-      document.body.appendChild(audio);
-    }
-    audio.srcObject = event.streams[0];
-    
-    if (mutedUsers.has(targetUserId)) {
-      audio.volume = 0;
-    }
-  };
-  
-  peerConnections.set(targetUserId, pc);
-  return pc;
-}
-
-function closePeerConnection(userId) {
-  if (peerConnections.has(userId)) {
-    try { peerConnections.get(userId).close(); } catch (e) {}
-    peerConnections.delete(userId);
-  }
-  
-  const audio = document.getElementById(`call-audio-${userId}`);
-  if (audio) audio.remove();
-}
-
-async function createOffer(targetUserId) {
-  try {
-    const pc = await createPeerConnection(targetUserId);
-    const offer = await pc.createOffer({ offerToReceiveAudio: true });
-    await pc.setLocalDescription(offer);
-    
-    callWS.send(JSON.stringify({
-      type: 'offer',
-      targetUserId: targetUserId,
-      offer: offer
-    }));
-  } catch (err) {
-    console.error('Create offer error:', err);
-  }
-}
-
-async function handleOffer(data) {
-  try {
-    const pc = await createPeerConnection(data.senderId);
-    await pc.setRemoteDescription(new RTCSessionDescription(data.offer));
-    const answer = await pc.createAnswer();
-    await pc.setLocalDescription(answer);
-    
-    callWS.send(JSON.stringify({
-      type: 'answer',
-      targetUserId: data.senderId,
-      answer: answer
-    }));
-  } catch (err) {
-    console.error('Handle offer error:', err);
-  }
-}
-
-async function handleAnswer(data) {
-  try {
-    const pc = peerConnections.get(data.senderId);
-    if (pc && pc.signalingState === 'have-local-offer') {
-      await pc.setRemoteDescription(new RTCSessionDescription(data.answer));
-    }
-  } catch (err) {
-    console.error('Handle answer error:', err);
-  }
-}
-
-async function handleCandidate(data) {
-  try {
-    const pc = peerConnections.get(data.senderId);
-    if (pc) {
-      await pc.addIceCandidate(new RTCIceCandidate(data.candidate));
-    }
-  } catch (err) {
-    console.error('Handle candidate error:', err);
-  }
-}
-
-function updateCallParticipantsList() {
-  if (!callParticipantsList) return;
-  
-  const otherParticipants = callParticipants.filter(id => id !== currentUser?.id);
-  
-  callParticipantsList.innerHTML = otherParticipants.map(userId => {
-    const user = conversationListCache
-      .flatMap(c => c.participants || [])
-      .find(p => p.id === userId);
-    
-    const username = user?.username || 'Участник';
-    const isSpeaking = speakingUsers.has(userId) && !mutedUsers.has(userId);
-    const isMuted = mutedUsers.has(userId);
-    
-    return `
-      <div class="call-participant ${isSpeaking ? 'speaking' : ''}">
-        <span class="participant-name">${username}</span>
-        <span class="participant-status">${isMuted ? '🔇' : (isSpeaking ? '🎤' : '')}</span>
-      </div>
-    `;
-  }).join('');
-}
-
-// Инициализация при загрузке
-document.addEventListener('DOMContentLoaded', () => {
-  // ... ваш существующий код ...
-  
-  // Добавляем кнопку звонка в заголовок группы
-  const chatHeader = document.getElementById('chat-header');
-  if (chatHeader) {
-    const callBtn = document.createElement('button');
-    callBtn.id = 'btn-start-call';
-    callBtn.innerHTML = '🎤';
-    callBtn.className = 'call-header-btn';
-    callBtn.style.marginLeft = 'auto';
-    callBtn.style.background = 'none';
-    callBtn.style.border = 'none';
-    callBtn.style.color = 'var(--text-muted)';
-    callBtn.style.fontSize = '1.2rem';
-    callBtn.style.cursor = 'pointer';
-    callBtn.style.padding = '0 10px';
-    callBtn.style.minWidth = '44px';
-    callBtn.style.minHeight = '44px';
-    callBtn.title = 'Начать звонок';
-    callBtn.onclick = startCall;
-    
-    chatHeader.appendChild(callBtn);
-  }
-  
-  // Подключаем WebSocket для звонков
-  connectCallWS();
 });

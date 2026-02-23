@@ -28,13 +28,11 @@ app.use(cors({
   origin: process.env.NODE_ENV === 'production' ? process.env.FRONTEND_URL : 'http://localhost:3000',
   credentials: true
 }));
-app.use(express.json());
+app.use(express.json({ limit: '50mb' })); // для файлов
 app.use(cookieParser());
 app.use(express.static(path.join(__dirname, 'public')));
 
 const sseClients = new Map();
-
-// Хранилище для звонков
 const callRooms = new Map(); // callId -> { participants: Set<userId>, maxUsers: number }
 
 function authMiddleware(req, res, next) {
@@ -42,9 +40,7 @@ function authMiddleware(req, res, next) {
                 (req.headers.authorization && req.headers.authorization.startsWith('Bearer ') && 
                  req.headers.authorization.slice(7));
   
-  if (!token) {
-    return res.status(401).json({ error: 'Not authenticated' });
-  }
+  if (!token) return res.status(401).json({ error: 'Not authenticated' });
   
   try {
     const payload = jwt.verify(token, JWT_SECRET);
@@ -91,8 +87,6 @@ wss.on('connection', (ws, req) => {
             const payload = jwt.verify(data.token, JWT_SECRET);
             userId = payload.userId;
             ws.userId = userId;
-            
-            // Отправляем подтверждение
             ws.send(JSON.stringify({ type: 'auth_success' }));
           } catch (err) {
             ws.send(JSON.stringify({ type: 'error', message: 'Invalid token' }));
@@ -102,31 +96,36 @@ wss.on('connection', (ws, req) => {
         case 'join_call':
           if (!userId) return;
           
-          const { callId, groupId } = data;
+          const { callId, conversationId } = data;
           
-          // Проверяем, является ли пользователь участником группы
+          // Проверяем, является ли пользователь участником беседы
           const memberCheck = await pool.query(`
             SELECT 1 FROM conversation_participants 
             WHERE conversation_id = $1 AND user_id = $2
-          `, [groupId, userId]);
+          `, [conversationId, userId]);
           
           if (memberCheck.rows.length === 0) {
-            ws.send(JSON.stringify({ type: 'error', message: 'Not a group member' }));
+            ws.send(JSON.stringify({ type: 'error', message: 'Not a conversation member' }));
             return;
           }
           
+          // Получаем информацию о беседе (группа или личка)
+          const convInfo = await pool.query(`
+            SELECT is_group, 
+              (SELECT COUNT(*) FROM conversation_participants WHERE conversation_id = $1) as participant_count
+            FROM conversations WHERE id = $1
+          `, [conversationId]);
+          
+          const isGroup = convInfo.rows[0]?.is_group || false;
+          const participantCount = parseInt(convInfo.rows[0]?.participant_count) || 2;
+          
+          // Максимум участников звонка: для лички - 2, для группы - min(участники, 6)
+          const maxUsers = isGroup ? Math.min(participantCount, 6) : 2;
+          
           // Создаём или получаем комнату звонка
           if (!callRooms.has(callId)) {
-            // Получаем всех участников группы
-            const participants = await pool.query(`
-              SELECT user_id FROM conversation_participants 
-              WHERE conversation_id = $1
-            `, [groupId]);
-            
-            const maxUsers = Math.min(participants.rows.length, 6); // Максимум 6
-            
             callRooms.set(callId, {
-              groupId: groupId,
+              conversationId: conversationId,
               participants: new Set(),
               maxUsers: maxUsers,
               createdBy: userId
@@ -135,30 +134,22 @@ wss.on('connection', (ws, req) => {
           
           const callRoom = callRooms.get(callId);
           
-          // Проверяем, не заполнена ли комната
           if (callRoom.participants.size >= callRoom.maxUsers) {
             ws.send(JSON.stringify({ type: 'error', message: 'Call room is full' }));
             return;
           }
           
-          // Добавляем пользователя
           callRoom.participants.add(userId);
           currentCallId = callId;
           
-          // Получаем данные пользователя
-          const userData = await pool.query(
-            'SELECT username FROM users WHERE id = $1',
-            [userId]
-          );
+          const userData = await pool.query('SELECT username FROM users WHERE id = $1', [userId]);
           
-          // Уведомляем всех в комнате о новом участнике
           broadcastToCall(callId, {
             type: 'user_joined',
             userId: userId,
             username: userData.rows[0]?.username || 'Unknown'
           }, userId);
           
-          // Отправляем список текущих участников новому пользователю
           ws.send(JSON.stringify({
             type: 'call_joined',
             participants: Array.from(callRoom.participants)
@@ -169,15 +160,8 @@ wss.on('connection', (ws, req) => {
           if (currentCallId && callRooms.has(currentCallId)) {
             const callRoom = callRooms.get(currentCallId);
             callRoom.participants.delete(userId);
-            
-            broadcastToCall(currentCallId, {
-              type: 'user_left',
-              userId: userId
-            });
-            
-            if (callRoom.participants.size === 0) {
-              callRooms.delete(currentCallId);
-            }
+            broadcastToCall(currentCallId, { type: 'user_left', userId: userId });
+            if (callRoom.participants.size === 0) callRooms.delete(currentCallId);
           }
           currentCallId = null;
           break;
@@ -185,16 +169,11 @@ wss.on('connection', (ws, req) => {
         case 'offer':
         case 'answer':
         case 'candidate':
-          // Пересылаем WebRTC сигналы целевому пользователю
           if (currentCallId && callRooms.has(currentCallId) && data.targetUserId) {
-            // Находим WebSocket целевого пользователя
             const clients = wss.clients;
             for (const client of clients) {
               if (client.userId === data.targetUserId && client.readyState === WebSocket.OPEN) {
-                client.send(JSON.stringify({
-                  ...data,
-                  senderId: userId
-                }));
+                client.send(JSON.stringify({ ...data, senderId: userId }));
                 break;
               }
             }
@@ -202,7 +181,6 @@ wss.on('connection', (ws, req) => {
           break;
           
         case 'mute_toggle':
-          // Уведомляем всех о изменении статуса микрофона
           if (currentCallId) {
             broadcastToCall(currentCallId, {
               type: 'user_muted',
@@ -221,15 +199,8 @@ wss.on('connection', (ws, req) => {
     if (currentCallId && callRooms.has(currentCallId)) {
       const callRoom = callRooms.get(currentCallId);
       callRoom.participants.delete(userId);
-      
-      broadcastToCall(currentCallId, {
-        type: 'user_left',
-        userId: userId
-      });
-      
-      if (callRoom.participants.size === 0) {
-        callRooms.delete(currentCallId);
-      }
+      broadcastToCall(currentCallId, { type: 'user_left', userId: userId });
+      if (callRoom.participants.size === 0) callRooms.delete(currentCallId);
     }
   });
 });
@@ -249,7 +220,7 @@ function broadcastToCall(callId, message, excludeUserId = null) {
   });
 }
 
-// ---- Auth (полностью ваш код) ----
+// ---- Auth ----
 app.post('/api/register', async (req, res) => {
   const { username, password } = req.body || {};
   if (!username || !password || username.length < 2) {
@@ -326,7 +297,6 @@ app.post('/api/logout', (req, res) => {
   res.json({ success: true });
 });
 
-// ---- Me ----
 app.get('/api/me', authMiddleware, async (req, res) => {
   const r = await pool.query('SELECT id, username, friend_code FROM users WHERE id = $1', [req.userId]);
   const user = r.rows[0];
@@ -344,14 +314,12 @@ app.get('/api/me', authMiddleware, async (req, res) => {
   });
 });
 
-// ---- Delete account ----
 app.delete('/api/account', authMiddleware, async (req, res) => {
   const { password } = req.body || {};
   const r = await pool.query('SELECT password_hash FROM users WHERE id = $1', [req.userId]);
   const user = r.rows[0];
   
   if (!user) return res.status(404).json({ error: 'Not found' });
-  
   if (!password || !(await bcrypt.compare(password, user.password_hash))) {
     return res.status(401).json({ error: 'Password required to delete account' });
   }
@@ -398,7 +366,7 @@ app.post('/api/friends', authMiddleware, async (req, res) => {
   res.json({ id: friend.id, username: friend.username });
 });
 
-// ---- Conversations (ваш код) ----
+// ---- Conversations ----
 app.get('/api/conversations', authMiddleware, async (req, res) => {
   const r = await pool.query(`
     SELECT 
@@ -420,6 +388,9 @@ app.get('/api/conversations', authMiddleware, async (req, res) => {
         SELECT jsonb_build_object(
           'id', m2.id,
           'body', m2.body,
+          'file_name', m2.file_name,
+          'file_type', m2.file_type,
+          'file_size', m2.file_size,
           'sender_id', m2.sender_id,
           'sender_username', u2.username,
           'created_at', m2.created_at
@@ -455,7 +426,7 @@ app.get('/api/conversations', authMiddleware, async (req, res) => {
       participants: participants,
       otherUsers: otherUsers,
       otherUser: !row.is_group && otherUsers.length > 0 ? otherUsers[0] : null,
-      lastMessage: lastMessage ? lastMessage.body : null,
+      lastMessage: lastMessage ? (lastMessage.body || (lastMessage.file_name ? '📎 Файл' : null)) : null,
       lastMessageData: lastMessage,
       lastAt: row.last_at,
       createdAt: row.created_at
@@ -543,9 +514,7 @@ app.post('/api/groups', authMiddleware, async (req, res) => {
     );
     
     if (isFriend.rows.length === 0) {
-      return res.status(403).json({ 
-        error: `User ${uid} is not your friend` 
-      });
+      return res.status(403).json({ error: `User ${uid} is not your friend` });
     }
   }
 
@@ -607,14 +576,10 @@ app.get('/api/groups/:id', authMiddleware, async (req, res) => {
     GROUP BY c.id
   `, [groupId]);
   
-  if (group.rows.length === 0) {
-    return res.status(404).json({ error: 'Group not found' });
-  }
+  if (group.rows.length === 0) return res.status(404).json({ error: 'Group not found' });
   
   const isMember = group.rows[0].participants.some(p => p.id === req.userId);
-  if (!isMember) {
-    return res.status(403).json({ error: 'Not a member of this group' });
-  }
+  if (!isMember) return res.status(403).json({ error: 'Not a member of this group' });
   
   res.json(group.rows[0]);
 });
@@ -623,9 +588,7 @@ app.post('/api/groups/:id/members', authMiddleware, async (req, res) => {
   const groupId = parseInt(req.params.id, 10);
   const { userId } = req.body || {};
   
-  if (!userId) {
-    return res.status(400).json({ error: 'User ID required' });
-  }
+  if (!userId) return res.status(400).json({ error: 'User ID required' });
   
   const check = await pool.query(`
     SELECT c.is_group FROM conversations c
@@ -654,25 +617,18 @@ app.post('/api/groups/:id/members', authMiddleware, async (req, res) => {
     
     const clients = sseClients.get(userId);
     if (clients) {
-      const payload = {
-        type: 'added_to_group',
-        conversationId: groupId
-      };
-      clients.forEach(r => {
-        try { r.write(`data: ${JSON.stringify(payload)}\n\n`); } catch (_) {}
-      });
+      const payload = { type: 'added_to_group', conversationId: groupId };
+      clients.forEach(r => { try { r.write(`data: ${JSON.stringify(payload)}\n\n`); } catch (_) {} });
     }
     
     res.json({ success: true });
   } catch (e) {
-    if (e.code === '23505') {
-      return res.status(400).json({ error: 'User already in group' });
-    }
+    if (e.code === '23505') return res.status(400).json({ error: 'User already in group' });
     throw e;
   }
 });
 
-// ---- Messages ----
+// ---- Messages (с поддержкой файлов) ----
 app.get('/api/conversations/:id/messages', authMiddleware, async (req, res) => {
   const convId = parseInt(req.params.id, 10);
   
@@ -687,6 +643,10 @@ app.get('/api/conversations/:id/messages', authMiddleware, async (req, res) => {
     SELECT 
       m.id, 
       m.body, 
+      m.file_data,
+      m.file_name,
+      m.file_type,
+      m.file_size,
       m.created_at, 
       m.sender_id,
       u.username AS sender_username
@@ -701,9 +661,11 @@ app.get('/api/conversations/:id/messages', authMiddleware, async (req, res) => {
 
 app.post('/api/conversations/:id/messages', authMiddleware, async (req, res) => {
   const convId = parseInt(req.params.id, 10);
-  const { body } = req.body || {};
+  const { body, fileData, fileName, fileType, fileSize } = req.body || {};
   
-  if (!body || !String(body).trim()) return res.status(400).json({ error: 'Message body required' });
+  if ((!body || !String(body).trim()) && !fileData) {
+    return res.status(400).json({ error: 'Message body or file required' });
+  }
   
   const part = await pool.query(
     'SELECT user_id FROM conversation_participants WHERE conversation_id = $1',
@@ -718,8 +680,11 @@ app.post('/api/conversations/:id/messages', authMiddleware, async (req, res) => 
   const otherUserIds = part.rows.filter(p => p.user_id !== req.userId).map(p => p.user_id);
   
   const ins = await pool.query(
-    'INSERT INTO messages (conversation_id, sender_id, body) VALUES ($1, $2, $3) RETURNING id, body, created_at, sender_id',
-    [convId, req.userId, String(body).trim()]
+    `INSERT INTO messages 
+     (conversation_id, sender_id, body, file_data, file_name, file_type, file_size) 
+     VALUES ($1, $2, $3, $4, $5, $6, $7) 
+     RETURNING id, body, file_data, file_name, file_type, file_size, created_at, sender_id`,
+    [convId, req.userId, body || null, fileData || null, fileName || null, fileType || null, fileSize || null]
   );
   
   const msg = ins.rows[0];
@@ -731,6 +696,10 @@ app.post('/api/conversations/:id/messages', authMiddleware, async (req, res) => 
     message: {
       id: msg.id,
       body: msg.body,
+      file_data: msg.file_data,
+      file_name: msg.file_name,
+      file_type: msg.file_type,
+      file_size: msg.file_size,
       created_at: msg.created_at,
       sender_id: msg.sender_id,
       sender_username: sender.rows[0]?.username || '',
@@ -756,10 +725,7 @@ app.post('/api/conversations/:id/messages', authMiddleware, async (req, res) => 
 
 // ---- Notifications ----
 app.get('/api/notifications/count', authMiddleware, async (req, res) => {
-  const r = await pool.query(
-    'SELECT COUNT(*)::int AS c FROM notifications WHERE user_id = $1',
-    [req.userId]
-  );
+  const r = await pool.query('SELECT COUNT(*)::int AS c FROM notifications WHERE user_id = $1', [req.userId]);
   res.json({ count: r.rows[0].c });
 });
 
@@ -798,10 +764,7 @@ app.post('/api/notifications/read', authMiddleware, async (req, res) => {
   const { conversationId } = req.body || {};
   
   if (conversationId != null) {
-    await pool.query(
-      'DELETE FROM notifications WHERE user_id = $1 AND conversation_id = $2',
-      [req.userId, conversationId]
-    );
+    await pool.query('DELETE FROM notifications WHERE user_id = $1 AND conversation_id = $2', [req.userId, conversationId]);
   } else {
     await pool.query('DELETE FROM notifications WHERE user_id = $1', [req.userId]);
   }

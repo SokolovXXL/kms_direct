@@ -45,7 +45,11 @@ async function initDb() {
         id SERIAL PRIMARY KEY,
         conversation_id INT REFERENCES conversations(id) ON DELETE CASCADE,
         sender_id INT REFERENCES users(id) ON DELETE CASCADE,
-        body TEXT NOT NULL,
+        body TEXT,
+        file_data TEXT,
+        file_name VARCHAR(255),
+        file_type VARCHAR(100),
+        file_size INTEGER,
         created_at TIMESTAMPTZ DEFAULT NOW()
       );
     `);
