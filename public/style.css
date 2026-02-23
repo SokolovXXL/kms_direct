@@ -869,3 +869,18 @@ body {
 #group-friends-list li:hover {
   background: var(--surface-hover);
 }
+.message-sender {
+  font-size: 0.8rem;
+  font-weight: bold;
+  margin-bottom: 4px;
+  color: #666;
+}
+
+.theirs .message-sender {
+  color: #4a6fa5;
+}
+  
+  
+.mine .message-sender {
+    color: #45a049;
+}

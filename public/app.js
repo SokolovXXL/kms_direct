@@ -4,8 +4,9 @@ let currentUser = JSON.parse(localStorage.getItem('user') || 'null');
 let currentConversationId = null;
 let eventSource = null;
 let unreadByConvo = {};
-let dmListCache = [];
+let conversationListCache = [];
 let isAtBottom = true;
+let currentConversationIsGroup = false;
 
 const $ = (id) => document.getElementById(id);
 
@@ -72,7 +73,7 @@ function renderScreen() {
     if (!currentUser.friend_code) fetchMe();
     
     startNotificationStream();
-    loadDmList();
+    loadConversationList();
     loadNotificationCount();
     
     if (isMobile()) {
@@ -231,7 +232,6 @@ if (logoutBtn) {
 
 // ---- Notifications (SSE) ----
 function startNotificationStream() {
-  // FIXED: Always close existing connection before creating new one
   if (eventSource) {
     eventSource.close();
     eventSource = null;
@@ -257,6 +257,12 @@ function startNotificationStream() {
         } else {
           updateSidebarRow(convId, message ? message.body : null);
         }
+      } else if (data.type === 'new_group') {
+        // Обновляем список разговоров при создании новой группы
+        loadConversationList();
+      } else if (data.type === 'added_to_group') {
+        // Обновляем список при добавлении в группу
+        loadConversationList();
       }
     } catch (_) {}
   };
@@ -296,6 +302,7 @@ function escapeHtml(s) {
   return div.innerHTML;
 }
 
+// Исправленная функция добавления сообщения с поддержкой групп
 function appendMessageToChat(message) {
   const list = $('messages-list');
   if (!list) return;
@@ -304,13 +311,27 @@ function appendMessageToChat(message) {
   
   const wasAtBottom = container.scrollHeight - container.scrollTop - container.clientHeight <= 20;
 
-  const div = document.createElement('div');
-  div.className = 'message ' + (message.sender_id === currentUser.id ? 'mine' : 'theirs');
-  div.innerHTML = `
-    <div>${escapeHtml(message.body)}</div>
-    <div class="message-meta">${new Date(message.created_at).toLocaleString()}</div>
-  `;
-  list.appendChild(div);
+  const messageDiv = document.createElement('div');
+  messageDiv.className = 'message ' + (message.sender_id === currentUser.id ? 'mine' : 'theirs');
+  
+  // Для групп показываем имя отправителя (кроме своих сообщений)
+  if (currentConversationIsGroup && message.sender_id !== currentUser.id) {
+    const nameSpan = document.createElement('div');
+    nameSpan.className = 'message-sender';
+    nameSpan.textContent = message.sender_username || 'Unknown';
+    messageDiv.appendChild(nameSpan);
+  }
+  
+  const bodyDiv = document.createElement('div');
+  bodyDiv.textContent = message.body;
+  messageDiv.appendChild(bodyDiv);
+  
+  const metaDiv = document.createElement('div');
+  metaDiv.className = 'message-meta';
+  metaDiv.textContent = new Date(message.created_at).toLocaleString();
+  messageDiv.appendChild(metaDiv);
+  
+  list.appendChild(messageDiv);
 
   requestAnimationFrame(() => {
     if (wasAtBottom) {
@@ -354,53 +375,58 @@ function updateSidebarRow(convId, lastMessageText) {
   }
 }
 
-// ---- DMs ----
-async function loadDmList() {
+// ---- Conversations List ----
+async function loadConversationList() {
   const list = $('dm-list');
   if (!list) return;
   
   list.innerHTML = '';
   
   try {
-    const [dms, notifByConvoResp] = await Promise.all([
+    const [conversations, notifByConvoResp] = await Promise.all([
       api('/api/conversations'),
       api('/api/notifications')
     ]);
     
     unreadByConvo = notifByConvoResp;
-    dmListCache = dms;
+    conversationListCache = conversations;
     
-    if (dms.length === 0) {
+    if (conversations.length === 0) {
       list.innerHTML = '<p style="padding:1rem;color:var(--text-muted)">No conversations yet. Start a new message!</p>';
       return;
     }
     
-    for (const dm of dms) {
-      const unread = notifByConvoResp[dm.id] || 0;
+    for (const conv of conversations) {
+      const unread = notifByConvoResp[conv.id] || 0;
       const item = document.createElement('button');
       item.type = 'button';
-      item.className = 'dm-item' + (dm.id === currentConversationId ? ' active' : '');
-      item.dataset.id = dm.id;
+      item.className = 'dm-item' + (conv.id === currentConversationId ? ' active' : '');
+      item.dataset.id = conv.id;
       
       let nameHtml = '';
-      if (dm.isGroup) {
-        nameHtml = `<span class="dm-name">👥 ${escapeHtml(dm.title)}</span>`;
+      let previewText = conv.lastMessage || 'No messages yet';
+      
+      if (conv.isGroup) {
+        // Для групп показываем иконку и название
+        nameHtml = `<span class="dm-name">👥 ${escapeHtml(conv.title || 'Group')}</span>`;
       } else {
-        nameHtml = `<span class="dm-name">${escapeHtml(dm.otherUser?.username || 'Unknown')}</span>`;
+        // Для личных чатов показываем имя собеседника
+        const otherUserName = conv.otherUser?.username || 'Unknown';
+        nameHtml = `<span class="dm-name">${escapeHtml(otherUserName)}</span>`;
       }
       
       item.innerHTML = `
         <div style="flex:1;min-width:0;">
           ${nameHtml}
-          <span class="dm-preview">${escapeHtml(dm.lastMessage || 'No messages yet')}</span>
+          <span class="dm-preview">${escapeHtml(previewText)}</span>
         </div>
         ${unread > 0 ? `<span class="dm-unread">${unread > 99 ? '99+' : unread}</span>` : ''}
       `;
       
       item.addEventListener('click', () => {
-        selectConversation(dm.id);
-        if (dm.isGroup) {
-          showGroupInfoButton(dm.id, dm.title);
+        selectConversation(conv.id);
+        if (conv.isGroup) {
+          showGroupInfoButton(conv.id, conv.title);
         } else {
           hideGroupInfoButton();
         }
@@ -415,8 +441,10 @@ async function loadDmList() {
   }
 }
 
+// Сохраняем для обратной совместимости
+const loadDmList = loadConversationList;
+
 async function selectConversation(convId) {
-  // FIXED: Ensure convId is a number
   convId = parseInt(convId, 10);
   currentConversationId = convId;
   
@@ -431,11 +459,14 @@ async function selectConversation(convId) {
   updateBadgeFromCache();
   updateSidebarRow(convId, null);
   
-  let dm = dmListCache.find(d => d.id === convId);
-  if (!dm) {
-    await loadDmList();
-    dm = dmListCache.find(d => d.id === convId);
+  let conversation = conversationListCache.find(c => c.id === convId);
+  if (!conversation) {
+    await loadConversationList();
+    conversation = conversationListCache.find(c => c.id === convId);
   }
+  
+  // Определяем, группа ли это
+  currentConversationIsGroup = conversation ? conversation.isGroup : false;
   
   const chatPlaceholder = $('chat-placeholder');
   const chatActive = $('chat-active');
@@ -445,11 +476,11 @@ async function selectConversation(convId) {
   if (chatActive) show(chatActive);
   
   let displayName = '';
-  if (dm) {
-    if (dm.isGroup) {
-      displayName = dm.title || 'Group';
+  if (conversation) {
+    if (conversation.isGroup) {
+      displayName = conversation.title || 'Group';
     } else {
-      displayName = dm.otherUser?.username || '…';
+      displayName = conversation.otherUser?.username || '…';
     }
   }
   if (chatWithName) chatWithName.textContent = displayName;
@@ -466,6 +497,7 @@ async function selectConversation(convId) {
   }, 200);
 }
 
+// Исправленная функция загрузки сообщений
 async function loadMessages(convId) {
   const list = $('messages-list');
   if (!list) return;
@@ -475,24 +507,40 @@ async function loadMessages(convId) {
   try {
     const messages = await api(`/api/conversations/${convId}/messages`);
     
-    for (const m of messages) {
-      const div = document.createElement('div');
-      div.className = 'message ' + (m.sender_id === currentUser.id ? 'mine' : 'theirs');
-      div.innerHTML = `
-        <div>${escapeHtml(m.body)}</div>
-        <div class="message-meta">${new Date(m.created_at).toLocaleString()}</div>
-      `;
-      list.appendChild(div);
+    for (const msg of messages) {
+      const messageDiv = document.createElement('div');
+      messageDiv.className = 'message ' + (msg.sender_id === currentUser.id ? 'mine' : 'theirs');
+      
+      // Для групп показываем имя отправителя (кроме своих сообщений)
+      if (currentConversationIsGroup && msg.sender_id !== currentUser.id) {
+        const nameSpan = document.createElement('div');
+        nameSpan.className = 'message-sender';
+        nameSpan.textContent = msg.sender_username || 'Unknown';
+        messageDiv.appendChild(nameSpan);
+      }
+      
+      const bodyDiv = document.createElement('div');
+      bodyDiv.textContent = msg.body;
+      messageDiv.appendChild(bodyDiv);
+      
+      const metaDiv = document.createElement('div');
+      metaDiv.className = 'message-meta';
+      metaDiv.textContent = new Date(msg.created_at).toLocaleString();
+      messageDiv.appendChild(metaDiv);
+      
+      list.appendChild(messageDiv);
     }
     
     requestAnimationFrame(() => {
       scrollMessagesToBottom();
     });
-  } catch (_) {
+  } catch (err) {
+    console.error('Failed to load messages:', err);
     list.innerHTML = '<p style="color:var(--text-muted)">Could not load messages</p>';
   }
 }
 
+// Отправка сообщений
 const sendForm = $('send-form');
 if (sendForm) {
   sendForm.addEventListener('submit', async (e) => {
@@ -523,8 +571,8 @@ if (sendForm) {
 
       updateSidebarRow(currentConversationId, body);
       
-      const dm = dmListCache.find(d => d.id === currentConversationId);
-      if (dm) dm.lastMessage = body;
+      const conversation = conversationListCache.find(c => c.id === currentConversationId);
+      if (conversation) conversation.lastMessage = body;
       
     } catch (err) {
       input.value = body;
@@ -559,6 +607,7 @@ if (btnNewDm) {
             });
             hide($('modal-new-dm'));
             selectConversation(data.conversationId);
+            hideGroupInfoButton(); // Личные чаты не имеют кнопки информации
             if (isMobile()) {
               setTimeout(() => showChat(), 10);
             }
@@ -762,6 +811,53 @@ const modalCreateGroup = $('modal-create-group');
 const modalGroupInfo = $('modal-group-info');
 const modalAddMember = $('modal-add-member');
 
+// Функция для загрузки списка групп (для модального окна списка групп)
+async function loadGroupsList() {
+  const list = $('groups-list');
+  if (!list) return;
+  
+  list.innerHTML = '<li style="color:var(--text-muted);">Loading...</li>';
+  
+  try {
+    const conversations = await api('/api/conversations');
+    const groups = conversations.filter(c => c.isGroup);
+    
+    list.innerHTML = '';
+    
+    if (groups.length === 0) {
+      list.innerHTML = '<li style="color:var(--text-muted);">No groups yet. Create one!</li>';
+      return;
+    }
+    
+    groups.forEach(group => {
+      const li = document.createElement('li');
+      li.style.display = 'flex';
+      li.style.justifyContent = 'space-between';
+      li.style.alignItems = 'center';
+      li.style.padding = '0.5rem 1rem';
+      
+      const nameSpan = document.createElement('span');
+      nameSpan.textContent = group.title || 'Unnamed Group';
+      
+      const viewBtn = document.createElement('button');
+      viewBtn.textContent = 'View';
+      viewBtn.style.padding = '0.25rem 0.5rem';
+      viewBtn.addEventListener('click', () => {
+        hide($('modal-groups-list'));
+        selectConversation(group.id);
+        showGroupInfoButton(group.id, group.title);
+        if (isMobile()) showChat();
+      });
+      
+      li.appendChild(nameSpan);
+      li.appendChild(viewBtn);
+      list.appendChild(li);
+    });
+  } catch (err) {
+    list.innerHTML = '<li style="color:var(--danger);">Failed to load groups</li>';
+  }
+}
+
 if (btnGroups) {
   btnGroups.addEventListener('click', async () => {
     show($('modal-groups-list'));
@@ -784,6 +880,18 @@ if (btnCloseGroup) {
 if (modalCreateGroup) {
   modalCreateGroup.addEventListener('click', (e) => {
     if (e.target.id === 'modal-create-group') hide(modalCreateGroup);
+  });
+}
+
+const btnCloseGroupsList = $('btn-close-groups-list');
+if (btnCloseGroupsList) {
+  btnCloseGroupsList.addEventListener('click', () => hide($('modal-groups-list')));
+}
+
+const modalGroupsList = $('modal-groups-list');
+if (modalGroupsList) {
+  modalGroupsList.addEventListener('click', (e) => {
+    if (e.target.id === 'modal-groups-list') hide(modalGroupsList);
   });
 }
 
@@ -857,9 +965,10 @@ if (btnCreateGroup) {
       });
       
       hide(modalCreateGroup);
-      await loadDmList();
+      await loadConversationList();
       
       selectConversation(data.conversationId);
+      showGroupInfoButton(data.conversationId, title);
       if (isMobile()) showChat();
       
     } catch (err) {
@@ -885,6 +994,8 @@ function showGroupInfoButton(groupId, groupTitle) {
   btn.style.fontSize = '1.2rem';
   btn.style.cursor = 'pointer';
   btn.style.padding = '0 10px';
+  btn.style.minWidth = '44px';
+  btn.style.minHeight = '44px';
   btn.title = 'Group info';
   
   btn.addEventListener('click', () => showGroupInfo(groupId, groupTitle));
@@ -916,6 +1027,7 @@ async function showGroupInfo(groupId, groupTitle) {
     group.participants.forEach(member => {
       const li = document.createElement('li');
       li.textContent = member.username + (member.id === currentUser.id ? ' (you)' : '');
+      li.style.padding = '0.25rem 0';
       listEl.appendChild(li);
     });
     
@@ -984,6 +1096,7 @@ async function loadFriendsToAdd(groupId, groupTitle) {
       btn.textContent = friend.username;
       btn.style.width = '100%';
       btn.style.textAlign = 'left';
+      btn.style.padding = '0.5rem 1rem';
       
       btn.addEventListener('click', async () => {
         try {

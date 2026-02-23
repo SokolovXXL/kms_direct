@@ -17,12 +17,11 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret-change-in-production';
 
-// Cookie settings
 const COOKIE_OPTIONS = {
   httpOnly: true,
   secure: process.env.NODE_ENV === 'production',
   sameSite: 'lax',
-  maxAge: 1000 * 60 * 60 * 24 * 30 // 30 дней
+  maxAge: 1000 * 60 * 60 * 24 * 30
 };
 
 app.use(cors({
@@ -146,7 +145,7 @@ app.post('/api/logout', (req, res) => {
   res.json({ success: true });
 });
 
-// ---- Me (profile + friend code) ----
+// ---- Me ----
 app.get('/api/me', authMiddleware, async (req, res) => {
   const r = await pool.query('SELECT id, username, friend_code FROM users WHERE id = $1', [req.userId]);
   const user = r.rows[0];
@@ -181,7 +180,7 @@ app.delete('/api/account', authMiddleware, async (req, res) => {
   res.json({ ok: true });
 });
 
-// ---- Friends (by friend code) ----
+// ---- Friends ----
 app.get('/api/friends', authMiddleware, async (req, res) => {
   const r = await pool.query(`
     SELECT u.id, u.username, u.friend_code
@@ -206,7 +205,6 @@ app.post('/api/friends', authMiddleware, async (req, res) => {
   if (friend.id === req.userId) return res.status(400).json({ error: 'Cannot add yourself' });
   
   try {
-    // Insert both directions to make lookups easier
     await pool.query(
       'INSERT INTO friends (user_id, friend_id) VALUES ($1, $2), ($2, $1) ON CONFLICT (user_id, friend_id) DO NOTHING',
       [req.userId, friend.id]
@@ -220,110 +218,136 @@ app.post('/api/friends', authMiddleware, async (req, res) => {
 });
 
 // ---- Conversations (DMs & Groups) ----
-// FIXED: No duplicates, one row per conversation
+// FIXED: Returns one row per conversation with proper user data
 app.get('/api/conversations', authMiddleware, async (req, res) => {
   const r = await pool.query(`
-    SELECT
+    SELECT 
       c.id,
       c.created_at,
       c.is_group,
       c.title,
       COALESCE(
-        (
-          SELECT json_agg(json_build_object('id', u.id, 'username', u.username))
-          FROM conversation_participants cp2
-          JOIN users u ON u.id = cp2.user_id
-          WHERE cp2.conversation_id = c.id AND u.id != $1
-        ),
+        json_agg(
+          DISTINCT jsonb_build_object(
+            'id', u.id,
+            'username', u.username
+          )
+        ) FILTER (WHERE u.id != $1),
         '[]'::json
-      ) AS other_users,
+      ) AS participants,
+      MAX(m.created_at) AS last_at,
       (
-        SELECT body
-        FROM messages
-        WHERE conversation_id = c.id
-        ORDER BY created_at DESC
+        SELECT jsonb_build_object(
+          'id', m2.id,
+          'body', m2.body,
+          'sender_id', m2.sender_id,
+          'sender_username', u2.username,
+          'created_at', m2.created_at
+        )
+        FROM messages m2
+        JOIN users u2 ON u2.id = m2.sender_id
+        WHERE m2.conversation_id = c.id
+        ORDER BY m2.created_at DESC
         LIMIT 1
-      ) AS last_message,
-      (
-        SELECT created_at
-        FROM messages
-        WHERE conversation_id = c.id
-        ORDER BY created_at DESC
-        LIMIT 1
-      ) AS last_at
+      ) AS last_message
     FROM conversations c
-    WHERE EXISTS (
-      SELECT 1
-      FROM conversation_participants
-      WHERE conversation_id = c.id AND user_id = $1
+    JOIN conversation_participants cp ON cp.conversation_id = c.id
+    JOIN users u ON u.id = cp.user_id
+    LEFT JOIN messages m ON m.conversation_id = c.id
+    WHERE c.id IN (
+      SELECT conversation_id 
+      FROM conversation_participants 
+      WHERE user_id = $1
     )
-    ORDER BY last_at DESC NULLS LAST, c.id DESC
+    GROUP BY c.id
+    ORDER BY last_at DESC NULLS LAST
   `, [req.userId]);
 
-  const convos = r.rows.map(row => ({
-    id: row.id,
-    isGroup: row.is_group || false,
-    title: row.title,
-    otherUsers: row.other_users,
-    lastMessage: row.last_message,
-    lastAt: row.last_at,
-    createdAt: row.created_at
-  }));
+  const convos = r.rows.map(row => {
+    const participants = row.participants || [];
+    const otherUsers = participants.filter(p => p.id !== req.userId);
+    const lastMessage = row.last_message;
+    
+    return {
+      id: row.id,
+      isGroup: row.is_group || false,
+      title: row.title,
+      participants: participants,
+      otherUsers: otherUsers,
+      // For backward compatibility
+      otherUser: !row.is_group && otherUsers.length > 0 ? otherUsers[0] : null,
+      lastMessage: lastMessage ? lastMessage.body : null,
+      lastMessageData: lastMessage,
+      lastAt: row.last_at,
+      createdAt: row.created_at
+    };
+  });
 
   res.json(convos);
 });
 
-// Legacy endpoint for backward compatibility
+// Legacy endpoint
 app.get('/api/dms', authMiddleware, async (req, res) => {
   const r = await pool.query(`
-    SELECT
+    SELECT 
       c.id,
       c.created_at,
       c.is_group,
       c.title,
       COALESCE(
-        (
-          SELECT json_agg(json_build_object('id', u.id, 'username', u.username))
-          FROM conversation_participants cp2
-          JOIN users u ON u.id = cp2.user_id
-          WHERE cp2.conversation_id = c.id AND u.id != $1
-        ),
+        json_agg(
+          DISTINCT jsonb_build_object(
+            'id', u.id,
+            'username', u.username
+          )
+        ) FILTER (WHERE u.id != $1),
         '[]'::json
-      ) AS other_users,
+      ) AS participants,
+      MAX(m.created_at) AS last_at,
       (
-        SELECT body
-        FROM messages
-        WHERE conversation_id = c.id
-        ORDER BY created_at DESC
+        SELECT jsonb_build_object(
+          'id', m2.id,
+          'body', m2.body,
+          'sender_id', m2.sender_id,
+          'sender_username', u2.username,
+          'created_at', m2.created_at
+        )
+        FROM messages m2
+        JOIN users u2 ON u2.id = m2.sender_id
+        WHERE m2.conversation_id = c.id
+        ORDER BY m2.created_at DESC
         LIMIT 1
-      ) AS last_message,
-      (
-        SELECT created_at
-        FROM messages
-        WHERE conversation_id = c.id
-        ORDER BY created_at DESC
-        LIMIT 1
-      ) AS last_at
+      ) AS last_message
     FROM conversations c
-    WHERE EXISTS (
-      SELECT 1
-      FROM conversation_participants
-      WHERE conversation_id = c.id AND user_id = $1
+    JOIN conversation_participants cp ON cp.conversation_id = c.id
+    JOIN users u ON u.id = cp.user_id
+    LEFT JOIN messages m ON m.conversation_id = c.id
+    WHERE c.id IN (
+      SELECT conversation_id 
+      FROM conversation_participants 
+      WHERE user_id = $1
     )
-    ORDER BY last_at DESC NULLS LAST, c.id DESC
+    GROUP BY c.id
+    ORDER BY last_at DESC NULLS LAST
   `, [req.userId]);
 
-  const convos = r.rows.map(row => ({
-    id: row.id,
-    isGroup: row.is_group || false,
-    title: row.title,
-    // For backward compatibility, provide the first other user as 'otherUser'
-    otherUser: !row.is_group && row.other_users && row.other_users.length > 0 ? row.other_users[0] : null,
-    otherUsers: row.other_users,
-    lastMessage: row.last_message,
-    lastAt: row.last_at,
-    createdAt: row.created_at
-  }));
+  const convos = r.rows.map(row => {
+    const participants = row.participants || [];
+    const otherUsers = participants.filter(p => p.id !== req.userId);
+    const lastMessage = row.last_message;
+    
+    return {
+      id: row.id,
+      isGroup: row.is_group || false,
+      title: row.title,
+      otherUser: !row.is_group && otherUsers.length > 0 ? otherUsers[0] : null,
+      otherUsers: otherUsers,
+      lastMessage: lastMessage ? lastMessage.body : null,
+      lastMessageData: lastMessage,
+      lastAt: row.last_at,
+      createdAt: row.created_at
+    };
+  });
 
   res.json(convos);
 });
@@ -335,17 +359,15 @@ app.post('/api/dms', authMiddleware, async (req, res) => {
     return res.status(400).json({ error: 'Valid other user required' });
   }
   
-  // Check if they are friends
   const isFriend = await pool.query(
     'SELECT 1 FROM friends WHERE (user_id = $1 AND friend_id = $2) OR (user_id = $2 AND friend_id = $1)',
     [req.userId, otherUserId]
   );
   
   if (isFriend.rows.length === 0) {
-    return res.status(403).json({ error: 'Add this user as a friend first (using their friend code)' });
+    return res.status(403).json({ error: 'Add this user as a friend first' });
   }
   
-  // Check for existing conversation using a more reliable method
   const existing = await pool.query(`
     SELECT c.id 
     FROM conversations c
@@ -390,7 +412,6 @@ app.post('/api/dms', authMiddleware, async (req, res) => {
 });
 
 // ---- Groups ----
-// Create group
 app.post('/api/groups', authMiddleware, async (req, res) => {
   const { title, userIds } = req.body || {};
 
@@ -398,10 +419,8 @@ app.post('/api/groups', authMiddleware, async (req, res) => {
     return res.status(400).json({ error: 'Title and at least 1 other user required' });
   }
 
-  // Validate all users exist and are friends
   const allUserIds = [...new Set([req.userId, ...userIds])];
   
-  // Check friendship for all non-self pairs
   for (const uid of userIds) {
     if (uid === req.userId) continue;
     
@@ -412,7 +431,7 @@ app.post('/api/groups', authMiddleware, async (req, res) => {
     
     if (isFriend.rows.length === 0) {
       return res.status(403).json({ 
-        error: `User ${uid} is not your friend. Add them first using their friend code.` 
+        error: `User ${uid} is not your friend` 
       });
     }
   }
@@ -438,7 +457,6 @@ app.post('/api/groups', authMiddleware, async (req, res) => {
 
     await client.query('COMMIT');
     
-    // Notify all participants except creator
     for (const uid of userIds) {
       const clients = sseClients.get(uid);
       if (clients) {
@@ -463,7 +481,6 @@ app.post('/api/groups', authMiddleware, async (req, res) => {
   }
 });
 
-// Get group info
 app.get('/api/groups/:id', authMiddleware, async (req, res) => {
   const groupId = parseInt(req.params.id, 10);
   
@@ -481,7 +498,6 @@ app.get('/api/groups/:id', authMiddleware, async (req, res) => {
     return res.status(404).json({ error: 'Group not found' });
   }
   
-  // Check if user is a member
   const isMember = group.rows[0].participants.some(p => p.id === req.userId);
   if (!isMember) {
     return res.status(403).json({ error: 'Not a member of this group' });
@@ -490,7 +506,6 @@ app.get('/api/groups/:id', authMiddleware, async (req, res) => {
   res.json(group.rows[0]);
 });
 
-// Add user to group
 app.post('/api/groups/:id/members', authMiddleware, async (req, res) => {
   const groupId = parseInt(req.params.id, 10);
   const { userId } = req.body || {};
@@ -499,7 +514,6 @@ app.post('/api/groups/:id/members', authMiddleware, async (req, res) => {
     return res.status(400).json({ error: 'User ID required' });
   }
   
-  // Check if group exists and user is member
   const check = await pool.query(`
     SELECT c.is_group FROM conversations c
     JOIN conversation_participants cp ON cp.conversation_id = c.id
@@ -510,7 +524,6 @@ app.post('/api/groups/:id/members', authMiddleware, async (req, res) => {
     return res.status(404).json({ error: 'Group not found or not a member' });
   }
   
-  // Check if new user is friend
   const isFriend = await pool.query(
     'SELECT 1 FROM friends WHERE (user_id = $1 AND friend_id = $2) OR (user_id = $2 AND friend_id = $1)',
     [req.userId, userId]
@@ -526,7 +539,6 @@ app.post('/api/groups/:id/members', authMiddleware, async (req, res) => {
       [groupId, userId]
     );
     
-    // Notify new member
     const clients = sseClients.get(userId);
     if (clients) {
       const payload = {
@@ -548,6 +560,7 @@ app.post('/api/groups/:id/members', authMiddleware, async (req, res) => {
 });
 
 // ---- Messages ----
+// FIXED: Returns messages with sender username
 app.get('/api/conversations/:id/messages', authMiddleware, async (req, res) => {
   const convId = parseInt(req.params.id, 10);
   
@@ -559,7 +572,12 @@ app.get('/api/conversations/:id/messages', authMiddleware, async (req, res) => {
   if (part.rows.length === 0) return res.status(404).json({ error: 'Conversation not found' });
   
   const r = await pool.query(`
-    SELECT m.id, m.body, m.created_at, m.sender_id, u.username AS sender_username
+    SELECT 
+      m.id, 
+      m.body, 
+      m.created_at, 
+      m.sender_id,
+      u.username AS sender_username
     FROM messages m
     JOIN users u ON u.id = m.sender_id
     WHERE m.conversation_id = $1
@@ -598,7 +616,6 @@ app.post('/api/conversations/:id/messages', authMiddleware, async (req, res) => 
   const payload = {
     type: 'new_message',
     conversationId: convId,
-    messageId: msg.id,
     message: {
       id: msg.id,
       body: msg.body,
@@ -622,15 +639,10 @@ app.post('/api/conversations/:id/messages', authMiddleware, async (req, res) => 
     }
   }
   
-  res.status(201).json({ 
-    id: msg.id, 
-    body: msg.body, 
-    created_at: msg.created_at, 
-    sender_id: msg.sender_id 
-  });
+  res.status(201).json(payload.message);
 });
 
-// Legacy endpoint for backward compatibility
+// Legacy endpoints
 app.get('/api/dms/:id/messages', authMiddleware, async (req, res) => {
   const convId = parseInt(req.params.id, 10);
   
@@ -642,7 +654,12 @@ app.get('/api/dms/:id/messages', authMiddleware, async (req, res) => {
   if (part.rows.length === 0) return res.status(404).json({ error: 'Conversation not found' });
   
   const r = await pool.query(`
-    SELECT m.id, m.body, m.created_at, m.sender_id, u.username AS sender_username
+    SELECT 
+      m.id, 
+      m.body, 
+      m.created_at, 
+      m.sender_id,
+      u.username AS sender_username
     FROM messages m
     JOIN users u ON u.id = m.sender_id
     WHERE m.conversation_id = $1
@@ -681,7 +698,6 @@ app.post('/api/dms/:id/messages', authMiddleware, async (req, res) => {
   const payload = {
     type: 'new_message',
     conversationId: convId,
-    messageId: msg.id,
     message: {
       id: msg.id,
       body: msg.body,
@@ -705,12 +721,7 @@ app.post('/api/dms/:id/messages', authMiddleware, async (req, res) => {
     }
   }
   
-  res.status(201).json({ 
-    id: msg.id, 
-    body: msg.body, 
-    created_at: msg.created_at, 
-    sender_id: msg.sender_id 
-  });
+  res.status(201).json(payload.message);
 });
 
 // ---- Notifications ----
