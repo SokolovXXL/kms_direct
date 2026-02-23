@@ -1,7 +1,7 @@
 {
   "name": "messenger-webapp",
   "version": "1.0.0",
-  "description": "Messenger with rooms and file sharing",
+  "description": "Simple messenger with accounts, DMs, notifications and calls",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",

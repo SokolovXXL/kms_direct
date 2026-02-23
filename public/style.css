@@ -884,3 +884,136 @@ body {
 .mine .message-sender {
     color: #45a049;
 }
+/* Панель звонка */
+.call-panel {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  width: 300px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+  z-index: 1000;
+  overflow: hidden;
+  animation: slideIn 0.3s;
+}
+
+.call-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  background: var(--accent);
+  color: white;
+  font-weight: 600;
+}
+
+.btn-close-call {
+  background: none;
+  border: none;
+  color: white;
+  font-size: 24px;
+  cursor: pointer;
+  padding: 0 8px;
+}
+
+.btn-close-call:hover {
+  opacity: 0.8;
+}
+
+.call-participants {
+  padding: 12px;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.call-participant {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  margin: 4px 0;
+  background: var(--surface-hover);
+  border-radius: 6px;
+  transition: all 0.2s;
+}
+
+.call-participant.speaking {
+  border: 2px solid #00ff88;
+  background: rgba(0, 255, 136, 0.1);
+}
+
+.participant-name {
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.participant-status {
+  font-size: 16px;
+}
+
+.call-controls {
+  display: flex;
+  gap: 8px;
+  padding: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.call-control-btn {
+  flex: 1;
+  padding: 8px 12px;
+  border: none;
+  border-radius: 6px;
+  background: var(--surface-hover);
+  color: var(--text);
+  cursor: pointer;
+  font-weight: 500;
+  transition: all 0.2s;
+}
+
+.call-control-btn:hover {
+  background: var(--border);
+}
+
+.call-control-btn.end {
+  background: var(--danger);
+  color: white;
+}
+
+.call-control-btn.end:hover {
+  filter: brightness(1.1);
+}
+
+.call-status {
+  padding: 8px 12px;
+  text-align: center;
+  font-size: 12px;
+  background: var(--bg);
+  border-top: 1px solid var(--border);
+  color: var(--text-muted);
+}
+
+.call-status.active {
+  color: #3ba55d;
+  font-weight: 500;
+}
+
+.call-header-btn {
+  transition: opacity 0.2s;
+}
+
+.call-header-btn:hover {
+  opacity: 0.8;
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
