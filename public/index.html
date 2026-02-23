@@ -53,7 +53,7 @@
           <div id="chat-active" class="hidden">
             <div class="chat-header" id="chat-header">
               <span id="chat-with-name"></span>
-              <!-- Кнопка звонка будет добавлена сюда через JavaScript -->
+              <!-- Кнопка звонка будет добавлена через JavaScript -->
             </div>
             <div class="chat-messages-wrapper" id="chat-messages-wrapper">
               <div id="messages-container">
@@ -61,6 +61,9 @@
               </div>
             </div>
             <form id="send-form" class="send-form">
+              <!-- ИСПРАВЛЕНО: Добавлена кнопка для файлов -->
+              <label for="file-input" class="file-upload-label">📎</label>
+              <input type="file" id="file-input" multiple style="display:none;">
               <input type="text" id="message-input" placeholder="Type a message..." autocomplete="off" />
               <button type="submit">Send</button>
             </form>
@@ -69,10 +72,10 @@
       </div>
     </div>
 
-    <!-- Панель звонка (ДОБАВЛЕНА) -->
+    <!-- ИСПРАВЛЕНО: Панель звонка (теперь не только для групп) -->
     <div id="call-panel" class="call-panel hidden">
       <div class="call-header">
-        <span>🎤 Звонок в группе</span>
+        <span>🎤 Звонок</span>
         <button class="btn-close-call" onclick="endCall()">×</button>
       </div>
       <div class="call-participants" id="call-participants"></div>
@@ -81,6 +84,18 @@
         <button class="call-control-btn end" id="btn-end-call" onclick="endCall()">🔚 Завершить</button>
       </div>
       <div class="call-status" id="call-status"></div>
+    </div>
+
+    <!-- ДОБАВЛЕНО: Прогресс загрузки файлов -->
+    <div id="upload-progress" class="upload-progress hidden">
+      <div>Загрузка...</div>
+      <div class="progress-bar" id="progress-bar"></div>
+    </div>
+
+    <!-- ДОБАВЛЕНО: Модальное окно для просмотра медиа -->
+    <div id="media-modal" class="modal hidden">
+      <span class="close-modal" onclick="this.parentElement.classList.add('hidden')">&times;</span>
+      <div class="modal-content" id="modal-content"></div>
     </div>
 
     <div id="modal-new-dm" class="modal hidden">
@@ -181,408 +196,7 @@
     <div id="notification-badge" class="badge hidden">0</div>
   </div>
   
-  <!-- Подключаем оригинальный app.js (без изменений) -->
+  <!-- Подключаем app.js -->
   <script src="/app.js"></script>
-  
-  <!-- Добавляем только функционал звонков -->
-  <script>
-    // ========== ЗВОНКИ (ДОБАВЛЕНО) ==========
-    let callWS = null;
-    let currentCallId = null;
-    let callParticipants = [];
-    let localStream = null;
-    let peerConnections = new Map();
-    let callActive = false;
-    let selfMuted = false;
-    let mutedUsers = new Set();
-    let speakingUsers = new Set();
-
-    // DOM элементы для звонков
-    const callPanel = document.getElementById('call-panel');
-    const callParticipantsList = document.getElementById('call-participants');
-    const muteCallBtn = document.getElementById('btn-mute-call');
-    const endCallBtn = document.getElementById('btn-end-call');
-    const callStatus = document.getElementById('call-status');
-
-    // Подключение к WebSocket для звонков
-    function connectCallWS() {
-      const token = document.cookie.split('; ').find(row => row.startsWith('token='))?.split('=')[1];
-      if (!token) return;
-      
-      const wsUrl = window.location.origin.replace('http', 'ws') + '/ws';
-      callWS = new WebSocket(wsUrl);
-      
-      callWS.onopen = () => {
-        callWS.send(JSON.stringify({ type: 'auth', token: token }));
-      };
-      
-      callWS.onmessage = (event) => {
-        const data = JSON.parse(event.data);
-        handleCallMessage(data);
-      };
-      
-      callWS.onclose = () => {
-        if (callActive) endCall();
-      };
-    }
-
-    function handleCallMessage(data) {
-      switch(data.type) {
-        case 'auth_success':
-          console.log('Call WebSocket authenticated');
-          break;
-          
-        case 'call_joined':
-          callParticipants = data.participants || [];
-          updateCallParticipantsList();
-          break;
-          
-        case 'user_joined':
-          callParticipants.push(data.userId);
-          addSystemMessage(`🎤 Участник присоединился к звонку`);
-          updateCallParticipantsList();
-          
-          if (callActive && localStream) {
-            createOffer(data.userId);
-          }
-          break;
-          
-        case 'user_left':
-          callParticipants = callParticipants.filter(id => id !== data.userId);
-          addSystemMessage(`👋 Участник покинул звонок`);
-          updateCallParticipantsList();
-          
-          closePeerConnection(data.userId);
-          mutedUsers.delete(data.userId);
-          speakingUsers.delete(data.userId);
-          break;
-          
-        case 'offer':
-          handleOffer(data);
-          break;
-          
-        case 'answer':
-          handleAnswer(data);
-          break;
-          
-        case 'candidate':
-          handleCandidate(data);
-          break;
-          
-        case 'user_muted':
-          if (data.muted) {
-            mutedUsers.add(data.userId);
-          } else {
-            mutedUsers.delete(data.userId);
-          }
-          updateCallParticipantsList();
-          break;
-          
-        case 'error':
-          alert(data.message);
-          if (data.message.includes('full')) {
-            endCall();
-          }
-          break;
-      }
-    }
-
-    // Начать звонок в группе
-    window.startCall = async function() {
-      if (!currentConversationId) return;
-      
-      // Находим группу
-      const conversation = conversationListCache.find(c => c.id === currentConversationId);
-      if (!conversation || !conversation.isGroup) {
-        alert('Звонки доступны только в группах');
-        return;
-      }
-      
-      try {
-        callStatus.textContent = '⏳ Запрос микрофона...';
-        callPanel.classList.remove('hidden');
-        
-        localStream = await navigator.mediaDevices.getUserMedia({ 
-          audio: { echoCancellation: true, noiseSuppression: true }
-        });
-        
-        callActive = true;
-        selfMuted = false;
-        
-        // Генерируем ID звонка на основе ID группы
-        currentCallId = `call_${currentConversationId}`;
-        
-        callWS.send(JSON.stringify({
-          type: 'join_call',
-          callId: currentCallId,
-          groupId: currentConversationId
-        }));
-        
-        // Обновляем UI
-        muteCallBtn.textContent = '🔇 Заглушить';
-        callStatus.textContent = '🎤 В звонке';
-        
-        addSystemMessage('🎤 Звонок начат');
-        
-      } catch (err) {
-        alert('Не удалось получить доступ к микрофону');
-        callPanel.classList.add('hidden');
-      }
-    };
-
-    window.endCall = function() {
-      if (callWS && currentCallId) {
-        callWS.send(JSON.stringify({
-          type: 'leave_call'
-        }));
-      }
-      
-      // Закрываем все peer connection
-      peerConnections.forEach((pc, id) => {
-        try { pc.close(); } catch (e) {}
-        const audio = document.getElementById(`call-audio-${id}`);
-        if (audio) audio.remove();
-      });
-      peerConnections.clear();
-      
-      if (localStream) {
-        localStream.getAudioTracks().forEach(track => track.stop());
-        localStream = null;
-      }
-      
-      callActive = false;
-      selfMuted = false;
-      mutedUsers.clear();
-      speakingUsers.clear();
-      currentCallId = null;
-      callParticipants = [];
-      
-      // Обновляем UI
-      callPanel.classList.add('hidden');
-      
-      addSystemMessage('🔇 Звонок завершен');
-    };
-
-    window.toggleMute = function() {
-      if (!localStream) return;
-      
-      selfMuted = !selfMuted;
-      localStream.getAudioTracks().forEach(track => {
-        track.enabled = !selfMuted;
-      });
-      
-      muteCallBtn.textContent = selfMuted ? '🎤 Включить' : '🔇 Заглушить';
-      
-      if (callWS && currentCallId) {
-        callWS.send(JSON.stringify({
-          type: 'mute_toggle',
-          muted: selfMuted
-        }));
-      }
-    };
-
-    // WebRTC функции
-    async function createPeerConnection(targetUserId) {
-      if (peerConnections.has(targetUserId)) {
-        return peerConnections.get(targetUserId);
-      }
-      
-      const configuration = {
-        iceServers: [
-          { urls: 'stun:stun.l.google.com:19302' },
-          { urls: 'stun:stun1.l.google.com:19302' },
-          { urls: 'turn:openrelay.metered.ca:80', username: 'openrelayproject', credential: 'openrelayproject' }
-        ]
-      };
-      
-      const pc = new RTCPeerConnection(configuration);
-      
-      if (localStream) {
-        localStream.getAudioTracks().forEach(track => pc.addTrack(track, localStream));
-      }
-      
-      pc.onicecandidate = (event) => {
-        if (event.candidate && callWS) {
-          callWS.send(JSON.stringify({
-            type: 'candidate',
-            targetUserId: targetUserId,
-            candidate: event.candidate
-          }));
-        }
-      };
-      
-      pc.ontrack = (event) => {
-        let audio = document.getElementById(`call-audio-${targetUserId}`);
-        if (!audio) {
-          audio = document.createElement('audio');
-          audio.id = `call-audio-${targetUserId}`;
-          audio.autoplay = true;
-          document.body.appendChild(audio);
-        }
-        audio.srcObject = event.streams[0];
-        
-        if (mutedUsers.has(targetUserId)) {
-          audio.volume = 0;
-        }
-      };
-      
-      peerConnections.set(targetUserId, pc);
-      return pc;
-    }
-
-    function closePeerConnection(userId) {
-      if (peerConnections.has(userId)) {
-        try { peerConnections.get(userId).close(); } catch (e) {}
-        peerConnections.delete(userId);
-      }
-      
-      const audio = document.getElementById(`call-audio-${userId}`);
-      if (audio) audio.remove();
-    }
-
-    async function createOffer(targetUserId) {
-      try {
-        const pc = await createPeerConnection(targetUserId);
-        const offer = await pc.createOffer({ offerToReceiveAudio: true });
-        await pc.setLocalDescription(offer);
-        
-        callWS.send(JSON.stringify({
-          type: 'offer',
-          targetUserId: targetUserId,
-          offer: offer
-        }));
-      } catch (err) {
-        console.error('Create offer error:', err);
-      }
-    }
-
-    async function handleOffer(data) {
-      try {
-        const pc = await createPeerConnection(data.senderId);
-        await pc.setRemoteDescription(new RTCSessionDescription(data.offer));
-        const answer = await pc.createAnswer();
-        await pc.setLocalDescription(answer);
-        
-        callWS.send(JSON.stringify({
-          type: 'answer',
-          targetUserId: data.senderId,
-          answer: answer
-        }));
-      } catch (err) {
-        console.error('Handle offer error:', err);
-      }
-    }
-
-    async function handleAnswer(data) {
-      try {
-        const pc = peerConnections.get(data.senderId);
-        if (pc && pc.signalingState === 'have-local-offer') {
-          await pc.setRemoteDescription(new RTCSessionDescription(data.answer));
-        }
-      } catch (err) {
-        console.error('Handle answer error:', err);
-      }
-    }
-
-    async function handleCandidate(data) {
-      try {
-        const pc = peerConnections.get(data.senderId);
-        if (pc) {
-          await pc.addIceCandidate(new RTCIceCandidate(data.candidate));
-        }
-      } catch (err) {
-        console.error('Handle candidate error:', err);
-      }
-    }
-
-    function updateCallParticipantsList() {
-      if (!callParticipantsList) return;
-      
-      const otherParticipants = callParticipants.filter(id => id !== currentUser?.id);
-      
-      callParticipantsList.innerHTML = otherParticipants.map(userId => {
-        const user = conversationListCache
-          .flatMap(c => c.participants || [])
-          .find(p => p.id === userId);
-        
-        const username = user?.username || 'Участник';
-        const isSpeaking = speakingUsers.has(userId) && !mutedUsers.has(userId);
-        const isMuted = mutedUsers.has(userId);
-        
-        return `
-          <div class="call-participant ${isSpeaking ? 'speaking' : ''}">
-            <span class="participant-name">${username}</span>
-            <span class="participant-status">${isMuted ? '🔇' : (isSpeaking ? '🎤' : '')}</span>
-          </div>
-        `;
-      }).join('');
-    }
-
-    function addSystemMessage(text) {
-      const messagesList = document.getElementById('messages-list');
-      if (!messagesList) return;
-      
-      const div = document.createElement('div');
-      div.style.textAlign = 'center';
-      div.style.color = 'var(--text-muted)';
-      div.style.fontSize = '0.85rem';
-      div.style.padding = '0.5rem';
-      div.textContent = text;
-      messagesList.appendChild(div);
-      
-      const wrapper = document.getElementById('chat-messages-wrapper');
-      if (wrapper) wrapper.scrollTop = wrapper.scrollHeight;
-    }
-
-    // Добавляем кнопку звонка в заголовок группы
-    function addCallButtonToGroup() {
-      const chatHeader = document.getElementById('chat-header');
-      if (!chatHeader) return;
-      
-      // Удаляем старую кнопку если есть
-      const oldBtn = document.getElementById('group-call-btn');
-      if (oldBtn) oldBtn.remove();
-      
-      // Создаем кнопку звонка
-      const callBtn = document.createElement('button');
-      callBtn.id = 'group-call-btn';
-      callBtn.innerHTML = '🎤';
-      callBtn.className = 'call-header-btn';
-      callBtn.style.marginLeft = 'auto';
-      callBtn.style.background = 'none';
-      callBtn.style.border = 'none';
-      callBtn.style.color = 'var(--text-muted)';
-      callBtn.style.fontSize = '1.2rem';
-      callBtn.style.cursor = 'pointer';
-      callBtn.style.padding = '0 10px';
-      callBtn.style.minWidth = '44px';
-      callBtn.style.minHeight = '44px';
-      callBtn.title = 'Начать звонок';
-      callBtn.onclick = window.startCall;
-      
-      chatHeader.appendChild(callBtn);
-    }
-
-    // Перехватываем выбор группы
-    const originalSelectConversation = window.selectConversation;
-    window.selectConversation = function(convId) {
-      originalSelectConversation(convId);
-      
-      // Проверяем, группа ли это
-      const conversation = conversationListCache.find(c => c.id === convId);
-      if (conversation && conversation.isGroup) {
-        addCallButtonToGroup();
-      } else {
-        // Убираем кнопку звонка для личных чатов
-        const callBtn = document.getElementById('group-call-btn');
-        if (callBtn) callBtn.remove();
-      }
-    };
-
-    // Подключаем WebSocket при загрузке
-    document.addEventListener('DOMContentLoaded', () => {
-      connectCallWS();
-    });
-  </script>
 </body>
 </html>
