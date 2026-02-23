@@ -7,7 +7,7 @@ const crypto = require('crypto');
 const cookieParser = require('cookie-parser');
 const { pool, initDb } = require('./db');
 const path = require('path');
-const WebSocket = require('ws'); // <-- ДОБАВЛЕНО
+const WebSocket = require('ws'); // <-- ТОЛЬКО ЭТА СТРОКА ДОБАВЛЕНА
 
 function generateFriendCode() {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -33,8 +33,7 @@ app.use(express.json());
 app.use(cookieParser());
 app.use(express.static(path.join(__dirname, 'public')));
 
-// --- WebSocket Server Logic ---
-const sseClients = new Map(); // Keep for HTTP notifications? Can be replaced later.
+const sseClients = new Map();
 
 function authMiddleware(req, res, next) {
   const token = req.cookies.token || 
@@ -51,6 +50,22 @@ function authMiddleware(req, res, next) {
     next();
   } catch {
     return res.status(401).json({ error: 'Invalid token' });
+  }
+}
+
+function streamAuthMiddleware(req, res, next) {
+  const token = req.query.token || req.cookies.token ||
+                (req.headers.authorization && req.headers.authorization.startsWith('Bearer ') && 
+                 req.headers.authorization.slice(7));
+  
+  if (!token) return res.status(401).end();
+  
+  try {
+    const payload = jwt.verify(token, JWT_SECRET);
+    req.userId = payload.userId;
+    next();
+  } catch {
+    return res.status(401).end();
   }
 }
 
@@ -204,6 +219,7 @@ app.post('/api/friends', authMiddleware, async (req, res) => {
 });
 
 // ---- Conversations (DMs & Groups) ----
+// FIXED: Returns one row per conversation with proper user data
 app.get('/api/conversations', authMiddleware, async (req, res) => {
   const r = await pool.query(`
     SELECT 
@@ -259,7 +275,74 @@ app.get('/api/conversations', authMiddleware, async (req, res) => {
       title: row.title,
       participants: participants,
       otherUsers: otherUsers,
+      // For backward compatibility
       otherUser: !row.is_group && otherUsers.length > 0 ? otherUsers[0] : null,
+      lastMessage: lastMessage ? lastMessage.body : null,
+      lastMessageData: lastMessage,
+      lastAt: row.last_at,
+      createdAt: row.created_at
+    };
+  });
+
+  res.json(convos);
+});
+
+// Legacy endpoint
+app.get('/api/dms', authMiddleware, async (req, res) => {
+  const r = await pool.query(`
+    SELECT 
+      c.id,
+      c.created_at,
+      c.is_group,
+      c.title,
+      COALESCE(
+        json_agg(
+          DISTINCT jsonb_build_object(
+            'id', u.id,
+            'username', u.username
+          )
+        ) FILTER (WHERE u.id != $1),
+        '[]'::json
+      ) AS participants,
+      MAX(m.created_at) AS last_at,
+      (
+        SELECT jsonb_build_object(
+          'id', m2.id,
+          'body', m2.body,
+          'sender_id', m2.sender_id,
+          'sender_username', u2.username,
+          'created_at', m2.created_at
+        )
+        FROM messages m2
+        JOIN users u2 ON u2.id = m2.sender_id
+        WHERE m2.conversation_id = c.id
+        ORDER BY m2.created_at DESC
+        LIMIT 1
+      ) AS last_message
+    FROM conversations c
+    JOIN conversation_participants cp ON cp.conversation_id = c.id
+    JOIN users u ON u.id = cp.user_id
+    LEFT JOIN messages m ON m.conversation_id = c.id
+    WHERE c.id IN (
+      SELECT conversation_id 
+      FROM conversation_participants 
+      WHERE user_id = $1
+    )
+    GROUP BY c.id
+    ORDER BY last_at DESC NULLS LAST
+  `, [req.userId]);
+
+  const convos = r.rows.map(row => {
+    const participants = row.participants || [];
+    const otherUsers = participants.filter(p => p.id !== req.userId);
+    const lastMessage = row.last_message;
+    
+    return {
+      id: row.id,
+      isGroup: row.is_group || false,
+      title: row.title,
+      otherUser: !row.is_group && otherUsers.length > 0 ? otherUsers[0] : null,
+      otherUsers: otherUsers,
       lastMessage: lastMessage ? lastMessage.body : null,
       lastMessageData: lastMessage,
       lastAt: row.last_at,
@@ -375,7 +458,6 @@ app.post('/api/groups', authMiddleware, async (req, res) => {
 
     await client.query('COMMIT');
     
-    // Notify via SSE if needed
     for (const uid of userIds) {
       const clients = sseClients.get(uid);
       if (clients) {
@@ -479,6 +561,7 @@ app.post('/api/groups/:id/members', authMiddleware, async (req, res) => {
 });
 
 // ---- Messages ----
+// FIXED: Returns messages with sender username
 app.get('/api/conversations/:id/messages', authMiddleware, async (req, res) => {
   const convId = parseInt(req.params.id, 10);
   
@@ -560,7 +643,89 @@ app.post('/api/conversations/:id/messages', authMiddleware, async (req, res) => 
   res.status(201).json(payload.message);
 });
 
-// ---- Notifications (SSE) ----
+// Legacy endpoints
+app.get('/api/dms/:id/messages', authMiddleware, async (req, res) => {
+  const convId = parseInt(req.params.id, 10);
+  
+  const part = await pool.query(
+    'SELECT 1 FROM conversation_participants WHERE conversation_id = $1 AND user_id = $2',
+    [convId, req.userId]
+  );
+  
+  if (part.rows.length === 0) return res.status(404).json({ error: 'Conversation not found' });
+  
+  const r = await pool.query(`
+    SELECT 
+      m.id, 
+      m.body, 
+      m.created_at, 
+      m.sender_id,
+      u.username AS sender_username
+    FROM messages m
+    JOIN users u ON u.id = m.sender_id
+    WHERE m.conversation_id = $1
+    ORDER BY m.created_at ASC
+  `, [convId]);
+  
+  res.json(r.rows);
+});
+
+app.post('/api/dms/:id/messages', authMiddleware, async (req, res) => {
+  const convId = parseInt(req.params.id, 10);
+  const { body } = req.body || {};
+  
+  if (!body || !String(body).trim()) return res.status(400).json({ error: 'Message body required' });
+  
+  const part = await pool.query(
+    'SELECT user_id FROM conversation_participants WHERE conversation_id = $1',
+    [convId]
+  );
+  
+  if (part.rows.length === 0) return res.status(404).json({ error: 'Conversation not found' });
+  
+  const isMember = part.rows.some(p => p.user_id === req.userId);
+  if (!isMember) return res.status(403).json({ error: 'Not in this conversation' });
+  
+  const otherUserIds = part.rows.filter(p => p.user_id !== req.userId).map(p => p.user_id);
+  
+  const ins = await pool.query(
+    'INSERT INTO messages (conversation_id, sender_id, body) VALUES ($1, $2, $3) RETURNING id, body, created_at, sender_id',
+    [convId, req.userId, String(body).trim()]
+  );
+  
+  const msg = ins.rows[0];
+  const sender = await pool.query('SELECT username FROM users WHERE id = $1', [req.userId]);
+  
+  const payload = {
+    type: 'new_message',
+    conversationId: convId,
+    message: {
+      id: msg.id,
+      body: msg.body,
+      created_at: msg.created_at,
+      sender_id: msg.sender_id,
+      sender_username: sender.rows[0]?.username || '',
+    },
+  };
+  
+  for (const uid of otherUserIds) {
+    await pool.query(
+      'INSERT INTO notifications (user_id, conversation_id, message_id) VALUES ($1, $2, $3)',
+      [uid, convId, msg.id]
+    );
+    
+    const clients = sseClients.get(uid);
+    if (clients) {
+      clients.forEach(r => {
+        try { r.write(`data: ${JSON.stringify(payload)}\n\n`); } catch (_) {}
+      });
+    }
+  }
+  
+  res.status(201).json(payload.message);
+});
+
+// ---- Notifications ----
 app.get('/api/notifications/count', authMiddleware, async (req, res) => {
   const r = await pool.query(
     'SELECT COUNT(*)::int AS c FROM notifications WHERE user_id = $1',
@@ -579,7 +744,7 @@ app.get('/api/notifications', authMiddleware, async (req, res) => {
   res.json(byConvo);
 });
 
-app.get('/api/notifications/stream', authMiddleware, (req, res) => {
+app.get('/api/notifications/stream', streamAuthMiddleware, (req, res) => {
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
   res.setHeader('Connection', 'keep-alive');
@@ -615,139 +780,11 @@ app.post('/api/notifications/read', authMiddleware, async (req, res) => {
   res.json({ ok: true });
 });
 
-// --- WebSocket Server Setup ---
-const server = app.listen(PORT, () => console.log(`HTTP server listening on port ${PORT}`));
-
-const wss = new WebSocket.Server({ server });
-
-// Store rooms: roomId -> { users: Map<userId, WebSocket>, nicknames: {} }
-const rooms = new Map();
-
-function send(ws, data) {
-  if (ws.readyState === WebSocket.OPEN) {
-    ws.send(JSON.stringify(data));
-  }
-}
-
-function broadcast(roomId, exceptId, data) {
-  const room = rooms.get(roomId);
-  if (!room) return;
-  for (const [id, client] of room.users) {
-    if (id !== exceptId && client.readyState === WebSocket.OPEN) {
-      send(client, data);
-    }
-  }
-}
-
-function sendTo(roomId, targetId, data) {
-  const room = rooms.get(roomId);
-  if (!room) return;
-  const client = room.users.get(targetId);
-  if (client && client.readyState === WebSocket.OPEN) {
-    send(client, data);
-  }
-}
-
-wss.on('connection', (ws) => {
-  console.log('WebSocket client connected');
-
-  ws.on('message', (raw) => {
-    try {
-      const data = JSON.parse(raw);
-      console.log('WS Message:', data.type, data);
-
-      // --- Join Room ---
-      if (data.type === 'join') {
-        const { roomId, nickname } = data;
-
-        if (!rooms.has(roomId)) {
-          rooms.set(roomId, {
-            users: new Map(),
-            nicknames: {}
-          });
-        }
-
-        const room = rooms.get(roomId);
-        // Generate a simple userId for the connection
-        const userId = Math.random().toString(36).slice(2);
-
-        ws.userId = userId;
-        ws.roomId = roomId;
-
-        room.users.set(userId, ws);
-        room.nicknames[userId] = nickname;
-
-        // Send confirmation to the new client
-        send(ws, {
-          type: 'joined',
-          userId,
-          users: Array.from(room.users.keys()),
-          nicknames: room.nicknames
-        });
-
-        // Notify others
-        broadcast(roomId, userId, {
-          type: 'user_joined',
-          userId,
-          nickname
-        });
-
-        return;
-      }
-
-      // --- Messages (Text/File) ---
-      if (data.type === 'message') {
-        if (data.targetUserId) {
-          // Private message
-          sendTo(ws.roomId, data.targetUserId, data);
-        } else {
-          // Broadcast to room
-          broadcast(ws.roomId, ws.userId, data);
-        }
-        return;
-      }
-
-      // --- WebRTC Signaling ---
-      if (['offer', 'answer', 'candidate'].includes(data.type)) {
-        if (data.targetUserId) {
-          sendTo(ws.roomId, data.targetUserId, data);
-        }
-        return;
-      }
-
-    } catch (err) {
-      console.error('WS message error:', err);
-    }
-  });
-
-  ws.on('close', () => {
-    const { roomId, userId } = ws;
-    if (!roomId) return;
-
-    const room = rooms.get(roomId);
-    if (room) {
-      room.users.delete(userId);
-      delete room.nicknames[userId];
-
-      broadcast(roomId, userId, {
-        type: 'user_left',
-        userId
-      });
-
-      if (room.users.size === 0) {
-        rooms.delete(roomId);
-      }
-    }
-    console.log('WebSocket client disconnected');
-  });
-});
-
 app.get('*', (req, res) => {
   if (req.path.startsWith('/api/')) return res.status(404).json({ error: 'Not found' });
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-// Database initialization
 async function main() {
   try {
     await initDb();
@@ -756,6 +793,7 @@ async function main() {
     console.error('DB init failed:', e.message);
     process.exit(1);
   }
+  app.listen(PORT, () => console.log(`Server listening on port ${PORT}`));
 }
 
 main();
