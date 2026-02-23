@@ -53,6 +53,9 @@
           <div id="chat-active" class="hidden">
             <div class="chat-header" id="chat-header">
               <span id="chat-with-name"></span>
+              <!-- Call buttons -->
+              <button type="button" id="btn-start-call" style="margin-left: auto; margin-right: 8px; background: none; border: none; color: var(--accent); font-size: 1.2rem; cursor: pointer;" title="Start audio call">📞</button>
+              <button type="button" id="btn-hangup" style="background: none; border: none; color: var(--danger); font-size: 1.2rem; cursor: pointer; opacity: 0.5;" title="Hang up" disabled>📴</button>
             </div>
             <div class="chat-messages-wrapper" id="chat-messages-wrapper">
               <div id="messages-container">
@@ -61,6 +64,9 @@
             </div>
             <form id="send-form" class="send-form">
               <input type="text" id="message-input" placeholder="Type a message..." autocomplete="off" />
+              <!-- File input -->
+              <input type="file" id="file-input" style="display: none;" />
+              <button type="button" id="btn-send-file" style="padding: 0.75rem; border-radius: 24px; background: var(--surface-hover); color: var(--text); border: none; cursor: pointer;">📎</button>
               <button type="submit">Send</button>
             </form>
           </div>
@@ -107,6 +113,7 @@
         </div>
       </div>
     </div>
+
     <div id="modal-create-group" class="modal hidden">
       <div class="modal-content">
         <h2>Create group</h2>
@@ -152,6 +159,20 @@
         </div>
       </div>
     </div>
+
+    <!-- Modal: Groups list -->
+    <div id="modal-groups-list" class="modal hidden">
+      <div class="modal-content">
+        <h2>Your Groups</h2>
+        <ul id="groups-list" class="user-list" style="max-height:300px;"></ul>
+        <div class="modal-actions">
+          <button type="button" class="btn-close-modal" id="btn-close-groups-list">Close</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Hidden audio element for remote stream -->
+    <audio id="remote-audio" autoplay style="display: none;"></audio>
 
     <div id="notification-toast" class="toast hidden"></div>
     <div id="notification-badge" class="badge hidden">0</div>

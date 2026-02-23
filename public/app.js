@@ -1,12 +1,26 @@
 const API = window.location.origin;
+const WS_URL = API.replace(/^http/, 'ws') + '/ws'; // Simple WS URL
 
 let currentUser = JSON.parse(localStorage.getItem('user') || 'null');
 let currentConversationId = null;
-let eventSource = null;
+let eventSource = null; // Keep for HTTP notifications? We'll use WS for new features.
 let unreadByConvo = {};
 let conversationListCache = [];
 let isAtBottom = true;
 let currentConversationIsGroup = false;
+
+// --- WebSocket & WebRTC State ---
+let ws = null;
+let myId = null;
+const peers = {}; // Store RTCPeerConnection objects keyed by userId
+let localStream = null; // Local media stream
+let remoteAudio = null; // Audio element for remote stream
+
+const pcConfig = {
+  iceServers: [
+    { urls: 'stun:stun.l.google.com:19302' }
+  ]
+};
 
 const $ = (id) => document.getElementById(id);
 
@@ -42,6 +56,364 @@ async function api(path, options = {}) {
   return data;
 }
 
+// --- WebSocket Connection Management ---
+function connectWebSocket() {
+  if (!currentUser) return;
+
+  ws = new WebSocket(WS_URL);
+
+  ws.onopen = () => {
+    console.log('WebSocket connected');
+    // Join the user's personal room? Or we can use conversation IDs as rooms.
+    // For simplicity, let's join a room based on conversation when selected.
+    // We'll join a room when a conversation is selected.
+    if (currentConversationId) {
+      joinRoom(currentConversationId);
+    }
+  };
+
+  ws.onmessage = (event) => {
+    const data = JSON.parse(event.data);
+    console.log('WS received:', data);
+
+    // --- Join confirmation ---
+    if (data.type === 'joined') {
+      myId = data.userId;
+      console.log('Joined room, myId:', myId);
+      // Optionally, store other users in the room
+      return;
+    }
+
+    // --- User joined notification ---
+    if (data.type === 'user_joined') {
+      console.log('User joined:', data.userId, data.nickname);
+      // Could update UI
+      return;
+    }
+
+    // --- User left notification ---
+    if (data.type === 'user_left') {
+      console.log('User left:', data.userId);
+      // Clean up peer connection if it exists
+      if (peers[data.userId]) {
+        peers[data.userId].close();
+        delete peers[data.userId];
+      }
+      // If it's the user we were calling, maybe reset call UI
+      if (data.userId === currentCallUserId) {
+        resetCallUI();
+      }
+      return;
+    }
+
+    // --- Text/File Message ---
+    if (data.type === 'message') {
+      // Append message to chat if it's from the current conversation
+      // Note: We need to know which conversation this message belongs to.
+      // The server's broadcast doesn't include conversationId. We need to add it.
+      // For now, assume it's for the current conversation.
+      if (data.conversationId === currentConversationId) {
+        appendMessageToChat({
+          id: Date.now(), // Temporary ID
+          body: data.text,
+          created_at: new Date().toISOString(),
+          sender_id: data.senderId,
+          sender_username: data.senderNickname,
+        });
+        // Also update unread count if not current user
+        if (data.senderId !== myId) {
+          unreadByConvo[currentConversationId] = (unreadByConvo[currentConversationId] || 0) + 1;
+          updateSidebarRow(currentConversationId, data.text);
+        }
+      } else {
+        // Handle notification for other conversations
+        if (data.conversationId) {
+           unreadByConvo[data.conversationId] = (unreadByConvo[data.conversationId] || 0) + 1;
+           // Optionally, trigger a load of conversation list to update last message
+           loadConversationList();
+        }
+      }
+      playNotificationSound(data.conversationId);
+      return;
+    }
+
+    // --- WebRTC Signaling ---
+    if (data.type === 'offer') {
+      handleOffer(data);
+    }
+    if (data.type === 'answer') {
+      handleAnswer(data);
+    }
+    if (data.type === 'candidate') {
+      handleCandidate(data);
+    }
+  };
+
+  ws.onerror = (err) => {
+    console.error('WebSocket error:', err);
+  };
+
+  ws.onclose = () => {
+    console.log('WebSocket disconnected');
+    // Attempt to reconnect after a delay
+    setTimeout(connectWebSocket, 3000);
+  };
+}
+
+function joinRoom(roomId) {
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify({
+      type: 'join',
+      roomId: String(roomId), // Ensure string
+      nickname: currentUser.username
+    }));
+  }
+}
+
+function sendMessageToRoom(messageText, targetUserId = null) {
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify({
+      type: 'message',
+      conversationId: currentConversationId, // Add context
+      text: messageText,
+      senderId: myId,
+      senderNickname: currentUser.username,
+      targetUserId // For private messages (not used in broadcast rooms)
+    }));
+  }
+}
+
+function sendFileToRoom(file, targetUserId = null) {
+  const reader = new FileReader();
+  reader.onload = () => {
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({
+        type: 'message',
+        conversationId: currentConversationId,
+        text: reader.result, // This will be a Data URL
+        fileName: file.name,
+        fileType: file.type,
+        senderId: myId,
+        senderNickname: currentUser.username,
+        targetUserId
+      }));
+    }
+  };
+  reader.readAsDataURL(file);
+}
+
+// --- WebRTC Functions ---
+async function getLocalStream() {
+  if (localStream) return localStream;
+  try {
+    localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    return localStream;
+  } catch (err) {
+    console.error('Error accessing media devices:', err);
+    alert('Could not access microphone. Please check permissions.');
+    throw err;
+  }
+}
+
+function createPeer(userId) {
+  if (peers[userId]) {
+    console.log('Peer already exists for', userId);
+    return peers[userId];
+  }
+
+  const pc = new RTCPeerConnection(pcConfig);
+
+  // Add local stream tracks to the connection
+  if (localStream) {
+    localStream.getTracks().forEach(track => {
+      pc.addTrack(track, localStream);
+    });
+  }
+
+  pc.onicecandidate = (e) => {
+    if (e.candidate) {
+      console.log('Sending ICE candidate to', userId);
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({
+          type: 'candidate',
+          targetUserId: userId,
+          candidate: e.candidate
+        }));
+      }
+    }
+  };
+
+  pc.ontrack = (e) => {
+    console.log('Received remote track from', userId);
+    if (!remoteAudio) {
+      remoteAudio = document.getElementById('remote-audio');
+    }
+    if (remoteAudio) {
+      remoteAudio.srcObject = e.streams[0];
+      remoteAudio.play().catch(err => console.warn('Audio play failed:', err));
+    }
+  };
+
+  pc.onconnectionstatechange = () => {
+    console.log('Connection state with', userId, ':', pc.connectionState);
+    if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed' || pc.connectionState === 'closed') {
+      // Clean up
+      if (peers[userId]) {
+        delete peers[userId];
+      }
+      // Reset UI if this was the active call
+      if (userId === currentCallUserId) {
+        resetCallUI();
+      }
+    }
+  };
+
+  peers[userId] = pc;
+  return pc;
+}
+
+async function startCall(userId) {
+  if (!userId) {
+    console.error('No user ID provided for call');
+    return;
+  }
+
+  // Prevent starting a call if one is already active
+  if (currentCallUserId) {
+    alert('You are already in a call. Please hang up first.');
+    return;
+  }
+
+  try {
+    await getLocalStream();
+
+    const pc = createPeer(userId);
+
+    const offer = await pc.createOffer();
+    await pc.setLocalDescription(offer);
+
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({
+        type: 'offer',
+        targetUserId: userId,
+        offer: offer
+      }));
+    }
+
+    // Update UI
+    currentCallUserId = userId;
+    updateCallUI(true, userId);
+  } catch (err) {
+    console.error('Failed to start call:', err);
+  }
+}
+
+async function handleOffer(data) {
+  console.log('Received offer from', data.senderId);
+  if (!data.offer) return;
+
+  // If already in a call with someone else, maybe auto-decline? For simplicity, we'll just handle it.
+  // You might want to add a "incoming call" UI here.
+  try {
+    await getLocalStream();
+
+    const pc = createPeer(data.senderId);
+
+    await pc.setRemoteDescription(new RTCSessionDescription(data.offer));
+
+    const answer = await pc.createAnswer();
+    await pc.setLocalDescription(answer);
+
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({
+        type: 'answer',
+        targetUserId: data.senderId,
+        answer: answer
+      }));
+    }
+
+    // Update UI: we are now in a call with the caller
+    currentCallUserId = data.senderId;
+    updateCallUI(true, data.senderId);
+
+  } catch (err) {
+    console.error('Error handling offer:', err);
+  }
+}
+
+async function handleAnswer(data) {
+  console.log('Received answer from', data.senderId);
+  if (!data.answer) return;
+
+  const pc = peers[data.senderId];
+  if (pc) {
+    try {
+      await pc.setRemoteDescription(new RTCSessionDescription(data.answer));
+    } catch (err) {
+      console.error('Error setting remote description:', err);
+    }
+  } else {
+    console.warn('No peer found for answer from', data.senderId);
+  }
+}
+
+async function handleCandidate(data) {
+  console.log('Received ICE candidate from', data.senderId);
+  if (!data.candidate) return;
+
+  const pc = peers[data.senderId];
+  if (pc) {
+    try {
+      await pc.addIceCandidate(new RTCIceCandidate(data.candidate));
+    } catch (err) {
+      console.error('Error adding ICE candidate:', err);
+    }
+  } else {
+    console.warn('No peer found for candidate from', data.senderId);
+  }
+}
+
+function hangUp() {
+  for (const userId in peers) {
+    peers[userId].close();
+    delete peers[userId];
+  }
+  if (localStream) {
+    localStream.getTracks().forEach(track => track.stop());
+    localStream = null;
+  }
+  if (remoteAudio) {
+    remoteAudio.srcObject = null;
+  }
+  resetCallUI();
+}
+
+function resetCallUI() {
+  currentCallUserId = null;
+  updateCallUI(false);
+}
+
+// UI update for call state
+function updateCallUI(isInCall, otherUserId = null) {
+  const callBtn = document.getElementById('btn-start-call');
+  const hangUpBtn = document.getElementById('btn-hangup');
+  if (callBtn && hangUpBtn) {
+    if (isInCall) {
+      callBtn.disabled = true;
+      callBtn.style.opacity = '0.5';
+      hangUpBtn.disabled = false;
+      hangUpBtn.style.opacity = '1';
+    } else {
+      callBtn.disabled = false;
+      callBtn.style.opacity = '1';
+      hangUpBtn.disabled = true;
+      hangUpBtn.style.opacity = '0.5';
+    }
+  }
+}
+
+let currentCallUserId = null;
+
 // Попытка автоматического входа при загрузке
 async function tryAutoLogin() {
   if (currentUser) {
@@ -72,7 +444,8 @@ function renderScreen() {
     
     if (!currentUser.friend_code) fetchMe();
     
-    startNotificationStream();
+    startNotificationStream(); // Keep SSE for now? Or rely solely on WS? Let's keep both.
+    connectWebSocket(); // Connect WebSocket
     loadConversationList();
     loadNotificationCount();
     
@@ -83,6 +456,9 @@ function renderScreen() {
     show($('auth-screen'));
     hide($('main-screen'));
     stopNotificationStream();
+    if (ws) {
+      ws.close();
+    }
   }
 }
 
@@ -223,6 +599,7 @@ if (logoutBtn) {
       await api('/api/logout', { method: 'POST' });
     } catch (_) {}
     
+    hangUp(); // End any active call on logout
     currentUser = null;
     localStorage.removeItem('user');
     currentConversationId = null;
@@ -258,10 +635,8 @@ function startNotificationStream() {
           updateSidebarRow(convId, message ? message.body : null);
         }
       } else if (data.type === 'new_group') {
-        // Обновляем список разговоров при создании новой группы
         loadConversationList();
       } else if (data.type === 'added_to_group') {
-        // Обновляем список при добавлении в группу
         loadConversationList();
       }
     } catch (_) {}
@@ -322,9 +697,23 @@ function appendMessageToChat(message) {
     messageDiv.appendChild(nameSpan);
   }
   
-  const bodyDiv = document.createElement('div');
-  bodyDiv.textContent = message.body;
-  messageDiv.appendChild(bodyDiv);
+  // Check if it's a file message
+  if (message.fileName) {
+    // It's a file
+    const link = document.createElement('a');
+    link.href = message.body; // This is the data URL
+    link.download = message.fileName;
+    link.textContent = `📎 Download ${message.fileName}`;
+    link.style.display = 'block';
+    link.style.color = 'var(--accent)';
+    link.style.textDecoration = 'underline';
+    messageDiv.appendChild(link);
+  } else {
+    // It's text
+    const bodyDiv = document.createElement('div');
+    bodyDiv.textContent = message.body;
+    messageDiv.appendChild(bodyDiv);
+  }
   
   const metaDiv = document.createElement('div');
   metaDiv.className = 'message-meta';
@@ -407,10 +796,8 @@ async function loadConversationList() {
       let previewText = conv.lastMessage || 'No messages yet';
       
       if (conv.isGroup) {
-        // Для групп показываем иконку и название
         nameHtml = `<span class="dm-name">👥 ${escapeHtml(conv.title || 'Group')}</span>`;
       } else {
-        // Для личных чатов показываем имя собеседника
         const otherUserName = conv.otherUser?.username || 'Unknown';
         nameHtml = `<span class="dm-name">${escapeHtml(otherUserName)}</span>`;
       }
@@ -441,9 +828,6 @@ async function loadConversationList() {
   }
 }
 
-// Сохраняем для обратной совместимости
-const loadDmList = loadConversationList;
-
 async function selectConversation(convId) {
   convId = parseInt(convId, 10);
   currentConversationId = convId;
@@ -465,7 +849,6 @@ async function selectConversation(convId) {
     conversation = conversationListCache.find(c => c.id === convId);
   }
   
-  // Определяем, группа ли это
   currentConversationIsGroup = conversation ? conversation.isGroup : false;
   
   const chatPlaceholder = $('chat-placeholder');
@@ -489,6 +872,11 @@ async function selectConversation(convId) {
     el.classList.toggle('active', parseInt(el.dataset.id, 10) === convId);
   });
   
+  // Join the WebSocket room for this conversation
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    joinRoom(convId);
+  }
+  
   loadMessages(convId);
   
   setTimeout(() => {
@@ -511,7 +899,6 @@ async function loadMessages(convId) {
       const messageDiv = document.createElement('div');
       messageDiv.className = 'message ' + (msg.sender_id === currentUser.id ? 'mine' : 'theirs');
       
-      // Для групп показываем имя отправителя (кроме своих сообщений)
       if (currentConversationIsGroup && msg.sender_id !== currentUser.id) {
         const nameSpan = document.createElement('div');
         nameSpan.className = 'message-sender';
@@ -555,6 +942,10 @@ if (sendForm) {
     if (!body) return;
 
     try {
+      // Use HTTP API for now to persist messages, but also send via WebSocket for real-time?
+      // For simplicity, we'll just use HTTP and rely on SSE/WS for real-time updates.
+      // However, WebRTC and file sending are handled via WS.
+      // Let's keep HTTP for text messages for persistence.
       const msg = await api(`/api/conversations/${currentConversationId}/messages`, {
         method: 'POST',
         body: JSON.stringify({ body }),
@@ -579,6 +970,56 @@ if (sendForm) {
       alert('Failed to send message: ' + err.message);
     }
   });
+}
+
+// --- File Send Handler ---
+const fileInput = $('file-input');
+const btnSendFile = $('btn-send-file');
+
+if (btnSendFile) {
+  btnSendFile.addEventListener('click', () => {
+    if (fileInput) {
+      fileInput.click();
+    }
+  });
+}
+
+if (fileInput) {
+  fileInput.addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (file && currentConversationId) {
+      // Send file via WebSocket (or HTTP). Using WebSocket for simplicity.
+      sendFileToRoom(file);
+      // Optionally, also save to DB via HTTP API if needed.
+      fileInput.value = ''; // Reset
+    }
+  });
+}
+
+// --- Call Buttons ---
+const btnStartCall = $('btn-start-call');
+const btnHangup = $('btn-hangup');
+
+if (btnStartCall) {
+  btnStartCall.addEventListener('click', () => {
+    if (currentConversationId && !currentConversationIsGroup) {
+      // For DM, find the other user's ID
+      const conversation = conversationListCache.find(c => c.id === currentConversationId);
+      if (conversation && conversation.otherUser) {
+        startCall(conversation.otherUser.id);
+      } else {
+        alert('Cannot start call: unknown user');
+      }
+    } else if (currentConversationIsGroup) {
+      alert('Group calls not supported yet');
+    } else {
+      alert('Select a conversation first');
+    }
+  });
+}
+
+if (btnHangup) {
+  btnHangup.addEventListener('click', hangUp);
 }
 
 // ---- New DM modal ----
@@ -607,7 +1048,7 @@ if (btnNewDm) {
             });
             hide($('modal-new-dm'));
             selectConversation(data.conversationId);
-            hideGroupInfoButton(); // Личные чаты не имеют кнопки информации
+            hideGroupInfoButton();
             if (isMobile()) {
               setTimeout(() => showChat(), 10);
             }
@@ -1154,6 +1595,14 @@ document.addEventListener('DOMContentLoaded', () => {
   
   scrollDownBtn = createScrollDownButton();
   setupScrollListener();
+  
+  // Create remote audio element
+  if (!document.getElementById('remote-audio')) {
+    const audio = document.createElement('audio');
+    audio.id = 'remote-audio';
+    audio.autoplay = true;
+    document.body.appendChild(audio);
+  }
   
   const header = $('chat-header');
   if (header && isMobile() && !$('mobile-back-btn')) {
