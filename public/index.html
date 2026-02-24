@@ -51,49 +51,30 @@
             <p>Select a conversation or start a new message</p>
           </div>
           <div id="chat-active" class="hidden">
-            <!-- Incoming call banner (shown when someone calls) -->
-            <div id="call-incoming-bar" class="call-incoming-bar hidden">
-              <span class="call-incoming-icon">📞</span>
-              <span id="call-incoming-text">Incoming call...</span>
-              <button type="button" class="call-accept-btn" id="btn-call-accept">Accept</button>
-              <button type="button" class="call-reject-btn" id="btn-call-reject">Decline</button>
-            </div>
-            <!-- Active call bar (shown while in call) -->
-            <div id="call-active-bar" class="call-active-bar hidden">
-              <span class="call-active-icon">🔴</span>
-              <span id="call-active-text">In call</span>
-              <button type="button" class="call-mute-btn" id="btn-call-mute" title="Mute/Unmute">🎤</button>
-              <button type="button" class="call-end-btn" id="btn-call-end">End call</button>
-            </div>
             <div class="chat-header" id="chat-header">
               <span id="chat-with-name"></span>
-              <!-- Call button injected by JS -->
+              <button type="button" class="btn-header" id="btn-call" title="Start call" style="margin-left:auto;background:none;border:none;color:var(--text);font-size:1.2rem;cursor:pointer;padding:0 10px;display:none;">☎️</button>
             </div>
             <div class="chat-messages-wrapper" id="chat-messages-wrapper">
               <div id="messages-container">
                 <div id="messages-list"></div>
               </div>
             </div>
-            <!-- File preview bar (shown when file selected) -->
-            <div id="file-preview-bar" class="file-preview-bar hidden">
-              <span id="file-preview-name" class="file-preview-name"></span>
-              <button type="button" class="file-preview-remove" id="btn-file-remove" title="Remove">✕</button>
+            <div id="call-status-bar" class="hidden" style="background:var(--surface-hover);padding:0.75rem;text-align:center;border-top:1px solid var(--border);font-size:0.9rem;">
+              <span id="call-status-text"></span>
+              <button type="button" id="btn-end-call" style="margin-left:1rem;padding:0.25rem 0.75rem;background:var(--danger);color:white;border:none;border-radius:4px;cursor:pointer;">End</button>
             </div>
             <form id="send-form" class="send-form">
-              <label class="btn-attach" title="Attach file">
-                📎
-                <input type="file" id="file-input" accept="*/*" style="display:none;" />
-              </label>
               <input type="text" id="message-input" placeholder="Type a message..." autocomplete="off" />
+              <label for="file-input" style="cursor:pointer;background:var(--surface-hover);border:none;padding:0.5rem 1rem;border-radius:4px;color:var(--text);text-align:center;">📎 File</label>
+              <input type="file" id="file-input" multiple style="display:none;" />
               <button type="submit">Send</button>
             </form>
+            <audio id="remote-audio-stream" autoplay></audio>
           </div>
         </main>
       </div>
     </div>
-
-    <!-- Audio elements for WebRTC (dynamically added) -->
-    <div id="audio-container" style="display:none;"></div>
 
     <div id="modal-new-dm" class="modal hidden">
       <div class="modal-content">
@@ -134,15 +115,18 @@
         </div>
       </div>
     </div>
-
     <div id="modal-create-group" class="modal hidden">
       <div class="modal-content">
         <h2>Create group</h2>
         <p>Select friends to add</p>
+        
         <input type="text" id="group-title" placeholder="Group name" style="width:100%; margin-bottom:1rem; padding:0.75rem; background:var(--bg); border:1px solid var(--border); border-radius:8px; color:var(--text);" />
+        
         <div style="margin-bottom:0.5rem; color:var(--text-muted); font-size:0.9rem;">Select friends:</div>
         <ul id="group-friends-list" class="user-list" style="max-height:200px;"></ul>
+        
         <p id="group-error" class="auth-error"></p>
+        
         <div class="modal-actions">
           <button type="button" class="btn-primary" id="btn-create-group">Create group</button>
           <button type="button" class="btn-close-modal" id="btn-close-group">Cancel</button>
@@ -150,11 +134,13 @@
       </div>
     </div>
 
+    <!-- Modal: Group info (view members) -->
     <div id="modal-group-info" class="modal hidden">
       <div class="modal-content">
         <h2 id="group-info-title">Group</h2>
         <p>Members:</p>
         <ul id="group-members-list" class="user-list" style="max-height:200px;"></ul>
+        
         <div class="modal-actions">
           <button type="button" class="btn-primary" id="btn-add-member">Add member</button>
           <button type="button" class="btn-close-modal" id="btn-close-group-info">Close</button>
@@ -162,6 +148,7 @@
       </div>
     </div>
 
+    <!-- Modal: Add member to group -->
     <div id="modal-add-member" class="modal hidden">
       <div class="modal-content">
         <h2>Add member</h2>
@@ -171,16 +158,6 @@
         <div class="modal-actions">
           <button type="button" class="btn-close-modal" id="btn-close-add-member">Cancel</button>
         </div>
-      </div>
-    </div>
-
-    <!-- Image lightbox -->
-    <div id="img-lightbox" class="img-lightbox hidden">
-      <div class="lightbox-overlay" id="lightbox-overlay"></div>
-      <div class="lightbox-content">
-        <button type="button" class="lightbox-close" id="lightbox-close">✕</button>
-        <img id="lightbox-img" src="" alt="" />
-        <a id="lightbox-download" class="lightbox-download" download>⬇ Download</a>
       </div>
     </div>
 
