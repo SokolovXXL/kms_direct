@@ -1,7 +1,7 @@
 {
   "name": "messenger-webapp",
   "version": "1.0.0",
-  "description": "Messenger with file sharing and calls",
+  "description": "Simple messenger with accounts, DMs, and notifications",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
@@ -17,7 +17,6 @@
     "dotenv": "^16.3.1",
     "express": "^4.18.2",
     "jsonwebtoken": "^9.0.2",
-    "pg": "^8.11.3",
-    "ws": "^8.14.2"
+    "pg": "^8.11.3"
   }
 }

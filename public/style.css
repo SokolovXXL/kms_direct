@@ -884,315 +884,331 @@ body {
 .mine .message-sender {
     color: #45a049;
 }
-/* Панель звонка */
-.call-panel {
-  position: fixed;
-  bottom: 20px;
-  right: 20px;
-  width: 300px;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  box-shadow: 0 10px 30px rgba(0,0,0,0.5);
-  z-index: 1000;
-  overflow: hidden;
-  animation: slideIn 0.3s;
-}
-
-.call-header {
+/* ======= FILE ATTACH BUTTON ======= */
+.btn-attach {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 12px 16px;
-  background: var(--accent);
-  color: white;
-  font-weight: 600;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: var(--surface-hover);
+  color: var(--text-muted);
+  font-size: 1.1rem;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.15s, color 0.15s;
+  user-select: none;
+}
+.btn-attach:hover {
+  background: var(--border);
+  color: var(--text);
 }
 
-.btn-close-call {
+/* File preview bar */
+.file-preview-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4rem 1.5rem;
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+.file-preview-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.file-preview-remove {
   background: none;
   border: none;
-  color: white;
-  font-size: 24px;
-  cursor: pointer;
-  padding: 0 8px;
-}
-
-.btn-close-call:hover {
-  opacity: 0.8;
-}
-
-.call-participants {
-  padding: 12px;
-  max-height: 200px;
-  overflow-y: auto;
-}
-
-.call-participant {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 8px 12px;
-  margin: 4px 0;
-  background: var(--surface-hover);
-  border-radius: 6px;
-  transition: all 0.2s;
-}
-
-.call-participant.speaking {
-  border: 2px solid #00ff88;
-  background: rgba(0, 255, 136, 0.1);
-}
-
-.participant-name {
-  font-size: 14px;
-  font-weight: 500;
-}
-
-.participant-status {
-  font-size: 16px;
-}
-
-.call-controls {
-  display: flex;
-  gap: 8px;
-  padding: 12px;
-  border-top: 1px solid var(--border);
-}
-
-.call-control-btn {
-  flex: 1;
-  padding: 8px 12px;
-  border: none;
-  border-radius: 6px;
-  background: var(--surface-hover);
-  color: var(--text);
-  cursor: pointer;
-  font-weight: 500;
-  transition: all 0.2s;
-}
-
-.call-control-btn:hover {
-  background: var(--border);
-}
-
-.call-control-btn.end {
-  background: var(--danger);
-  color: white;
-}
-
-.call-control-btn.end:hover {
-  filter: brightness(1.1);
-}
-
-.call-status {
-  padding: 8px 12px;
-  text-align: center;
-  font-size: 12px;
-  background: var(--bg);
-  border-top: 1px solid var(--border);
   color: var(--text-muted);
-}
-
-.call-status.active {
-  color: #3ba55d;
-  font-weight: 500;
-}
-
-.call-header-btn {
-  transition: opacity 0.2s;
-}
-
-.call-header-btn:hover {
-  opacity: 0.8;
-}
-
-@keyframes slideIn {
-  from {
-    opacity: 0;
-    transform: translateY(20px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-/* Вставьте этот код в конец существующего style.css */
-
-/* ===== ФАЙЛЫ ===== */
-.file-upload-label {
-  display: inline-block;
-  padding: 8px 12px;
-  background: var(--surface-hover);
-  border-radius: 24px;
   cursor: pointer;
-  margin-right: 5px;
+  font-size: 1rem;
+  padding: 2px 6px;
+  border-radius: 4px;
+  line-height: 1;
 }
-#file-input {
-  display: none;
-}
-.upload-progress {
-  position: fixed;
-  bottom: 20px;
-  left: 20px;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 10px;
-  width: 200px;
-  z-index: 1000;
-}
-.progress-bar {
-  height: 4px;
-  background: var(--accent);
-  width: 0%;
-  transition: width 0.3s;
-}
-.image-preview {
-  max-width: 200px;
-  max-height: 200px;
-  border-radius: 8px;
-  margin-top: 8px;
-  cursor: pointer;
-}
-.video-preview {
-  max-width: 300px;
-  max-height: 200px;
-  border-radius: 8px;
-  margin-top: 8px;
-}
-.file-message {
+.file-preview-remove:hover {
   background: var(--surface-hover);
-  border-radius: 8px;
-  padding: 8px;
-  margin-top: 5px;
+  color: var(--danger);
 }
-.file-info {
+
+/* ======= FILE MESSAGES ======= */
+.file-card {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 0.75rem;
+  background: rgba(0,0,0,0.18);
+  border-radius: 10px;
+  padding: 0.6rem 0.9rem;
+  margin-top: 0.3rem;
+  max-width: 280px;
+  border: 1px solid rgba(255,255,255,0.08);
 }
-.file-icon {
-  font-size: 2rem;
+.file-card-icon {
+  font-size: 1.8rem;
+  flex-shrink: 0;
+  line-height: 1;
 }
-.file-details {
+.file-card-info {
   flex: 1;
+  min-width: 0;
 }
-.file-name {
-  font-weight: 500;
-  font-size: 0.9rem;
-  word-break: break-word;
+.file-card-name {
+  font-size: 0.85rem;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
-.file-size {
+.file-card-size {
   font-size: 0.75rem;
-  opacity: 0.7;
+  opacity: 0.65;
+  margin-top: 1px;
 }
-.download-btn {
-  background: var(--accent);
-  color: white;
+.file-card-dl {
+  background: rgba(255,255,255,0.12);
   border: none;
+  border-radius: 6px;
+  color: inherit;
   padding: 4px 8px;
-  border-radius: 4px;
   cursor: pointer;
   font-size: 0.8rem;
-  margin-top: 5px;
+  white-space: nowrap;
+  text-decoration: none;
+  transition: background 0.15s;
+  display: inline-block;
+  margin-top: 6px;
+}
+.file-card-dl:hover {
+  background: rgba(255,255,255,0.22);
 }
 
-/* ===== ЗВОНКИ ===== */
-.call-header-btn {
+/* Inline image in messages */
+.msg-image-wrap {
+  margin-top: 0.3rem;
+  border-radius: 10px;
+  overflow: hidden;
+  max-width: 260px;
+  cursor: pointer;
+  position: relative;
+}
+.msg-image-wrap img {
+  width: 100%;
+  max-height: 220px;
+  object-fit: cover;
+  display: block;
+  transition: filter 0.2s;
+}
+.msg-image-wrap:hover img { filter: brightness(0.85); }
+.msg-image-dl {
+  position: absolute;
+  bottom: 6px; right: 6px;
+  background: rgba(0,0,0,0.55);
+  border: none;
+  border-radius: 6px;
+  color: #fff;
+  padding: 3px 8px;
+  font-size: 0.75rem;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.2s;
+  text-decoration: none;
+}
+.msg-image-wrap:hover .msg-image-dl { opacity: 1; }
+
+/* ======= CALL BUTTON IN HEADER ======= */
+.btn-call {
   margin-left: auto;
   background: none;
-  border: none;
+  border: 1px solid var(--border);
+  border-radius: 8px;
   color: var(--text-muted);
-  font-size: 1.2rem;
+  font-size: 1.1rem;
   cursor: pointer;
-  padding: 0 10px;
-  min-width: 44px;
-  min-height: 44px;
+  padding: 6px 10px;
+  min-width: 40px;
+  min-height: 36px;
+  transition: all 0.15s;
+  display: flex;
+  align-items: center;
+  gap: 4px;
 }
-.call-header-btn:hover {
+.btn-call:hover {
+  background: rgba(99,102,241,0.15);
+  border-color: var(--accent);
   color: var(--accent);
 }
-.call-panel {
-  position: fixed;
-  bottom: 20px;
-  right: 20px;
-  width: 300px;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  box-shadow: 0 10px 30px rgba(0,0,0,0.5);
-  z-index: 1000;
-  overflow: hidden;
-  animation: slideIn 0.3s;
+.btn-call.in-call {
+  background: rgba(239,68,68,0.18);
+  border-color: var(--danger);
+  color: var(--danger);
 }
-.call-header {
+
+/* ======= INCOMING CALL BAR ======= */
+.call-incoming-bar {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 12px 16px;
-  background: var(--accent);
+  gap: 0.6rem;
+  padding: 0.65rem 1.25rem;
+  background: linear-gradient(90deg, rgba(99,102,241,0.25), rgba(99,102,241,0.1));
+  border-bottom: 1px solid rgba(99,102,241,0.4);
+  flex-shrink: 0;
+  animation: callPulse 1.5s ease-in-out infinite;
+}
+@keyframes callPulse {
+  0%, 100% { background: linear-gradient(90deg, rgba(99,102,241,0.25), rgba(99,102,241,0.1)); }
+  50% { background: linear-gradient(90deg, rgba(99,102,241,0.4), rgba(99,102,241,0.2)); }
+}
+.call-incoming-icon { font-size: 1.2rem; }
+#call-incoming-text { flex: 1; font-weight: 500; font-size: 0.95rem; }
+.call-accept-btn {
+  padding: 0.4rem 0.9rem;
+  border: none;
+  border-radius: 20px;
+  background: #22c55e;
   color: white;
+  font: inherit;
   font-weight: 600;
-}
-.btn-close-call {
-  background: none;
-  border: none;
-  color: white;
-  font-size: 24px;
+  font-size: 0.85rem;
   cursor: pointer;
-  padding: 0 8px;
+  transition: filter 0.15s;
 }
-.call-participants {
-  padding: 12px;
-  max-height: 200px;
-  overflow-y: auto;
-}
-.call-participant {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 8px 12px;
-  margin: 4px 0;
-  background: var(--surface-hover);
-  border-radius: 6px;
-}
-.call-participant.speaking {
-  border: 2px solid #00ff88;
-  background: rgba(0,255,136,0.1);
-}
-.participant-name {
-  font-size: 14px;
-}
-.participant-status {
-  font-size: 16px;
-}
-.call-controls {
-  display: flex;
-  gap: 8px;
-  padding: 12px;
-  border-top: 1px solid var(--border);
-}
-.call-control-btn {
-  flex: 1;
-  padding: 8px;
+.call-accept-btn:hover { filter: brightness(1.15); }
+.call-reject-btn {
+  padding: 0.4rem 0.9rem;
   border: none;
-  border-radius: 6px;
-  background: var(--surface-hover);
-  color: var(--text);
-  cursor: pointer;
-}
-.call-control-btn.end {
+  border-radius: 20px;
   background: var(--danger);
   color: white;
+  font: inherit;
+  font-weight: 600;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: filter 0.15s;
 }
-.call-status {
-  padding: 8px;
-  text-align: center;
-  font-size: 12px;
-  border-top: 1px solid var(--border);
+.call-reject-btn:hover { filter: brightness(1.15); }
+
+/* ======= ACTIVE CALL BAR ======= */
+.call-active-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.5rem 1.25rem;
+  background: rgba(34,197,94,0.12);
+  border-bottom: 1px solid rgba(34,197,94,0.3);
+  flex-shrink: 0;
 }
-@keyframes slideIn {
-  from { transform: translateY(20px); opacity: 0; }
-  to { transform: translateY(0); opacity: 1; }
+.call-active-icon { font-size: 0.7rem; color: #22c55e; }
+#call-active-text { flex: 1; font-size: 0.88rem; font-weight: 500; color: #4ade80; }
+.call-mute-btn {
+  background: var(--surface-hover);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  font-size: 1rem;
+  cursor: pointer;
+  padding: 4px 10px;
+  transition: all 0.15s;
+}
+.call-mute-btn.muted {
+  background: rgba(239,68,68,0.2);
+  border-color: var(--danger);
+  color: var(--danger);
+}
+.call-mute-btn:hover { background: var(--border); }
+.call-end-btn {
+  padding: 0.35rem 0.85rem;
+  border: none;
+  border-radius: 20px;
+  background: var(--danger);
+  color: white;
+  font: inherit;
+  font-weight: 600;
+  font-size: 0.82rem;
+  cursor: pointer;
+  transition: filter 0.15s;
+}
+.call-end-btn:hover { filter: brightness(1.15); }
+
+/* ======= IMAGE LIGHTBOX ======= */
+.img-lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 3000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.lightbox-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0,0,0,0.88);
+  backdrop-filter: blur(6px);
+}
+.lightbox-content {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+  max-width: 90vw;
+  max-height: 90vh;
+}
+.lightbox-content img {
+  max-width: 90vw;
+  max-height: 80vh;
+  border-radius: 8px;
+  box-shadow: 0 8px 40px rgba(0,0,0,0.7);
+  object-fit: contain;
+}
+.lightbox-close {
+  position: absolute;
+  top: -40px;
+  right: 0;
+  background: rgba(255,255,255,0.1);
+  border: none;
+  border-radius: 50%;
+  color: white;
+  width: 32px;
+  height: 32px;
+  font-size: 1rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.lightbox-close:hover { background: rgba(255,255,255,0.2); }
+.lightbox-download {
+  background: var(--accent);
+  color: white;
+  text-decoration: none;
+  padding: 0.45rem 1.2rem;
+  border-radius: 20px;
+  font-size: 0.88rem;
+  font-weight: 600;
+  transition: background 0.15s;
+}
+.lightbox-download:hover { background: var(--accent-hover); }
+
+/* Upload progress indicator */
+.upload-indicator {
+  display: inline-block;
+  padding: 0.2rem 0.6rem;
+  background: rgba(99,102,241,0.2);
+  border-radius: 12px;
+  font-size: 0.75rem;
+  color: var(--accent);
+  margin-left: 0.5rem;
+  animation: fadeInOut 1s ease-in-out infinite;
+}
+@keyframes fadeInOut {
+  0%,100% { opacity: 0.5; }
+  50% { opacity: 1; }
 }

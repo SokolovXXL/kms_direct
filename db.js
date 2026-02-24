@@ -45,11 +45,7 @@ async function initDb() {
         id SERIAL PRIMARY KEY,
         conversation_id INT REFERENCES conversations(id) ON DELETE CASCADE,
         sender_id INT REFERENCES users(id) ON DELETE CASCADE,
-        body TEXT,
-        file_data TEXT,
-        file_name VARCHAR(255),
-        file_type VARCHAR(100),
-        file_size INTEGER,
+        body TEXT NOT NULL,
         created_at TIMESTAMPTZ DEFAULT NOW()
       );
     `);
@@ -62,31 +58,15 @@ async function initDb() {
         created_at TIMESTAMPTZ DEFAULT NOW()
       );
     `);
-    
-    // Добавляем колонки в существующую таблицу messages (если их нет)
-    await client.query(`
-      ALTER TABLE messages 
-      ADD COLUMN IF NOT EXISTS file_data TEXT,
-      ADD COLUMN IF NOT EXISTS file_name VARCHAR(255),
-      ADD COLUMN IF NOT EXISTS file_type VARCHAR(100),
-      ADD COLUMN IF NOT EXISTS file_size INTEGER
-    `);
-    
-    await client.query(`
+    await pool.query(`
       ALTER TABLE conversations 
       ADD COLUMN IF NOT EXISTS is_group BOOLEAN DEFAULT false,
       ADD COLUMN IF NOT EXISTS title TEXT
     `);
-    
     await client.query(`CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(user_id);`);
     await client.query(`CREATE INDEX IF NOT EXISTS idx_messages_conversation ON messages(conversation_id);`);
     await client.query(`CREATE INDEX IF NOT EXISTS idx_friends_user ON friends(user_id);`);
     await client.query(`CREATE INDEX IF NOT EXISTS idx_friends_friend ON friends(friend_id);`);
-    
-    console.log('Database schema updated successfully');
-  } catch (error) {
-    console.error('Error initializing database:', error);
-    throw error;
   } finally {
     client.release();
   }
