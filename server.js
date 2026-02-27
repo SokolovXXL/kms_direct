@@ -7,6 +7,23 @@ const crypto = require('crypto');
 const cookieParser = require('cookie-parser');
 const { pool, initDb } = require('./db');
 const path = require('path');
+const multer = require('multer');
+const fs = require('fs');
+
+// Создаем папку uploads, если её нет
+if (!fs.existsSync('uploads')) {
+  fs.mkdirSync('uploads');
+}
+
+// Настройка Multer для загрузки файлов
+const storage = multer.diskStorage({
+  destination: 'uploads/',
+  filename: (req, file, cb) => {
+    // Генерируем уникальное имя файла: время-оригинальноеИмя
+    cb(null, Date.now() + '-' + file.originalname);
+  }
+});
+const upload = multer({ storage });
 
 function generateFriendCode() {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -605,9 +622,24 @@ app.post('/api/conversations/:id/messages', authMiddleware, async (req, res) => 
   
   const otherUserIds = part.rows.filter(p => p.user_id !== req.userId).map(p => p.user_id);
   
+  // Определяем, является ли сообщение файлом
+  let messageBody = String(body).trim();
+  let messageType = 'text';
+
+  // Проверяем, не является ли сообщение JSON-строкой от клиента (для файлов)
+  try {
+    const parsed = JSON.parse(messageBody);
+    if (parsed.type === 'file') {
+      messageType = 'file';
+      // Оставляем как есть, это валидный JSON
+    }
+  } catch (e) {
+    // Это просто текст
+  }
+
   const ins = await pool.query(
     'INSERT INTO messages (conversation_id, sender_id, body) VALUES ($1, $2, $3) RETURNING id, body, created_at, sender_id',
-    [convId, req.userId, String(body).trim()]
+    [convId, req.userId, messageBody]
   );
   
   const msg = ins.rows[0];
@@ -845,6 +877,22 @@ app.get('/api/groups/:id/members', authMiddleware, async (req, res) => {
   
   res.json(r.rows);
 });
+
+// ---- FILE UPLOAD ----
+app.post('/api/upload', authMiddleware, upload.single('file'), (req, res) => {
+  if (!req.file) {
+    return res.status(400).json({ error: 'No file uploaded' });
+  }
+  // Возвращаем данные о файле
+  res.json({
+    url: `/uploads/${req.file.filename}`,
+    name: req.file.originalname,
+    type: req.file.mimetype
+  });
+});
+
+// Раздаем файлы из папки uploads
+app.use('/uploads', express.static('uploads'));
 
 app.get('*', (req, res) => {
   if (req.path.startsWith('/api/')) return res.status(404).json({ error: 'Not found' });

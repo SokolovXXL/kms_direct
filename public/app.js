@@ -587,19 +587,44 @@ if (sendForm) {
         if (conversation) conversation.lastMessage = body;
       }
       
-      // Send files
+            // Send files
       for (const file of files) {
-        const base64 = await fileToBase64(file);
-        const base64Data = base64.split(',')[1] || base64;
-        const fileBody = `|file|${file.name}|${file.type}|${file.size}|${base64Data}|`;
-        
-        const msg = await api(`/api/conversations/${currentConversationId}/messages`, {
-          method: 'POST',
-          body: JSON.stringify({ body: fileBody }),
-        });
-        
-        appendMessageToChat(msg);
-        updateSidebarRow(currentConversationId, `📎 ${file.name}`);
+        try {
+          // 1. Загружаем файл на сервер
+          const formData = new FormData();
+          formData.append('file', file);
+
+          const uploadRes = await fetch(API + '/api/upload', {
+            method: 'POST',
+            credentials: 'include',
+            body: formData
+          });
+
+          if (!uploadRes.ok) {
+            throw new Error('File upload failed');
+          }
+
+          const fileData = await uploadRes.json();
+
+          // 2. Создаем сообщение с JSON-данными файла
+          const fileMessage = {
+            type: 'file',
+            url: fileData.url,
+            name: fileData.name,
+            mime: fileData.type
+          };
+
+          const msg = await api(`/api/conversations/${currentConversationId}/messages`, {
+            method: 'POST',
+            body: JSON.stringify({ body: JSON.stringify(fileMessage) }),
+          });
+
+          appendMessageToChat(msg);
+          updateSidebarRow(currentConversationId, `📎 ${file.name}`);
+        } catch (err) {
+          console.error('Error sending file:', err);
+          alert(`Failed to send file ${file.name}: ${err.message}`);
+        }
       }
 
       requestAnimationFrame(() => {
@@ -1186,30 +1211,6 @@ if (fileInput) {
   });
 }
 
-function fileToBase64(file) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result);
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
-  });
-}
-
-function base64ToBlob(base64String, mime) {
-  try {
-    const bstr = atob(base64String);
-    const n = bstr.length;
-    const u8arr = new Uint8Array(n);
-    for (let i = 0; i < n; i++) {
-      u8arr[i] = bstr.charCodeAt(i);
-    }
-    return new Blob([u8arr], { type: mime });
-  } catch (e) {
-    console.error('Error converting base64 to blob:', e);
-    return new Blob([], { type: mime });
-  }
-}
-
 function formatFileSize(bytes) {
   if (bytes === 0) return '0 B';
   const k = 1024;
@@ -1276,15 +1277,13 @@ function appendMessageToChat(message) {
 
 function renderFileMessage(messageDiv, message) {
   try {
-    // Parse file data: |file|filename|mimetype|size|base64data|
-    const parts = message.body.split('|');
-    if (parts.length < 6) return;
-    
-    const filename = parts[2];
-    const mimetype = parts[3];
-    const size = parseInt(parts[4], 10);
-    const base64data = parts[5];
-    
+    const fileData = JSON.parse(message.body);
+    if (fileData.type !== 'file') {
+      // Если это не файл, рендерим как обычный текст
+      messageDiv.textContent = message.body;
+      return;
+    }
+
     const fileDiv = document.createElement('div');
     fileDiv.style.background = 'var(--surface-hover)';
     fileDiv.style.borderRadius = '8px';
@@ -1293,71 +1292,63 @@ function renderFileMessage(messageDiv, message) {
     fileDiv.style.display = 'flex';
     fileDiv.style.alignItems = 'center';
     fileDiv.style.gap = '12px';
-    
+    fileDiv.style.flexWrap = 'wrap';
+
     const iconSpan = document.createElement('span');
-    iconSpan.textContent = getFileIcon(mimetype);
+    iconSpan.textContent = getFileIcon(fileData.mime);
     iconSpan.style.fontSize = '1.5rem';
     fileDiv.appendChild(iconSpan);
-    
+
     const infoDiv = document.createElement('div');
     infoDiv.style.flex = '1';
     infoDiv.style.minWidth = '0';
-    
+
     const nameDiv = document.createElement('div');
-    nameDiv.textContent = filename;
+    nameDiv.textContent = fileData.name;
     nameDiv.style.fontWeight = '500';
     nameDiv.style.wordBreak = 'break-all';
     infoDiv.appendChild(nameDiv);
-    
-    const sizeDiv = document.createElement('div');
-    sizeDiv.textContent = formatFileSize(size);
-    sizeDiv.style.fontSize = '0.85rem';
-    sizeDiv.style.color = 'var(--text-muted)';
-    infoDiv.appendChild(sizeDiv);
     fileDiv.appendChild(infoDiv);
-    
-    const downloadBtn = document.createElement('button');
-    downloadBtn.textContent = '⬇️ Download';
-    downloadBtn.style.padding = '0.4rem 0.8rem';
-    downloadBtn.style.background = 'var(--accent)';
-    downloadBtn.style.color = 'white';
-    downloadBtn.style.border = 'none';
-    downloadBtn.style.borderRadius = '4px';
-    downloadBtn.style.cursor = 'pointer';
-    downloadBtn.style.fontSize = '0.85rem';
-    downloadBtn.style.whiteSpace = 'nowrap';
-    
-    downloadBtn.addEventListener('click', () => {
-      downloadFile(filename, base64data, mimetype);
-    });
-    fileDiv.appendChild(downloadBtn);
-    
+
+    // Если это картинка, показываем превью
+    if (fileData.mime.startsWith('image/')) {
+      const img = document.createElement('img');
+      img.src = fileData.url;
+      img.style.maxWidth = '200px';
+      img.style.maxHeight = '200px';
+      img.style.borderRadius = '8px';
+      img.style.cursor = 'pointer';
+      img.addEventListener('click', () => window.open(fileData.url, '_blank'));
+      fileDiv.appendChild(img);
+    } else {
+      // Для других файлов - кнопка скачивания
+      const downloadBtn = document.createElement('button');
+      downloadBtn.textContent = '⬇️ Download';
+      downloadBtn.style.padding = '0.4rem 0.8rem';
+      downloadBtn.style.background = 'var(--accent)';
+      downloadBtn.style.color = 'white';
+      downloadBtn.style.border = 'none';
+      downloadBtn.style.borderRadius = '4px';
+      downloadBtn.style.cursor = 'pointer';
+      downloadBtn.style.fontSize = '0.85rem';
+      downloadBtn.style.whiteSpace = 'nowrap';
+
+      downloadBtn.addEventListener('click', () => {
+        window.open(fileData.url, '_blank');
+      });
+      fileDiv.appendChild(downloadBtn);
+    }
+
     messageDiv.appendChild(fileDiv);
+
   } catch (e) {
-    console.error('Error rendering file message:', e);
+    // Если не удалось распарсить JSON, значит это просто текст
     const bodyDiv = document.createElement('div');
     bodyDiv.textContent = message.body;
     messageDiv.appendChild(bodyDiv);
+    console.warn('Failed to parse file message:', e);
   }
 }
-
-function downloadFile(filename, base64data, mimetype) {
-  try {
-    const blob = base64ToBlob(base64data, mimetype);
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  } catch (e) {
-    console.error('Error downloading file:', e);
-    alert('Failed to download file');
-  }
-}
-
 // ---- CALL HANDLING ----
 let callActive = false;
 let localStream = null;
