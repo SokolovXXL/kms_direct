@@ -1250,9 +1250,18 @@ function appendMessageToChat(message) {
   }
   
   // Check if message body contains file data
-  if (message.body && message.body.startsWith('|file|')) {
-    renderFileMessage(messageDiv, message);
-  } else {
+  let isFile = false;
+  if (message.body) {
+    try {
+      const parsed = JSON.parse(message.body);
+      if (parsed.type === 'file') {
+        renderFileMessage(messageDiv, message);
+        isFile = true;
+      }
+    } catch (e) {}
+  }
+
+  if (!isFile) {
     const bodyDiv = document.createElement('div');
     bodyDiv.textContent = message.body;
     messageDiv.appendChild(bodyDiv);
@@ -1312,32 +1321,31 @@ function renderFileMessage(messageDiv, message) {
 
     // Если это картинка, показываем превью
     if (fileData.mime.startsWith('image/')) {
-      const img = document.createElement('img');
-      img.src = fileData.url;
-      img.style.maxWidth = '200px';
-      img.style.maxHeight = '200px';
-      img.style.borderRadius = '8px';
-      img.style.cursor = 'pointer';
-      img.addEventListener('click', () => window.open(fileData.url, '_blank'));
-      fileDiv.appendChild(img);
-    } else {
-      // Для других файлов - кнопка скачивания
-      const downloadBtn = document.createElement('button');
-      downloadBtn.textContent = '⬇️ Download';
-      downloadBtn.style.padding = '0.4rem 0.8rem';
-      downloadBtn.style.background = 'var(--accent)';
-      downloadBtn.style.color = 'white';
-      downloadBtn.style.border = 'none';
-      downloadBtn.style.borderRadius = '4px';
-      downloadBtn.style.cursor = 'pointer';
-      downloadBtn.style.fontSize = '0.85rem';
-      downloadBtn.style.whiteSpace = 'nowrap';
+    const img = document.createElement('img');
+    img.src = fileData.url;
+    img.style.maxWidth = '200px';
+    img.style.borderRadius = '8px';
+    fileDiv.appendChild(img);
 
-      downloadBtn.addEventListener('click', () => {
-        window.open(fileData.url, '_blank');
-      });
-      fileDiv.appendChild(downloadBtn);
-    }
+  } else if (fileData.mime.startsWith('video/')) {
+    const video = document.createElement('video');
+    video.src = fileData.url;
+    video.controls = true;
+    video.style.maxWidth = '250px';
+    fileDiv.appendChild(video);
+
+  } else if (fileData.mime.startsWith('audio/')) {
+    const audio = document.createElement('audio');
+    audio.src = fileData.url;
+    audio.controls = true;
+    fileDiv.appendChild(audio);
+
+  } else {
+    const downloadBtn = document.createElement('button');
+    downloadBtn.textContent = '⬇️ Download';
+    downloadBtn.onclick = () => window.open(fileData.url, '_blank');
+    fileDiv.appendChild(downloadBtn);
+  }
 
     messageDiv.appendChild(fileDiv);
 
