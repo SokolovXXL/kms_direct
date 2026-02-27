@@ -1,5 +1,6 @@
 const API = window.location.origin;
 
+let pendingFile = null;
 let currentUser = JSON.parse(localStorage.getItem('user') || 'null');
 let currentConversationId = null;
 let eventSource = null;
@@ -1286,11 +1287,13 @@ function appendMessageToChat(message) {
 
 function renderFileMessage(messageDiv, message) {
   try {
-    const fileData = JSON.parse(message.body);
+    const fileData = typeof message.body === 'string'
+      ? JSON.parse(message.body)
+      : message.body;
+
+    // Проверяем, что это действительно файл
     if (fileData.type !== 'file') {
-      // Если это не файл, рендерим как обычный текст
-      messageDiv.textContent = message.body;
-      return;
+      throw new Error('Not a file message');
     }
 
     const fileDiv = document.createElement('div');
@@ -1321,42 +1324,40 @@ function renderFileMessage(messageDiv, message) {
 
     // Если это картинка, показываем превью
     if (fileData.mime.startsWith('image/')) {
-    const img = document.createElement('img');
-    img.src = fileData.url;
-    img.style.maxWidth = '200px';
-    img.style.borderRadius = '8px';
-    fileDiv.appendChild(img);
-
-  } else if (fileData.mime.startsWith('video/')) {
-    const video = document.createElement('video');
-    video.src = fileData.url;
-    video.controls = true;
-    video.style.maxWidth = '250px';
-    fileDiv.appendChild(video);
-
-  } else if (fileData.mime.startsWith('audio/')) {
-    const audio = document.createElement('audio');
-    audio.src = fileData.url;
-    audio.controls = true;
-    fileDiv.appendChild(audio);
-
-  } else {
-    const downloadBtn = document.createElement('button');
-    downloadBtn.textContent = '⬇️ Download';
-    downloadBtn.onclick = () => window.open(fileData.url, '_blank');
-    fileDiv.appendChild(downloadBtn);
-  }
+      const img = document.createElement('img');
+      img.src = fileData.url;
+      img.style.maxWidth = '200px';
+      img.style.borderRadius = '8px';
+      fileDiv.appendChild(img);
+    } else if (fileData.mime.startsWith('video/')) {
+      const video = document.createElement('video');
+      video.src = fileData.url;
+      video.controls = true;
+      video.style.maxWidth = '250px';
+      fileDiv.appendChild(video);
+    } else if (fileData.mime.startsWith('audio/')) {
+      const audio = document.createElement('audio');
+      audio.src = fileData.url;
+      audio.controls = true;
+      fileDiv.appendChild(audio);
+    } else {
+      const downloadBtn = document.createElement('button');
+      downloadBtn.textContent = '⬇️ Download';
+      downloadBtn.onclick = () => window.open(fileData.url, '_blank');
+      fileDiv.appendChild(downloadBtn);
+    }
 
     messageDiv.appendChild(fileDiv);
 
   } catch (e) {
-    // Если не удалось распарсить JSON, значит это просто текст
+    console.warn('Failed to parse file message:', e);
+    // Если не удалось распарсить как файл, показываем как обычный текст
     const bodyDiv = document.createElement('div');
     bodyDiv.textContent = message.body;
     messageDiv.appendChild(bodyDiv);
-    console.warn('Failed to parse file message:', e);
   }
 }
+
 // ---- CALL HANDLING ----
 let callActive = false;
 let localStream = null;
