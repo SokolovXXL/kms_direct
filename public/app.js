@@ -1206,9 +1206,10 @@ if (modalAddMember) {
   });
 }
 
-// ---- FILE HANDLING ----
+// ---- FILE HANDLING ---- (обновленная секция)
 const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
 let pendingFiles = [];
+let activeUploads = new Map(); // Для отслеживания активных загрузок
 
 const fileInput = $('file-input');
 const fileInfo = $('fileInfo');
@@ -1218,161 +1219,219 @@ if (fileInput) {
     const files = Array.from(e.target.files);
     if (files.length === 0) return;
     
-    // Показываем индикацию
-    if (fileInfo) {
-      const names = files.map(f => f.name).join(', ');
-      fileInfo.textContent = `📎 Выбрано: ${names}`;
-      fileInfo.style.color = 'var(--accent)';
-    }
-    
-    // Добавляем в pendingFiles
+    // Добавляем в pendingFiles и показываем индикацию
+    const validFiles = [];
     for (const file of files) {
       if (file.size > MAX_FILE_SIZE) {
         alert(`File "${file.name}" is too large (max ${MAX_FILE_SIZE / 1024 / 1024}MB)`);
         continue;
       }
-      pendingFiles.push(file);
+      validFiles.push(file);
+    }
+    
+    if (validFiles.length === 0) return;
+    
+    // Добавляем файлы в очередь
+    pendingFiles.push(...validFiles);
+    
+    // Показываем информационное сообщение
+    if (fileInfo) {
+      const fileNames = validFiles.map(f => f.name).join(', ');
+      fileInfo.innerHTML = `
+        <div style="color: var(--accent); padding: 4px 0;">
+          📎 Selected: ${fileNames}
+          <button onclick="window.clearSelectedFiles()" style="margin-left: 8px; padding: 2px 8px; background: var(--surface-hover); border: 1px solid var(--border); border-radius: 4px; cursor: pointer;">Clear</button>
+        </div>
+      `;
     }
     
     e.target.value = '';
   });
 }
 
-function formatFileSize(bytes) {
-  if (bytes === 0) return '0 B';
-  const k = 1024;
-  const sizes = ['B', 'KB', 'MB', 'GB'];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+// Функция для очистки выбранных файлов
+window.clearSelectedFiles = function() {
+  pendingFiles = [];
+  if (fileInfo) {
+    fileInfo.innerHTML = '';
+  }
+};
+
+// Функции для управления индикаторами прогресса
+function showUploadProgress(fileName, progressId) {
+  const messagesList = $('messages-list');
+  if (!messagesList) return;
+
+  const progressDiv = document.createElement('div');
+  progressDiv.id = progressId;
+  progressDiv.className = 'message theirs';
+  progressDiv.innerHTML = `
+    <div class="file-upload-progress">
+      <div class="file-name">📤 Uploading: ${escapeHtml(fileName)}</div>
+      <div class="progress-bar-container">
+        <div class="progress-bar" style="width: 0%"></div>
+      </div>
+      <div class="progress-stats">0% • 0 B / ${formatFileSize(fileName.length)}</div>
+    </div>
+  `;
+  
+  messagesList.appendChild(progressDiv);
+  scrollMessagesToBottom();
 }
 
-function getFileIcon(mime) {
-  if (mime.startsWith('image/')) return '🖼️';
-  if (mime.startsWith('video/')) return '🎬';
-  if (mime.startsWith('audio/')) return '🎵';
-  if (mime.includes('pdf')) return '📕';
-  if (mime.includes('word') || mime.includes('document')) return '📘';
-  if (mime.includes('sheet') || mime.includes('excel')) return '📗';
-  if (mime.includes('zip') || mime.includes('archive')) return '🗜️';
-  return '📎';
-}
+function updateUploadProgress(progressId, percent, loaded, total) {
+  const progressDiv = $(progressId);
+  if (!progressDiv) return;
 
-// Modify appendMessageToChat to support file content
-const originalAppendMessageToChat = appendMessageToChat;
-function appendMessageToChat(message) {
-  const list = $('messages-list');
-  if (!list) return;
-
+  const bar = progressDiv.querySelector('.progress-bar');
+  const stats = progressDiv.querySelector('.progress-stats');
+  
+  if (bar) {
+    bar.style.width = percent + '%';
+  }
+  
+  if (stats) {
+    stats.textContent = `${Math.round(percent)}% • ${formatFileSize(loaded)} / ${formatFileSize(total)}`;
+  }
+  
+  // Плавно скроллим если пользователь внизу
   const container = $('chat-messages-wrapper');
-  const wasAtBottom = container.scrollHeight - container.scrollTop - container.clientHeight <= 20;
-
-  const messageDiv = document.createElement('div');
-  messageDiv.className = 'message ' + (message.sender_id === currentUser.id ? 'mine' : 'theirs');
-  
-  if (currentConversationIsGroup && message.sender_id !== currentUser.id) {
-    const nameSpan = document.createElement('div');
-    nameSpan.className = 'message-sender';
-    nameSpan.textContent = message.sender_username || 'Unknown';
-    messageDiv.appendChild(nameSpan);
+  if (container && container.scrollHeight - container.scrollTop - container.clientHeight <= 30) {
+    container.scrollTop = container.scrollHeight;
   }
-  
-  // Check if message body contains file data
-  let isFile = false;
-  if (message.body) {
-    try {
-      const parsed = JSON.parse(message.body);
-      if (parsed.type === 'file') {
-        renderFileMessage(messageDiv, message);
-        isFile = true;
-      }
-    } catch (e) {}
-  }
-
-  if (!isFile) {
-    const bodyDiv = document.createElement('div');
-    bodyDiv.textContent = message.body;
-    messageDiv.appendChild(bodyDiv);
-  }
-  
-  const metaDiv = document.createElement('div');
-  metaDiv.className = 'message-meta';
-  metaDiv.textContent = new Date(message.created_at).toLocaleString();
-  messageDiv.appendChild(metaDiv);
-  
-  list.appendChild(messageDiv);
-
-  requestAnimationFrame(() => {
-    if (wasAtBottom) {
-      container.scrollTop = container.scrollHeight;
-      if (scrollDownBtn) scrollDownBtn.classList.add('hidden');
-    } else {
-      if (scrollDownBtn) scrollDownBtn.classList.remove('hidden');
-    }
-  });
 }
 
+function removeUploadProgress(progressId) {
+  const progressDiv = $(progressId);
+  if (progressDiv) {
+    // Добавляем небольшую задержку перед удалением, чтобы пользователь увидел 100%
+    setTimeout(() => {
+      if (progressDiv.parentNode) {
+        progressDiv.remove();
+      }
+    }, 500);
+  }
+}
+
+// Обновленная функция рендеринга файлов
 function renderFileMessage(messageDiv, message) {
   try {
     const fileData = typeof message.body === 'string'
       ? JSON.parse(message.body)
       : message.body;
 
-    // Проверяем, что это действительно файл
     if (fileData.type !== 'file') {
       throw new Error('Not a file message');
     }
 
     const fileDiv = document.createElement('div');
-    fileDiv.style.background = 'var(--surface-hover)';
-    fileDiv.style.borderRadius = '8px';
-    fileDiv.style.padding = '12px';
-    fileDiv.style.marginTop = '8px';
-    fileDiv.style.display = 'flex';
-    fileDiv.style.alignItems = 'center';
-    fileDiv.style.gap = '12px';
-    fileDiv.style.flexWrap = 'wrap';
+    fileDiv.className = 'message-file-content';
+
+    // Заголовок с информацией о файле
+    const headerDiv = document.createElement('div');
+    headerDiv.className = 'file-info-header';
 
     const iconSpan = document.createElement('span');
+    iconSpan.className = 'file-icon';
     iconSpan.textContent = getFileIcon(fileData.mime);
-    iconSpan.style.fontSize = '1.5rem';
-    fileDiv.appendChild(iconSpan);
+    headerDiv.appendChild(iconSpan);
 
     const infoDiv = document.createElement('div');
-    infoDiv.style.flex = '1';
-    infoDiv.style.minWidth = '0';
+    infoDiv.className = 'file-details';
 
     const nameDiv = document.createElement('div');
+    nameDiv.className = 'file-name';
     nameDiv.textContent = fileData.name;
-    nameDiv.style.fontWeight = '500';
-    nameDiv.style.wordBreak = 'break-all';
     infoDiv.appendChild(nameDiv);
-    fileDiv.appendChild(infoDiv);
 
-    // Если это картинка, показываем превью
+    if (fileData.size) {
+      const sizeDiv = document.createElement('div');
+      sizeDiv.className = 'file-size';
+      sizeDiv.textContent = formatFileSize(fileData.size);
+      infoDiv.appendChild(sizeDiv);
+    }
+
+    headerDiv.appendChild(infoDiv);
+    fileDiv.appendChild(headerDiv);
+
+    // Превью для медиафайлов
     if (fileData.mime.startsWith('image/')) {
+      const previewDiv = document.createElement('div');
+      previewDiv.className = 'file-preview';
+      
       const img = document.createElement('img');
       img.src = fileData.url;
-      img.style.maxWidth = '200px';
+      img.alt = fileData.name;
+      img.loading = 'lazy';
+      img.style.maxWidth = '100%';
+      img.style.maxHeight = '300px';
       img.style.borderRadius = '8px';
-      fileDiv.appendChild(img);
+      img.style.cursor = 'pointer';
+      
+      // Открыть на весь экран при клике
+      img.addEventListener('click', () => openFullscreen(fileData.url, fileData.mime));
+      
+      previewDiv.appendChild(img);
+      fileDiv.appendChild(previewDiv);
+      
     } else if (fileData.mime.startsWith('video/')) {
+      const previewDiv = document.createElement('div');
+      previewDiv.className = 'file-preview';
+      
       const video = document.createElement('video');
       video.src = fileData.url;
       video.controls = true;
-      video.style.maxWidth = '250px';
-      fileDiv.appendChild(video);
+      video.preload = 'metadata';
+      video.style.maxWidth = '100%';
+      video.style.maxHeight = '300px';
+      video.style.borderRadius = '8px';
+      
+      // Открыть на весь экран при клике
+      video.addEventListener('click', () => openFullscreen(fileData.url, fileData.mime));
+      
+      previewDiv.appendChild(video);
+      fileDiv.appendChild(previewDiv);
+      
     } else if (fileData.mime.startsWith('audio/')) {
+      const previewDiv = document.createElement('div');
+      previewDiv.className = 'file-preview audio-preview';
+      
       const audio = document.createElement('audio');
       audio.src = fileData.url;
       audio.controls = true;
-      fileDiv.appendChild(audio);
-    } else {
-      const downloadBtn = document.createElement('button');
-      downloadBtn.textContent = '⬇️ Download';
-      downloadBtn.onclick = () => window.open(fileData.url, '_blank');
-      fileDiv.appendChild(downloadBtn);
+      audio.preload = 'metadata';
+      audio.style.width = '100%';
+      
+      previewDiv.appendChild(audio);
+      fileDiv.appendChild(previewDiv);
     }
 
+    // Кнопки действий
+    const actionsDiv = document.createElement('div');
+    actionsDiv.className = 'file-actions';
+
+    const downloadBtn = document.createElement('button');
+    downloadBtn.className = 'file-download-btn';
+    downloadBtn.innerHTML = '⬇️ Download';
+    downloadBtn.onclick = (e) => {
+      e.stopPropagation();
+      window.open(fileData.url, '_blank');
+    };
+    actionsDiv.appendChild(downloadBtn);
+
+    // Для изображений и видео добавляем кнопку предпросмотра
+    if (fileData.mime.startsWith('image/') || fileData.mime.startsWith('video/')) {
+      const previewBtn = document.createElement('button');
+      previewBtn.className = 'file-preview-btn';
+      previewBtn.innerHTML = '🔍 Preview';
+      previewBtn.onclick = (e) => {
+        e.stopPropagation();
+        openFullscreen(fileData.url, fileData.mime);
+      };
+      actionsDiv.appendChild(previewBtn);
+    }
+
+    fileDiv.appendChild(actionsDiv);
     messageDiv.appendChild(fileDiv);
 
   } catch (e) {
@@ -1384,6 +1443,118 @@ function renderFileMessage(messageDiv, message) {
   }
 }
 
+// Функция для открытия полноэкранного просмотра
+function openFullscreen(url, mimeType) {
+  // Проверяем, не открыто ли уже модальное окно
+  const existingModal = document.querySelector('.file-fullscreen-modal');
+  if (existingModal) {
+    document.body.removeChild(existingModal);
+  }
+  
+  const modal = document.createElement('div');
+  modal.className = 'file-fullscreen-modal';
+  modal.style.position = 'fixed';
+  modal.style.inset = '0';
+  modal.style.background = 'rgba(0, 0, 0, 0.95)';
+  modal.style.display = 'flex';
+  modal.style.alignItems = 'center';
+  modal.style.justifyContent = 'center';
+  modal.style.zIndex = '2000';
+  modal.style.padding = '2rem';
+  
+  const content = document.createElement('div');
+  content.style.position = 'relative';
+  content.style.maxWidth = '90vw';
+  content.style.maxHeight = '90vh';
+  
+  const closeBtn = document.createElement('button');
+  closeBtn.style.position = 'absolute';
+  closeBtn.style.top = '-40px';
+  closeBtn.style.right = '0';
+  closeBtn.style.background = 'none';
+  closeBtn.style.border = 'none';
+  closeBtn.style.color = 'white';
+  closeBtn.style.fontSize = '2rem';
+  closeBtn.style.cursor = 'pointer';
+  closeBtn.style.padding = '8px';
+  closeBtn.innerHTML = '✕';
+  closeBtn.onclick = () => document.body.removeChild(modal);
+  
+  content.appendChild(closeBtn);
+  
+  if (mimeType.startsWith('image/')) {
+    const img = document.createElement('img');
+    img.src = url;
+    img.style.maxWidth = '100%';
+    img.style.maxHeight = '90vh';
+    img.style.objectFit = 'contain';
+    img.style.borderRadius = '8px';
+    content.appendChild(img);
+  } else if (mimeType.startsWith('video/')) {
+    const video = document.createElement('video');
+    video.src = url;
+    video.controls = true;
+    video.autoplay = true;
+    video.style.maxWidth = '100%';
+    video.style.maxHeight = '90vh';
+    content.appendChild(video);
+  }
+  
+  modal.appendChild(content);
+  
+  // Закрыть по клику на фон
+  modal.addEventListener('click', (e) => {
+    if (e.target === modal) {
+      document.body.removeChild(modal);
+    }
+  });
+  
+  // Закрыть по Escape
+  const escHandler = (e) => {
+    if (e.key === 'Escape') {
+      document.body.removeChild(modal);
+      document.removeEventListener('keydown', escHandler);
+    }
+  };
+  document.addEventListener('keydown', escHandler);
+  
+  document.body.appendChild(modal);
+}
+
+// Утилита для форматирования размера файла
+function formatFileSize(bytes) {
+  if (bytes === 0 || bytes === undefined) return '0 B';
+  const k = 1024;
+  const sizes = ['B', 'KB', 'MB', 'GB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+}
+
+// Утилита для получения иконки файла
+function getFileIcon(mime) {
+  if (mime.startsWith('image/')) return '🖼️';
+  if (mime.startsWith('video/')) return '🎬';
+  if (mime.startsWith('audio/')) return '🎵';
+  if (mime.includes('pdf')) return '📕';
+  if (mime.includes('word') || mime.includes('document')) return '📘';
+  if (mime.includes('sheet') || mime.includes('excel')) return '📗';
+  if (mime.includes('zip') || mime.includes('archive')) return '🗜️';
+  return '📎';
+}
+
+// Функция для показа тостов
+function showToast(message, type = 'info') {
+  const toast = $('notification-toast');
+  if (!toast) return;
+  
+  toast.textContent = message;
+  toast.style.background = type === 'error' ? 'var(--danger)' : 'var(--surface)';
+  toast.classList.remove('hidden');
+  
+  setTimeout(() => {
+    toast.classList.add('hidden');
+  }, 3000);
+}
 // ---- CALL HANDLING ----
 let callActive = false;
 let localStream = null;

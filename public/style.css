@@ -8,6 +8,7 @@
   --accent: #6366f1;
   --accent-hover: #818cf8;
   --danger: #ef4444;
+  --success: #10b981;
   --radius: 10px;
   --font: 'DM Sans', system-ui, sans-serif;
 }
@@ -941,6 +942,245 @@ body {
   transform: scale(1.05);
 }
 
+/* ===== УЛУЧШЕННЫЕ СТИЛИ ДЛЯ ФАЙЛОВ ===== */
+
+/* Индикатор загрузки файлов */
+.file-upload-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  background: var(--surface);
+  border-radius: 8px;
+  margin-top: 8px;
+}
+
+.file-upload-progress .file-name {
+  font-size: 0.9rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.progress-bar-container {
+  width: 100%;
+  height: 8px;
+  background: var(--surface-hover);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.progress-bar {
+  height: 100%;
+  background: var(--accent);
+  transition: width 0.1s linear;
+  border-radius: 4px;
+}
+
+.progress-stats {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  text-align: right;
+}
+
+/* Стили для сообщений с файлами */
+.message-file-content {
+  background: var(--surface-hover);
+  border-radius: 12px;
+  padding: 16px;
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  border: 1px solid var(--border);
+  transition: all 0.2s ease;
+}
+
+.message-file-content:hover {
+  border-color: var(--accent);
+  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.1);
+}
+
+.file-info-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+.file-icon {
+  font-size: 2rem;
+}
+
+.file-details {
+  flex: 1;
+  min-width: 0;
+}
+
+.file-name {
+  font-weight: 600;
+  font-size: 0.95rem;
+  word-break: break-all;
+  margin-bottom: 4px;
+}
+
+.file-size {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+.file-preview {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background: var(--surface);
+  border-radius: 8px;
+  overflow: hidden;
+  max-height: 300px;
+}
+
+/* Увеличенные медиа */
+.file-preview img,
+.file-preview video {
+  max-width: 100%;
+  max-height: 300px;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: transform 0.2s ease;
+}
+
+.file-preview img:hover,
+.file-preview video:hover {
+  transform: scale(1.02);
+}
+
+.file-preview.audio-preview {
+  width: 100%;
+  padding: 12px;
+  background: var(--surface);
+  border-radius: 8px;
+}
+
+.file-preview.audio-preview audio {
+  width: 100%;
+}
+
+.file-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+
+.file-download-btn {
+  padding: 8px 16px;
+  background: var(--accent);
+  color: white;
+  border: none;
+  border-radius: 20px;
+  cursor: pointer;
+  font-weight: 500;
+  transition: all 0.2s ease;
+}
+
+.file-download-btn:hover {
+  background: var(--accent-hover);
+  transform: translateY(-1px);
+}
+
+.file-preview-btn {
+  padding: 8px 16px;
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  cursor: pointer;
+  font-weight: 500;
+  transition: all 0.2s ease;
+}
+
+.file-preview-btn:hover {
+  background: var(--surface-hover);
+  border-color: var(--accent);
+}
+
+/* Для своих сообщений меняем цвета */
+.message.mine .message-file-content {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.message.mine .file-info-header {
+  border-bottom-color: rgba(255, 255, 255, 0.2);
+}
+
+.message.mine .file-actions {
+  border-top-color: rgba(255, 255, 255, 0.2);
+}
+
+.message.mine .file-download-btn {
+  background: white;
+  color: var(--accent);
+}
+
+.message.mine .file-download-btn:hover {
+  background: rgba(255, 255, 255, 0.9);
+}
+
+.message.mine .file-preview-btn {
+  background: rgba(255, 255, 255, 0.1);
+  color: white;
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+/* Модальное окно для увеличенного просмотра */
+.file-fullscreen-modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.95);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+  padding: 2rem;
+}
+
+.file-fullscreen-content {
+  position: relative;
+  max-width: 90vw;
+  max-height: 90vh;
+}
+
+.file-fullscreen-content img,
+.file-fullscreen-content video {
+  max-width: 100%;
+  max-height: 90vh;
+  object-fit: contain;
+  border-radius: 8px;
+}
+
+.close-fullscreen {
+  position: absolute;
+  top: -40px;
+  right: 0;
+  background: none;
+  border: none;
+  color: white;
+  font-size: 2rem;
+  cursor: pointer;
+  padding: 8px;
+}
+
+.close-fullscreen:hover {
+  opacity: 0.8;
+}
+
 /* File input styling */
 #file-input {
   display: none !important;
@@ -966,6 +1206,10 @@ body {
   background: var(--accent);
   border-color: var(--accent);
   color: white;
+}
+
+.send-form label:active {
+  transform: scale(0.98);
 }
 
 /* Remote audio element */
