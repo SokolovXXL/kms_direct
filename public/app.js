@@ -534,9 +534,25 @@ async function loadMessages(convId) {
         messageDiv.appendChild(nameSpan);
       }
       
-      const bodyDiv = document.createElement('div');
-      bodyDiv.textContent = msg.body;
-      messageDiv.appendChild(bodyDiv);
+      // Проверяем, не файл ли это
+      let isFile = false;
+      try {
+        const parsed = JSON.parse(msg.body);
+        if (parsed.type === 'file') {
+          // Используем существующую функцию renderFileMessage
+          renderFileMessage(messageDiv, msg);
+          isFile = true;
+        }
+      } catch (e) {
+        // Это не JSON или не файл - игнорируем
+      }
+      
+      // Если не файл, показываем как обычный текст
+      if (!isFile) {
+        const bodyDiv = document.createElement('div');
+        bodyDiv.textContent = msg.body;
+        messageDiv.appendChild(bodyDiv);
+      }
       
       const metaDiv = document.createElement('div');
       metaDiv.className = 'message-meta';
@@ -1195,11 +1211,21 @@ const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
 let pendingFiles = [];
 
 const fileInput = $('file-input');
+const fileInfo = $('fileInfo');
+
 if (fileInput) {
   fileInput.addEventListener('change', async (e) => {
     const files = Array.from(e.target.files);
     if (files.length === 0) return;
     
+    // Показываем индикацию
+    if (fileInfo) {
+      const names = files.map(f => f.name).join(', ');
+      fileInfo.textContent = `📎 Выбрано: ${names}`;
+      fileInfo.style.color = 'var(--accent)';
+    }
+    
+    // Добавляем в pendingFiles
     for (const file of files) {
       if (file.size > MAX_FILE_SIZE) {
         alert(`File "${file.name}" is too large (max ${MAX_FILE_SIZE / 1024 / 1024}MB)`);
