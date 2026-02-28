@@ -323,9 +323,24 @@ function appendMessageToChat(message) {
     messageDiv.appendChild(nameSpan);
   }
   
-  const bodyDiv = document.createElement('div');
-  bodyDiv.textContent = message.body;
-  messageDiv.appendChild(bodyDiv);
+  // Проверяем, не файл ли это
+  let isFile = false;
+  try {
+    const parsed = JSON.parse(message.body);
+    if (parsed.type === 'file') {
+      renderFileMessage(messageDiv, message);
+      isFile = true;
+    }
+  } catch (e) {
+    // Это не JSON - игнорируем
+  }
+  
+  // Если не файл, показываем как обычный текст
+  if (!isFile) {
+    const bodyDiv = document.createElement('div');
+    bodyDiv.textContent = message.body;
+    messageDiv.appendChild(bodyDiv);
+  }
   
   const metaDiv = document.createElement('div');
   metaDiv.className = 'message-meta';
@@ -539,12 +554,11 @@ async function loadMessages(convId) {
       try {
         const parsed = JSON.parse(msg.body);
         if (parsed.type === 'file') {
-          // Используем существующую функцию renderFileMessage
           renderFileMessage(messageDiv, msg);
           isFile = true;
         }
       } catch (e) {
-        // Это не JSON или не файл - игнорируем
+        // Это не JSON - игнорируем
       }
       
       // Если не файл, показываем как обычный текст
@@ -1316,11 +1330,26 @@ function removeUploadProgress(progressId) {
 // Обновленная функция рендеринга файлов
 function renderFileMessage(messageDiv, message) {
   try {
-    const fileData = typeof message.body === 'string'
-      ? JSON.parse(message.body)
-      : message.body;
+    let fileData;
+    
+    // Парсим сообщение
+    if (typeof message.body === 'string') {
+      try {
+        fileData = JSON.parse(message.body);
+      } catch (e) {
+        console.warn('Failed to parse message body as JSON:', e);
+        // Если не получается распарсить, показываем как обычный текст
+        const bodyDiv = document.createElement('div');
+        bodyDiv.textContent = message.body;
+        messageDiv.appendChild(bodyDiv);
+        return;
+      }
+    } else {
+      fileData = message.body;
+    }
 
-    if (fileData.type !== 'file') {
+    // Проверяем, что это действительно файл
+    if (!fileData || fileData.type !== 'file') {
       throw new Error('Not a file message');
     }
 
@@ -1333,7 +1362,7 @@ function renderFileMessage(messageDiv, message) {
 
     const iconSpan = document.createElement('span');
     iconSpan.className = 'file-icon';
-    iconSpan.textContent = getFileIcon(fileData.mime);
+    iconSpan.textContent = getFileIcon(fileData.mime || '');
     headerDiv.appendChild(iconSpan);
 
     const infoDiv = document.createElement('div');
@@ -1341,7 +1370,7 @@ function renderFileMessage(messageDiv, message) {
 
     const nameDiv = document.createElement('div');
     nameDiv.className = 'file-name';
-    nameDiv.textContent = fileData.name;
+    nameDiv.textContent = fileData.name || 'Unnamed file';
     infoDiv.appendChild(nameDiv);
 
     if (fileData.size) {
@@ -1355,26 +1384,25 @@ function renderFileMessage(messageDiv, message) {
     fileDiv.appendChild(headerDiv);
 
     // Превью для медиафайлов
-    if (fileData.mime.startsWith('image/')) {
+    if (fileData.mime && fileData.mime.startsWith('image/')) {
       const previewDiv = document.createElement('div');
       previewDiv.className = 'file-preview';
       
       const img = document.createElement('img');
       img.src = fileData.url;
-      img.alt = fileData.name;
+      img.alt = fileData.name || 'Image';
       img.loading = 'lazy';
       img.style.maxWidth = '100%';
       img.style.maxHeight = '300px';
       img.style.borderRadius = '8px';
       img.style.cursor = 'pointer';
       
-      // Открыть на весь экран при клике
       img.addEventListener('click', () => openFullscreen(fileData.url, fileData.mime));
       
       previewDiv.appendChild(img);
       fileDiv.appendChild(previewDiv);
       
-    } else if (fileData.mime.startsWith('video/')) {
+    } else if (fileData.mime && fileData.mime.startsWith('video/')) {
       const previewDiv = document.createElement('div');
       previewDiv.className = 'file-preview';
       
@@ -1386,13 +1414,12 @@ function renderFileMessage(messageDiv, message) {
       video.style.maxHeight = '300px';
       video.style.borderRadius = '8px';
       
-      // Открыть на весь экран при клике
       video.addEventListener('click', () => openFullscreen(fileData.url, fileData.mime));
       
       previewDiv.appendChild(video);
       fileDiv.appendChild(previewDiv);
       
-    } else if (fileData.mime.startsWith('audio/')) {
+    } else if (fileData.mime && fileData.mime.startsWith('audio/')) {
       const previewDiv = document.createElement('div');
       previewDiv.className = 'file-preview audio-preview';
       
@@ -1420,7 +1447,7 @@ function renderFileMessage(messageDiv, message) {
     actionsDiv.appendChild(downloadBtn);
 
     // Для изображений и видео добавляем кнопку предпросмотра
-    if (fileData.mime.startsWith('image/') || fileData.mime.startsWith('video/')) {
+    if (fileData.mime && (fileData.mime.startsWith('image/') || fileData.mime.startsWith('video/'))) {
       const previewBtn = document.createElement('button');
       previewBtn.className = 'file-preview-btn';
       previewBtn.innerHTML = '🔍 Preview';
@@ -1435,10 +1462,10 @@ function renderFileMessage(messageDiv, message) {
     messageDiv.appendChild(fileDiv);
 
   } catch (e) {
-    console.warn('Failed to parse file message:', e);
+    console.warn('Failed to render file message:', e);
     // Если не удалось распарсить как файл, показываем как обычный текст
     const bodyDiv = document.createElement('div');
-    bodyDiv.textContent = message.body;
+    bodyDiv.textContent = typeof message.body === 'string' ? message.body : JSON.stringify(message.body);
     messageDiv.appendChild(bodyDiv);
   }
 }
