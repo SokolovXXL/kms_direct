@@ -466,9 +466,10 @@ app.post('/api/groups', authMiddleware, async (req, res) => {
     const cid = ins.rows[0].id;
 
     for (const uid of allUserIds) {
+      const role = uid === req.userId ? 'owner' : 'member';
       await client.query(
-        'INSERT INTO conversation_participants (conversation_id, user_id) VALUES ($1, $2)',
-        [cid, uid]
+        'INSERT INTO conversation_participants (conversation_id, user_id, role) VALUES ($1, $2, $3)',
+        [cid, uid, role]
       );
     }
 
@@ -503,7 +504,7 @@ app.get('/api/groups/:id', authMiddleware, async (req, res) => {
   
   const group = await pool.query(`
     SELECT c.id, c.title, c.created_at, 
-           json_agg(json_build_object('id', u.id, 'username', u.username)) as participants
+           json_agg(json_build_object('id', u.id, 'username', u.username, 'role', cp.role)) as participants
     FROM conversations c
     JOIN conversation_participants cp ON cp.conversation_id = c.id
     JOIN users u ON u.id = cp.user_id
@@ -540,7 +541,21 @@ app.post('/api/groups/:id/members', authMiddleware, async (req, res) => {
   if (check.rows.length === 0 || !check.rows[0].is_group) {
     return res.status(404).json({ error: 'Group not found or not a member' });
   }
-  
+
+  // Проверяем права текущего пользователя (должен быть owner/admin)
+  const requesterRole = await pool.query(`
+    SELECT role FROM conversation_participants
+    WHERE conversation_id = $1 AND user_id = $2
+  `, [groupId, req.userId]);
+
+  if (requesterRole.rows.length === 0) {
+    return res.status(404).json({ error: 'You are not a member of this group' });
+  }
+
+  if (requesterRole.rows[0].role !== 'owner' && requesterRole.rows[0].role !== 'admin') {
+    return res.status(403).json({ error: 'Only admins can add members' });
+  }
+
   const isFriend = await pool.query(
     'SELECT 1 FROM friends WHERE (user_id = $1 AND friend_id = $2) OR (user_id = $2 AND friend_id = $1)',
     [req.userId, userId]
@@ -590,6 +605,46 @@ app.post('/api/groups/:id/leave', authMiddleware, async (req, res) => {
 
   if (check.rows.length === 0 || !check.rows[0].is_group) {
     return res.status(404).json({ error: 'Group not found or not a member' });
+  }
+  // Проверяем роль уходящего
+  const roleData = await pool.query(`
+    SELECT role FROM conversation_participants
+    WHERE conversation_id = $1 AND user_id = $2
+  `, [groupId, req.userId]);
+
+  const isOwner = roleData.rows[0]?.role === 'owner';
+
+  if (isOwner) {
+    // Ищем админов
+    const admins = await pool.query(`
+      SELECT user_id FROM conversation_participants
+      WHERE conversation_id = $1 AND role = 'admin'
+    `, [groupId]);
+
+    let newOwnerId;
+
+    if (admins.rows.length > 0) {
+      // Случайный админ
+      newOwnerId = admins.rows[Math.floor(Math.random() * admins.rows.length)].user_id;
+    } else {
+      // Если админов нет — выбираем случайного участника (кроме себя)
+      const members = await pool.query(`
+        SELECT user_id FROM conversation_participants
+        WHERE conversation_id = $1 AND user_id != $2
+      `, [groupId, req.userId]);
+
+      if (members.rows.length > 0) {
+        newOwnerId = members.rows[Math.floor(Math.random() * members.rows.length)].user_id;
+      }
+    }
+
+    if (newOwnerId) {
+      await pool.query(`
+        UPDATE conversation_participants
+        SET role = 'owner'
+        WHERE conversation_id = $1 AND user_id = $2
+      `, [groupId, newOwnerId]);
+    }
   }
 
   // Удаляем пользователя из группы
@@ -655,6 +710,17 @@ app.post('/api/conversations/:id/messages', authMiddleware, async (req, res) => 
   const isMember = part.rows.some(p => p.user_id === req.userId);
   if (!isMember) return res.status(403).json({ error: 'Not in this conversation' });
   
+  // Проверка, не замучен ли пользователь
+  const muteCheck = await pool.query(`
+    SELECT muted_until FROM conversation_participants
+    WHERE conversation_id = $1 AND user_id = $2
+  `, [convId, req.userId]);
+
+  if (muteCheck.rows[0]?.muted_until &&
+      new Date(muteCheck.rows[0].muted_until) > new Date()) {
+    return res.status(403).json({ error: 'You are muted' });
+  }
+
   const otherUserIds = part.rows.filter(p => p.user_id !== req.userId).map(p => p.user_id);
   
   // Определяем, является ли сообщение файлом
@@ -752,6 +818,17 @@ app.post('/api/dms/:id/messages', authMiddleware, async (req, res) => {
   const isMember = part.rows.some(p => p.user_id === req.userId);
   if (!isMember) return res.status(403).json({ error: 'Not in this conversation' });
   
+  // Проверка, не замучен ли пользователь
+  const muteCheck = await pool.query(`
+    SELECT muted_until FROM conversation_participants
+    WHERE conversation_id = $1 AND user_id = $2
+  `, [convId, req.userId]);
+
+  if (muteCheck.rows[0]?.muted_until &&
+      new Date(muteCheck.rows[0].muted_until) > new Date()) {
+    return res.status(403).json({ error: 'You are muted' });
+  }
+
   const otherUserIds = part.rows.filter(p => p.user_id !== req.userId).map(p => p.user_id);
   
   const ins = await pool.query(
@@ -810,7 +887,17 @@ app.delete('/api/messages/:id', authMiddleware, async (req, res) => {
 
   // Проверяем, что пользователь — автор
   if (message.sender_id !== req.userId) {
-    return res.status(403).json({ error: 'You can delete only your messages' });
+    // Проверяем, является ли пользователь админом в этом чате
+    const roleCheck = await pool.query(`
+      SELECT role FROM conversation_participants
+      WHERE conversation_id = $1 AND user_id = $2
+    `, [message.conversation_id, req.userId]);
+
+    if (roleCheck.rows.length === 0 ||
+        (roleCheck.rows[0].role !== 'owner' && roleCheck.rows[0].role !== 'admin')) {
+      return res.status(403).json({ error: 'No permission to delete this message' });
+    }
+    // Если админ — пропускаем, разрешаем удаление
   }
 
   // Удаляем уведомления по этому сообщению
@@ -961,6 +1048,78 @@ app.post('/api/upload', authMiddleware, upload.single('file'), (req, res) => {
     name: req.file.originalname,
     type: req.file.mimetype
   });
+});
+
+// Повысить участника до админа (только owner)
+app.post('/api/groups/:id/promote', authMiddleware, async (req, res) => {
+  const groupId = parseInt(req.params.id, 10);
+  const { userId } = req.body;
+
+  if (!userId) {
+    return res.status(400).json({ error: 'User ID required' });
+  }
+
+  // Проверяем, что текущий пользователь — owner
+  const requester = await pool.query(`
+    SELECT role FROM conversation_participants
+    WHERE conversation_id = $1 AND user_id = $2
+  `, [groupId, req.userId]);
+
+  if (requester.rows.length === 0 || requester.rows[0].role !== 'owner') {
+    return res.status(403).json({ error: 'Only the group owner can promote admins' });
+  }
+
+  // Повышаем указанного участника
+  await pool.query(`
+    UPDATE conversation_participants
+    SET role = 'admin'
+    WHERE conversation_id = $1 AND user_id = $2
+  `, [groupId, userId]);
+
+  res.json({ success: true });
+});
+
+// Замутить участника (только админы)
+app.post('/api/groups/:id/mute', authMiddleware, async (req, res) => {
+  const groupId = parseInt(req.params.id, 10);
+  const { userId, minutes } = req.body;
+
+  if (!userId || !minutes || minutes < 1) {
+    return res.status(400).json({ error: 'User ID and minutes (>=1) required' });
+  }
+
+  // Проверяем права текущего пользователя
+  const requester = await pool.query(`
+    SELECT role FROM conversation_participants
+    WHERE conversation_id = $1 AND user_id = $2
+  `, [groupId, req.userId]);
+
+  if (requester.rows.length === 0) {
+    return res.status(404).json({ error: 'Not a member' });
+  }
+
+  if (requester.rows[0].role !== 'owner' && requester.rows[0].role !== 'admin') {
+    return res.status(403).json({ error: 'Only admins can mute members' });
+  }
+
+  // Нельзя замутить владельца
+  const target = await pool.query(`
+    SELECT role FROM conversation_participants
+    WHERE conversation_id = $1 AND user_id = $2
+  `, [groupId, userId]);
+
+  if (target.rows[0]?.role === 'owner') {
+    return res.status(403).json({ error: 'Cannot mute the group owner' });
+  }
+
+  // Устанавливаем muted_until
+  await pool.query(`
+    UPDATE conversation_participants
+    SET muted_until = NOW() + ($1 || ' minutes')::interval
+    WHERE conversation_id = $2 AND user_id = $3
+  `, [minutes, groupId, userId]);
+
+  res.json({ success: true });
 });
 
 // Раздаем файлы из папки uploads

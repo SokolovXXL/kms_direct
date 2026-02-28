@@ -63,6 +63,14 @@ async function initDb() {
       ADD COLUMN IF NOT EXISTS is_group BOOLEAN DEFAULT false,
       ADD COLUMN IF NOT EXISTS title TEXT
     `);
+    await client.query(`
+      ALTER TABLE conversation_participants
+      ADD COLUMN IF NOT EXISTS role TEXT DEFAULT 'member'
+    `);
+    await client.query(`
+      ALTER TABLE conversation_participants
+      ADD COLUMN IF NOT EXISTS muted_until TIMESTAMPTZ
+    `);
     await client.query(`CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(user_id);`);
     await client.query(`CREATE INDEX IF NOT EXISTS idx_messages_conversation ON messages(conversation_id);`);
     await client.query(`CREATE INDEX IF NOT EXISTS idx_friends_user ON friends(user_id);`);

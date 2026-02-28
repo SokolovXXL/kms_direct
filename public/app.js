@@ -1176,14 +1176,69 @@ async function showGroupInfo(groupId, groupTitle) {
   try {
     const group = await api(`/api/groups/${groupId}`);
     
-    listEl.innerHTML = '';
     group.participants.forEach(member => {
       const li = document.createElement('li');
-      li.textContent = member.username + (member.id === currentUser.id ? ' (you)' : '');
-      li.style.padding = '0.25rem 0';
+      li.style.display = 'flex';
+      li.style.alignItems = 'center';
+      li.style.justifyContent = 'space-between';
+
+      const nameSpan = document.createElement('span');
+      nameSpan.textContent = member.username + (member.id === currentUser.id ? ' (you)' : '');
+      li.appendChild(nameSpan);
+
+      // Отображаем роль
+      const roleSpan = document.createElement('span');
+      if (member.role === 'owner') roleSpan.textContent = '👑';
+      else if (member.role === 'admin') roleSpan.textContent = '⭐';
+      li.appendChild(roleSpan);
+
       listEl.appendChild(li);
     });
+    if (currentUser && group.participants.some(p => p.id === currentUser.id && p.role === 'owner')) {
     
+      group.participants.forEach(member => {
+      if (member.id === currentUser.id || member.role === 'owner') return; // себя и другого owner не трогаем
+
+      const li = document.createElement('li');
+      li.style.display = 'flex';
+      li.style.gap = '0.5rem';
+      li.style.marginTop = '0.5rem';
+
+      const promoteBtn = document.createElement('button');
+      promoteBtn.textContent = '⭐ Сделать админом';
+      promoteBtn.addEventListener('click', async () => {
+        try {
+          await api(`/api/groups/${groupId}/promote`, {
+            method: 'POST',
+            body: JSON.stringify({ userId: member.id })
+          });
+          alert('Участник повышен до админа');
+          // Обновить информацию о группе
+          showGroupInfo(groupId, groupTitle);
+        } catch (err) {
+          alert(err.message);
+        }
+      });
+
+      const muteBtn = document.createElement('button');
+      muteBtn.textContent = '🔇 Замутить на 10 мин';
+      muteBtn.addEventListener('click', async () => {
+        try {
+          await api(`/api/groups/${groupId}/mute`, {
+            method: 'POST',
+            body: JSON.stringify({ userId: member.id, minutes: 10 })
+          });
+          alert('Участник замучен на 10 минут');
+        } catch (err) {
+          alert(err.message);
+        }
+      });
+
+      li.appendChild(promoteBtn);
+      li.appendChild(muteBtn);
+      listEl.parentNode.appendChild(li); // добавим после списка
+    });
+  }
     const addBtn = $('btn-add-member');
     if (addBtn) {
       addBtn.dataset.groupId = groupId;
