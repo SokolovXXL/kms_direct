@@ -1267,6 +1267,34 @@ async function showGroupInfo(groupId, groupTitle) {
   }
 }
 
+function showGroupInfoButton(groupId, groupTitle) {
+  const header = $('chat-header');
+  if (!header) return;
+  
+  // Удаляем старую кнопку, если есть
+  const oldBtn = document.getElementById('group-info-btn');
+  if (oldBtn) oldBtn.remove();
+  
+  // Создаём новую кнопку
+  const btn = document.createElement('button');
+  btn.id = 'group-info-btn';
+  btn.innerHTML = 'ℹ️';
+  btn.style.marginLeft = 'auto';
+  btn.style.background = 'none';
+  btn.style.border = 'none';
+  btn.style.color = 'var(--text-muted)';
+  btn.style.fontSize = '1.2rem';
+  btn.style.cursor = 'pointer';
+  btn.style.padding = '0 10px';
+  btn.style.minWidth = '44px';
+  btn.style.minHeight = '44px';
+  btn.title = 'Group info';
+  
+  btn.addEventListener('click', () => showGroupInfo(groupId, groupTitle));
+  
+  header.appendChild(btn);
+}
+
 function hideGroupInfoButton() {
   const btn = document.getElementById('group-info-btn');
   if (btn) btn.remove();
