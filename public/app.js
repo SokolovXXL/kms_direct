@@ -1300,39 +1300,6 @@ function hideGroupInfoButton() {
   if (btn) btn.remove();
 }
 
-async function showGroupInfo(groupId, groupTitle) {
-  const modal = $('modal-group-info');
-  const titleEl = $('group-info-title');
-  const listEl = $('group-members-list');
-  
-  if (!modal || !titleEl || !listEl) return;
-  
-  titleEl.textContent = groupTitle || 'Group';
-  listEl.innerHTML = '<li style="color:var(--text-muted);">Loading...</li>';
-  
-  show(modal);
-  
-  try {
-    const group = await api(`/api/groups/${groupId}`);
-    
-    listEl.innerHTML = '';
-    group.participants.forEach(member => {
-      const li = document.createElement('li');
-      li.textContent = member.username + (member.id === currentUser.id ? ' (you)' : '');
-      li.style.padding = '0.25rem 0';
-      listEl.appendChild(li);
-    });
-    
-    const addBtn = $('btn-add-member');
-    if (addBtn) {
-      addBtn.dataset.groupId = groupId;
-      addBtn.dataset.groupTitle = groupTitle;
-    }
-    
-  } catch (err) {
-    listEl.innerHTML = `<li style="color:var(--danger);">Failed to load members</li>`;
-  }
-}
 
 const btnCloseGroupInfo = $('btn-close-group-info');
 if (btnCloseGroupInfo) {
