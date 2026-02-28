@@ -1176,81 +1176,107 @@ async function showGroupInfo(groupId, groupTitle) {
   try {
     const group = await api(`/api/groups/${groupId}`);
     
+    // Определяем права текущего пользователя
+    const currentMember = group.participants.find(p => p.id === currentUser.id);
+    const isOwner = currentMember?.role === 'owner';
+    const isAdmin = currentMember?.role === 'admin' || isOwner; // админ или владелец может мутить
+    
+    listEl.innerHTML = ''; // очищаем список
+    
     group.participants.forEach(member => {
       const li = document.createElement('li');
       li.style.display = 'flex';
       li.style.alignItems = 'center';
       li.style.justifyContent = 'space-between';
-
+      li.style.padding = '0.5rem 0';
+      
+      // Левая часть: имя и роль
+      const leftDiv = document.createElement('div');
+      leftDiv.style.display = 'flex';
+      leftDiv.style.alignItems = 'center';
+      leftDiv.style.gap = '0.5rem';
+      
       const nameSpan = document.createElement('span');
       nameSpan.textContent = member.username + (member.id === currentUser.id ? ' (you)' : '');
-      li.appendChild(nameSpan);
-
-      // Отображаем роль
+      leftDiv.appendChild(nameSpan);
+      
       const roleSpan = document.createElement('span');
       if (member.role === 'owner') roleSpan.textContent = '👑';
       else if (member.role === 'admin') roleSpan.textContent = '⭐';
-      li.appendChild(roleSpan);
-
+      leftDiv.appendChild(roleSpan);
+      
+      li.appendChild(leftDiv);
+      
+      // Правая часть: кнопки действий (если есть права)
+      const actionsDiv = document.createElement('div');
+      actionsDiv.style.display = 'flex';
+      actionsDiv.style.gap = '0.5rem';
+      
+      // Кнопка повышения до админа (только для owner и только для не-owner, не себя)
+      if (isOwner && member.id !== currentUser.id && member.role !== 'owner') {
+        const promoteBtn = document.createElement('button');
+        promoteBtn.textContent = '⭐';
+        promoteBtn.title = 'Сделать админом';
+        promoteBtn.className = 'admin-action-btn';
+        promoteBtn.addEventListener('click', async (e) => {
+          e.stopPropagation();
+          try {
+            await api(`/api/groups/${groupId}/promote`, {
+              method: 'POST',
+              body: JSON.stringify({ userId: member.id })
+            });
+            // Обновляем модалку
+            showGroupInfo(groupId, groupTitle);
+          } catch (err) {
+            alert(err.message);
+          }
+        });
+        actionsDiv.appendChild(promoteBtn);
+      }
+      
+      // Кнопка мута (для owner/admin, не для себя и не для owner, если мы не owner)
+      if ((isOwner || isAdmin) && member.id !== currentUser.id) {
+        // Нельзя мутить owner, если мы не owner (проверка на сервере уже есть, но можно и на клиенте)
+        if (member.role !== 'owner' || isOwner) {
+          const muteBtn = document.createElement('button');
+          muteBtn.textContent = '🔇';
+          muteBtn.title = 'Замутить на 10 мин';
+          muteBtn.className = 'admin-action-btn';
+          muteBtn.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            try {
+              await api(`/api/groups/${groupId}/mute`, {
+                method: 'POST',
+                body: JSON.stringify({ userId: member.id, minutes: 10 })
+              });
+              alert('Участник замучен на 10 минут');
+              // Можно обновить модалку, чтобы увидеть изменения
+              showGroupInfo(groupId, groupTitle);
+            } catch (err) {
+              alert(err.message);
+            }
+          });
+          actionsDiv.appendChild(muteBtn);
+        }
+      }
+      
+      if (actionsDiv.children.length > 0) {
+        li.appendChild(actionsDiv);
+      }
+      
       listEl.appendChild(li);
     });
-    if (currentUser && group.participants.some(p => p.id === currentUser.id && p.role === 'owner')) {
     
-      group.participants.forEach(member => {
-      if (member.id === currentUser.id || member.role === 'owner') return; // себя и другого owner не трогаем
-
-      const li = document.createElement('li');
-      li.style.display = 'flex';
-      li.style.gap = '0.5rem';
-      li.style.marginTop = '0.5rem';
-
-      const promoteBtn = document.createElement('button');
-      promoteBtn.textContent = '⭐ Сделать админом';
-      promoteBtn.addEventListener('click', async () => {
-        try {
-          await api(`/api/groups/${groupId}/promote`, {
-            method: 'POST',
-            body: JSON.stringify({ userId: member.id })
-          });
-          alert('Участник повышен до админа');
-          // Обновить информацию о группе
-          showGroupInfo(groupId, groupTitle);
-        } catch (err) {
-          alert(err.message);
-        }
-      });
-
-      const muteBtn = document.createElement('button');
-      muteBtn.textContent = '🔇 Замутить на 10 мин';
-      muteBtn.addEventListener('click', async () => {
-        try {
-          await api(`/api/groups/${groupId}/mute`, {
-            method: 'POST',
-            body: JSON.stringify({ userId: member.id, minutes: 10 })
-          });
-          alert('Участник замучен на 10 минут');
-        } catch (err) {
-          alert(err.message);
-        }
-      });
-
-      li.appendChild(promoteBtn);
-      li.appendChild(muteBtn);
-      listEl.parentNode.appendChild(li); // добавим после списка
-    });
-  }
     const addBtn = $('btn-add-member');
     if (addBtn) {
       addBtn.dataset.groupId = groupId;
       addBtn.dataset.groupTitle = groupTitle;
     }
     
-    // КНОПКА ВЫХОДА ИЗ ГРУППЫ
-    // Удаляем старую кнопку, если есть
+    // Кнопка выхода из группы (для всех)
     const oldLeaveBtn = document.getElementById('leave-group-btn');
     if (oldLeaveBtn) oldLeaveBtn.remove();
     
-    // Создаём новую кнопку
     const leaveBtn = document.createElement('button');
     leaveBtn.id = 'leave-group-btn';
     leaveBtn.textContent = '🚪 Покинуть группу';
@@ -1275,38 +1301,29 @@ async function showGroupInfo(groupId, groupTitle) {
       try {
         await api(`/api/groups/${groupId}/leave`, { method: 'POST' });
         
-        // Закрываем модальное окно
         hide(modal);
         
-        // Если это текущий открытый чат - закрываем его
         if (currentConversationId === groupId) {
           currentConversationId = null;
           currentConversationIsGroup = false;
           
-          // Показываем плейсхолдер
           const chatPlaceholder = $('chat-placeholder');
           const chatActive = $('chat-active');
           if (chatPlaceholder) show(chatPlaceholder);
           if (chatActive) hide(chatActive);
           
-          // Убираем активный класс у всех элементов списка
           document.querySelectorAll('.dm-item').forEach(el => {
             el.classList.remove('active');
           });
           
-          // Прячем кнопку информации о группе
           hideGroupInfoButton();
           
-          // На мобильных устройствах показываем сайдбар
           if (isMobile()) {
             showSidebar();
           }
         }
         
-        // Перезагружаем список чатов
         await loadConversationList();
-        
-        // Показываем уведомление
         showToast(`Вы покинули группу "${groupTitle}"`, 'info');
         
       } catch (err) {
@@ -1314,7 +1331,6 @@ async function showGroupInfo(groupId, groupTitle) {
       }
     };
     
-    // Добавляем кнопку после списка участников
     listEl.parentNode.appendChild(leaveBtn);
     
   } catch (err) {
