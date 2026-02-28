@@ -304,6 +304,7 @@ function escapeHtml(s) {
 }
 
 // Исправленная функция добавления сообщения с поддержкой групп
+// Исправленная функция добавления сообщения с поддержкой групп и удалением
 function appendMessageToChat(message) {
   const list = $('messages-list');
   if (!list) return;
@@ -314,6 +315,7 @@ function appendMessageToChat(message) {
 
   const messageDiv = document.createElement('div');
   messageDiv.className = 'message ' + (message.sender_id === currentUser.id ? 'mine' : 'theirs');
+  messageDiv.dataset.messageId = message.id; // добавляем ID для удобства
   
   // Для групп показываем имя отправителя (кроме своих сообщений)
   if (currentConversationIsGroup && message.sender_id !== currentUser.id) {
@@ -346,6 +348,53 @@ function appendMessageToChat(message) {
   metaDiv.className = 'message-meta';
   metaDiv.textContent = new Date(message.created_at).toLocaleString();
   messageDiv.appendChild(metaDiv);
+  
+  // КНОПКА УДАЛЕНИЯ - только для своих сообщений
+  if (message.sender_id === currentUser.id) {
+    const deleteBtn = document.createElement('button');
+    deleteBtn.textContent = '🗑️';
+    deleteBtn.className = 'delete-message-btn';
+    deleteBtn.setAttribute('aria-label', 'Удалить сообщение');
+    deleteBtn.style.marginLeft = '10px';
+    deleteBtn.style.background = 'none';
+    deleteBtn.style.border = 'none';
+    deleteBtn.style.color = 'var(--text-muted)';
+    deleteBtn.style.cursor = 'pointer';
+    deleteBtn.style.fontSize = '1rem';
+    deleteBtn.style.padding = '4px 8px';
+    deleteBtn.style.borderRadius = '4px';
+    deleteBtn.style.opacity = '0.6';
+    deleteBtn.style.transition = 'opacity 0.2s';
+    
+    // Ховер эффект
+    deleteBtn.onmouseover = () => { deleteBtn.style.opacity = '1'; };
+    deleteBtn.onmouseout = () => { deleteBtn.style.opacity = '0.6'; };
+    
+    deleteBtn.onclick = async (e) => {
+      e.stopPropagation();
+      if (!confirm('Удалить это сообщение?')) return;
+      
+      try {
+        await api(`/api/messages/${message.id}`, { method: 'DELETE' });
+        // Плавно удаляем из DOM
+        messageDiv.style.opacity = '0';
+        messageDiv.style.transform = 'translateX(-10px)';
+        messageDiv.style.transition = 'all 0.3s';
+        
+        setTimeout(() => {
+          if (messageDiv.parentNode) {
+            messageDiv.remove();
+            // Обновляем превью в сайдбаре, если это было последнее сообщение
+            updateSidebarRow(currentConversationId, null);
+          }
+        }, 300);
+      } catch (err) {
+        alert('Ошибка удаления: ' + err.message);
+      }
+    };
+    
+    messageDiv.appendChild(deleteBtn);
+  }
   
   list.appendChild(messageDiv);
 
@@ -527,7 +576,7 @@ async function selectConversation(convId) {
   }, 200);
 }
 
-// Исправленная функция загрузки сообщений
+// Исправленная функция загрузки сообщений с поддержкой удаления
 async function loadMessages(convId) {
   const list = $('messages-list');
   if (!list) return;
@@ -540,6 +589,7 @@ async function loadMessages(convId) {
     for (const msg of messages) {
       const messageDiv = document.createElement('div');
       messageDiv.className = 'message ' + (msg.sender_id === currentUser.id ? 'mine' : 'theirs');
+      messageDiv.dataset.messageId = msg.id;
       
       // Для групп показываем имя отправителя (кроме своих сообщений)
       if (currentConversationIsGroup && msg.sender_id !== currentUser.id) {
@@ -572,6 +622,52 @@ async function loadMessages(convId) {
       metaDiv.className = 'message-meta';
       metaDiv.textContent = new Date(msg.created_at).toLocaleString();
       messageDiv.appendChild(metaDiv);
+      
+      // КНОПКА УДАЛЕНИЯ - только для своих сообщений
+      if (msg.sender_id === currentUser.id) {
+        const deleteBtn = document.createElement('button');
+        deleteBtn.textContent = '🗑️';
+        deleteBtn.className = 'delete-message-btn';
+        deleteBtn.setAttribute('aria-label', 'Удалить сообщение');
+        deleteBtn.style.marginLeft = '10px';
+        deleteBtn.style.background = 'none';
+        deleteBtn.style.border = 'none';
+        deleteBtn.style.color = 'var(--text-muted)';
+        deleteBtn.style.cursor = 'pointer';
+        deleteBtn.style.fontSize = '1rem';
+        deleteBtn.style.padding = '4px 8px';
+        deleteBtn.style.borderRadius = '4px';
+        deleteBtn.style.opacity = '0.6';
+        deleteBtn.style.transition = 'opacity 0.2s';
+        
+        deleteBtn.onmouseover = () => { deleteBtn.style.opacity = '1'; };
+        deleteBtn.onmouseout = () => { deleteBtn.style.opacity = '0.6'; };
+        
+        deleteBtn.onclick = async (e) => {
+          e.stopPropagation();
+          if (!confirm('Удалить это сообщение?')) return;
+          
+          try {
+            await api(`/api/messages/${msg.id}`, { method: 'DELETE' });
+            // Плавно удаляем из DOM
+            messageDiv.style.opacity = '0';
+            messageDiv.style.transform = 'translateX(-10px)';
+            messageDiv.style.transition = 'all 0.3s';
+            
+            setTimeout(() => {
+              if (messageDiv.parentNode) {
+                messageDiv.remove();
+                // Обновляем превью в сайдбаре
+                updateSidebarRow(currentConversationId, null);
+              }
+            }, 300);
+          } catch (err) {
+            alert('Ошибка удаления: ' + err.message);
+          }
+        };
+        
+        messageDiv.appendChild(deleteBtn);
+      }
       
       list.appendChild(messageDiv);
     }
@@ -1065,30 +1161,110 @@ if (btnCreateGroup) {
   });
 }
 
-function showGroupInfoButton(groupId, groupTitle) {
-  const header = $('chat-header');
-  if (!header) return;
+async function showGroupInfo(groupId, groupTitle) {
+  const modal = $('modal-group-info');
+  const titleEl = $('group-info-title');
+  const listEl = $('group-members-list');
   
-  const oldBtn = document.getElementById('group-info-btn');
-  if (oldBtn) oldBtn.remove();
+  if (!modal || !titleEl || !listEl) return;
   
-  const btn = document.createElement('button');
-  btn.id = 'group-info-btn';
-  btn.innerHTML = 'ℹ️';
-  btn.style.marginLeft = 'auto';
-  btn.style.background = 'none';
-  btn.style.border = 'none';
-  btn.style.color = 'var(--text-muted)';
-  btn.style.fontSize = '1.2rem';
-  btn.style.cursor = 'pointer';
-  btn.style.padding = '0 10px';
-  btn.style.minWidth = '44px';
-  btn.style.minHeight = '44px';
-  btn.title = 'Group info';
+  titleEl.textContent = groupTitle || 'Group';
+  listEl.innerHTML = '<li style="color:var(--text-muted);">Loading...</li>';
   
-  btn.addEventListener('click', () => showGroupInfo(groupId, groupTitle));
+  show(modal);
   
-  header.appendChild(btn);
+  try {
+    const group = await api(`/api/groups/${groupId}`);
+    
+    listEl.innerHTML = '';
+    group.participants.forEach(member => {
+      const li = document.createElement('li');
+      li.textContent = member.username + (member.id === currentUser.id ? ' (you)' : '');
+      li.style.padding = '0.25rem 0';
+      listEl.appendChild(li);
+    });
+    
+    const addBtn = $('btn-add-member');
+    if (addBtn) {
+      addBtn.dataset.groupId = groupId;
+      addBtn.dataset.groupTitle = groupTitle;
+    }
+    
+    // КНОПКА ВЫХОДА ИЗ ГРУППЫ
+    // Удаляем старую кнопку, если есть
+    const oldLeaveBtn = document.getElementById('leave-group-btn');
+    if (oldLeaveBtn) oldLeaveBtn.remove();
+    
+    // Создаём новую кнопку
+    const leaveBtn = document.createElement('button');
+    leaveBtn.id = 'leave-group-btn';
+    leaveBtn.textContent = '🚪 Покинуть группу';
+    leaveBtn.style.marginTop = '1.5rem';
+    leaveBtn.style.width = '100%';
+    leaveBtn.style.padding = '0.75rem';
+    leaveBtn.style.backgroundColor = 'var(--danger)';
+    leaveBtn.style.color = 'white';
+    leaveBtn.style.border = 'none';
+    leaveBtn.style.borderRadius = '6px';
+    leaveBtn.style.cursor = 'pointer';
+    leaveBtn.style.fontSize = '1rem';
+    leaveBtn.style.fontWeight = '500';
+    leaveBtn.style.transition = 'opacity 0.2s';
+    
+    leaveBtn.onmouseover = () => { leaveBtn.style.opacity = '0.9'; };
+    leaveBtn.onmouseout = () => { leaveBtn.style.opacity = '1'; };
+    
+    leaveBtn.onclick = async () => {
+      if (!confirm(`Вы уверены, что хотите покинуть группу "${groupTitle}"?`)) return;
+      
+      try {
+        await api(`/api/groups/${groupId}/leave`, { method: 'POST' });
+        
+        // Закрываем модальное окно
+        hide(modal);
+        
+        // Если это текущий открытый чат - закрываем его
+        if (currentConversationId === groupId) {
+          currentConversationId = null;
+          currentConversationIsGroup = false;
+          
+          // Показываем плейсхолдер
+          const chatPlaceholder = $('chat-placeholder');
+          const chatActive = $('chat-active');
+          if (chatPlaceholder) show(chatPlaceholder);
+          if (chatActive) hide(chatActive);
+          
+          // Убираем активный класс у всех элементов списка
+          document.querySelectorAll('.dm-item').forEach(el => {
+            el.classList.remove('active');
+          });
+          
+          // Прячем кнопку информации о группе
+          hideGroupInfoButton();
+          
+          // На мобильных устройствах показываем сайдбар
+          if (isMobile()) {
+            showSidebar();
+          }
+        }
+        
+        // Перезагружаем список чатов
+        await loadConversationList();
+        
+        // Показываем уведомление
+        showToast(`Вы покинули группу "${groupTitle}"`, 'info');
+        
+      } catch (err) {
+        alert('Ошибка при выходе из группы: ' + err.message);
+      }
+    };
+    
+    // Добавляем кнопку после списка участников
+    listEl.parentNode.appendChild(leaveBtn);
+    
+  } catch (err) {
+    listEl.innerHTML = `<li style="color:var(--danger);">Failed to load members</li>`;
+  }
 }
 
 function hideGroupInfoButton() {
@@ -1570,18 +1746,52 @@ function getFileIcon(mime) {
 }
 
 // Функция для показа тостов
+// Функция для показа тостов
 function showToast(message, type = 'info') {
-  const toast = $('notification-toast');
-  if (!toast) return;
+  // Проверяем, есть ли уже контейнер для тостов
+  let toastContainer = document.querySelector('.toast-container');
   
+  if (!toastContainer) {
+    toastContainer = document.createElement('div');
+    toastContainer.className = 'toast-container';
+    toastContainer.style.position = 'fixed';
+    toastContainer.style.bottom = '20px';
+    toastContainer.style.right = '20px';
+    toastContainer.style.zIndex = '9999';
+    document.body.appendChild(toastContainer);
+  }
+  
+  const toast = document.createElement('div');
+  toast.className = 'toast';
   toast.textContent = message;
-  toast.style.background = type === 'error' ? 'var(--danger)' : 'var(--surface)';
-  toast.classList.remove('hidden');
+  toast.style.backgroundColor = type === 'error' ? 'var(--danger)' : 'var(--surface)';
+  toast.style.color = 'var(--text)';
+  toast.style.padding = '12px 24px';
+  toast.style.borderRadius = '8px';
+  toast.style.marginTop = '10px';
+  toast.style.boxShadow = '0 4px 12px rgba(0,0,0,0.15)';
+  toast.style.animation = 'slideIn 0.3s ease';
+  toast.style.border = '1px solid var(--border)';
+  
+  toastContainer.appendChild(toast);
   
   setTimeout(() => {
-    toast.classList.add('hidden');
+    toast.style.animation = 'slideOut 0.3s ease';
+    setTimeout(() => toast.remove(), 300);
   }, 3000);
 }
+const style = document.createElement('style');
+style.textContent = `
+  @keyframes slideIn {
+    from { transform: translateX(100%); opacity: 0; }
+    to { transform: translateX(0); opacity: 1; }
+  }
+  @keyframes slideOut {
+    from { transform: translateX(0); opacity: 1; }
+    to { transform: translateX(100%); opacity: 0; }
+  }
+`;
+document.head.appendChild(style);
 // ---- CALL HANDLING ----
 let callActive = false;
 let localStream = null;

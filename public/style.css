@@ -1224,3 +1224,26 @@ body {
   border-color: var(--accent);
   transform: translateY(-1px);
 }
+.delete-message-btn {
+  opacity: 0.6;
+  transition: opacity 0.2s;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 4px;
+  margin-left: 8px;
+}
+
+.delete-message-btn:hover {
+  opacity: 1;
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
+.message.mine .delete-message-btn {
+  order: 3; /* чтобы кнопка была после метаданных */
+}
+
+.message {
+  transition: opacity 0.3s, transform 0.3s;
+}

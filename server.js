@@ -576,6 +576,41 @@ app.post('/api/groups/:id/members', authMiddleware, async (req, res) => {
   }
 });
 
+// ---- LEAVE GROUP ----
+app.post('/api/groups/:id/leave', authMiddleware, async (req, res) => {
+  const groupId = parseInt(req.params.id, 10);
+
+  // Проверяем, что это группа и пользователь в ней
+  const check = await pool.query(`
+    SELECT c.is_group
+    FROM conversations c
+    JOIN conversation_participants cp ON cp.conversation_id = c.id
+    WHERE c.id = $1 AND cp.user_id = $2
+  `, [groupId, req.userId]);
+
+  if (check.rows.length === 0 || !check.rows[0].is_group) {
+    return res.status(404).json({ error: 'Group not found or not a member' });
+  }
+
+  // Удаляем пользователя из группы
+  await pool.query(
+    'DELETE FROM conversation_participants WHERE conversation_id = $1 AND user_id = $2',
+    [groupId, req.userId]
+  );
+
+  // Если в группе никого не осталось — удаляем её
+  const left = await pool.query(
+    'SELECT COUNT(*)::int AS c FROM conversation_participants WHERE conversation_id = $1',
+    [groupId]
+  );
+
+  if (left.rows[0].c === 0) {
+    await pool.query('DELETE FROM conversations WHERE id = $1', [groupId]);
+  }
+
+  res.json({ success: true });
+});
+
 // ---- Messages ----
 // FIXED: Returns messages with sender username
 app.get('/api/conversations/:id/messages', authMiddleware, async (req, res) => {
@@ -754,6 +789,43 @@ app.post('/api/dms/:id/messages', authMiddleware, async (req, res) => {
   }
   
   res.status(201).json(payload.message);
+});
+
+
+// ---- DELETE MESSAGE ----
+app.delete('/api/messages/:id', authMiddleware, async (req, res) => {
+  const messageId = parseInt(req.params.id, 10);
+
+  // Получаем сообщение
+  const r = await pool.query(
+    'SELECT id, sender_id, conversation_id FROM messages WHERE id = $1',
+    [messageId]
+  );
+
+  if (r.rows.length === 0) {
+    return res.status(404).json({ error: 'Message not found' });
+  }
+
+  const message = r.rows[0];
+
+  // Проверяем, что пользователь — автор
+  if (message.sender_id !== req.userId) {
+    return res.status(403).json({ error: 'You can delete only your messages' });
+  }
+
+  // Удаляем уведомления по этому сообщению
+  await pool.query(
+    'DELETE FROM notifications WHERE message_id = $1',
+    [messageId]
+  );
+
+  // Удаляем сообщение
+  await pool.query(
+    'DELETE FROM messages WHERE id = $1',
+    [messageId]
+  );
+
+  res.json({ success: true });
 });
 
 // ---- Notifications ----
