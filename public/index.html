@@ -32,6 +32,7 @@
 
     <div id="main-screen" class="hidden">
       <header class="header">
+        <button type="button" class="btn-menu" id="btn-menu">☰</button>
         <span class="logo">Messenger</span>
         <span class="user-name" id="header-username"></span>
         <button type="button" class="btn-header" id="btn-friends">Friends</button>
@@ -165,5 +166,17 @@
     <div id="notification-badge" class="badge hidden">0</div>
   </div>
   <script src="/app.js"></script>
+  <div id="modal-profile" class="modal hidden">
+  <div class="modal-content">
+    <h2>Profile settings</h2>
+    <p>Change your display name (how others see you)</p>
+    <input type="text" id="profile-display-name" placeholder="Display name" maxlength="50" />
+    <p id="profile-error" class="auth-error"></p>
+    <div class="modal-actions">
+      <button type="button" class="btn-primary" id="btn-save-display-name">Save</button>
+      <button type="button" class="btn-close-modal" id="btn-close-profile">Close</button>
+    </div>
+  </div>
+</div>
 </body>
 </html>

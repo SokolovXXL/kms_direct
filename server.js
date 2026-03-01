@@ -164,7 +164,7 @@ app.post('/api/logout', (req, res) => {
 
 // ---- Me ----
 app.get('/api/me', authMiddleware, async (req, res) => {
-  const r = await pool.query('SELECT id, username, friend_code FROM users WHERE id = $1', [req.userId]);
+  const r = await pool.query('SELECT id, username, display_name, friend_code FROM users WHERE id = $1', [req.userId]);
   const user = r.rows[0];
   if (!user) return res.status(404).json({ error: 'Not found' });
   
@@ -175,9 +175,37 @@ app.get('/api/me', authMiddleware, async (req, res) => {
   
   res.json({ 
     id: user.id, 
-    username: user.username, 
+    username: user.username,
+    display_name: user.display_name || user.username,
     friend_code: user.friend_code 
   });
+});
+
+// ---- Display Name ----
+app.get('/api/display-name', authMiddleware, async (req, res) => {
+  const r = await pool.query('SELECT display_name, username FROM users WHERE id = $1', [req.userId]);
+  const user = r.rows[0];
+  res.json({ 
+    displayName: user.display_name || user.username,
+    username: user.username
+  });
+});
+
+app.post('/api/display-name', authMiddleware, async (req, res) => {
+  const { displayName } = req.body || {};
+  
+  if (!displayName || displayName.trim().length < 2) {
+    return res.status(400).json({ error: 'Display name must be at least 2 characters' });
+  }
+  
+  const trimmedName = displayName.trim();
+  
+  await pool.query(
+    'UPDATE users SET display_name = $1 WHERE id = $2',
+    [trimmedName, req.userId]
+  );
+  
+  res.json({ displayName: trimmedName });
 });
 
 // ---- Delete account ----
@@ -200,7 +228,8 @@ app.delete('/api/account', authMiddleware, async (req, res) => {
 // ---- Friends ----
 app.get('/api/friends', authMiddleware, async (req, res) => {
   const r = await pool.query(`
-    SELECT u.id, u.username, u.friend_code
+    SELECT u.id, u.username, u.display_name, u.friend_code,
+           COALESCE(u.display_name, u.username) AS name
     FROM friends f
     JOIN users u ON u.id = f.friend_id
     WHERE f.user_id = $1
@@ -247,7 +276,9 @@ app.get('/api/conversations', authMiddleware, async (req, res) => {
         json_agg(
           DISTINCT jsonb_build_object(
             'id', u.id,
-            'username', u.username
+            'username', u.username,
+            'display_name', u.display_name,
+            'name', COALESCE(u.display_name, u.username)
           )
         ) FILTER (WHERE u.id != $1),
         '[]'::json
@@ -504,7 +535,14 @@ app.get('/api/groups/:id', authMiddleware, async (req, res) => {
   
   const group = await pool.query(`
     SELECT c.id, c.title, c.created_at, 
-           json_agg(json_build_object('id', u.id, 'username', u.username, 'role', cp.role, 'muted_until', cp.muted_until)) as participants
+           json_agg(json_build_object(
+              'id', u.id, 
+              'username', u.username,
+              'display_name', u.display_name,
+              'name', COALESCE(u.display_name, u.username),
+              'role', cp.role, 
+              'muted_until', cp.muted_until
+            )) as participants
     FROM conversations c
     JOIN conversation_participants cp ON cp.conversation_id = c.id
     JOIN users u ON u.id = cp.user_id
@@ -533,9 +571,11 @@ app.post('/api/groups/:id/members', authMiddleware, async (req, res) => {
   }
   
   const check = await pool.query(`
-    SELECT c.is_group FROM conversations c
-    JOIN conversation_participants cp ON cp.conversation_id = c.id
-    WHERE c.id = $1 AND cp.user_id = $2
+    SELECT u.id, u.username, u.display_name,
+          COALESCE(u.display_name, u.username) AS name
+    FROM conversation_participants cp
+    JOIN users u ON u.id = cp.user_id
+    WHERE cp.conversation_id = $1
   `, [groupId, req.userId]);
   
   if (check.rows.length === 0 || !check.rows[0].is_group) {

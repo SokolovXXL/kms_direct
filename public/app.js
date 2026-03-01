@@ -69,7 +69,7 @@ function renderScreen() {
     show($('main-screen'));
     
     const headerUsername = $('header-username');
-    if (headerUsername) headerUsername.textContent = currentUser.username;
+    if (headerUsername) headerUsername.textContent = currentUser.display_name || currentUser.username;
     
     if (!currentUser.friend_code) fetchMe();
     
@@ -168,6 +168,7 @@ async function fetchMe() {
     const me = await api('/api/me');
     if (currentUser) {
       currentUser.friend_code = me.friend_code;
+      currentUser.display_name = me.display_name;
       localStorage.setItem('user', JSON.stringify(currentUser));
     }
   } catch (_) {}
@@ -542,7 +543,7 @@ async function loadConversationList() {
         nameHtml = `<span class="dm-name">👥 ${escapeHtml(conv.title || 'Group')}</span>`;
       } else {
         // Для личных чатов показываем имя собеседника
-        const otherUserName = conv.otherUser?.username || 'Unknown';
+        const otherUserName = conv.otherUser?.name || conv.otherUser?.username || 'Unknown';
         nameHtml = `<span class="dm-name">${escapeHtml(otherUserName)}</span>`;
       }
       
@@ -848,7 +849,7 @@ if (btnNewDm) {
         const li = document.createElement('li');
         const btn = document.createElement('button');
         btn.type = 'button';
-        btn.textContent = u.username;
+        btn.textContent = u.name || u.username;
         btn.addEventListener('click', async () => {
           try {
             const data = await api('/api/dms', { 
@@ -913,7 +914,7 @@ if (btnFriends) {
       
       for (const u of friends) {
         const li = document.createElement('li');
-        li.textContent = u.username;
+        li.textContent = u.name || u.username;
         friendsList.appendChild(li);
       }
       
@@ -1054,6 +1055,67 @@ if (btnConfirmDelete) {
   });
 }
 
+// ---- Profile menu ----
+const btnMenu = $('btn-menu');
+const modalProfile = $('modal-profile');
+const btnCloseProfile = $('btn-close-profile');
+const btnSaveDisplayName = $('btn-save-display-name');
+const profileDisplayNameInput = $('profile-display-name');
+const profileError = $('profile-error');
+
+if (btnMenu) {
+  btnMenu.addEventListener('click', () => {
+    if (modalProfile && currentUser) {
+      profileDisplayNameInput.value = currentUser.display_name || currentUser.username;
+      profileError.textContent = '';
+      show(modalProfile);
+    }
+  });
+}
+
+if (btnCloseProfile) {
+  btnCloseProfile.addEventListener('click', () => hide(modalProfile));
+}
+
+if (modalProfile) {
+  modalProfile.addEventListener('click', (e) => {
+    if (e.target.id === 'modal-profile') hide(modalProfile);
+  });
+}
+
+if (btnSaveDisplayName) {
+  btnSaveDisplayName.addEventListener('click', async () => {
+    const newName = profileDisplayNameInput.value.trim();
+    if (!newName) {
+      profileError.textContent = 'Display name cannot be empty';
+      return;
+    }
+    if (newName.length < 2) {
+      profileError.textContent = 'Display name must be at least 2 characters';
+      return;
+    }
+    try {
+      const result = await api('/api/display-name', {
+        method: 'POST',
+        body: JSON.stringify({ displayName: newName })
+      });
+      // Update currentUser
+      currentUser.display_name = result.displayName;
+      localStorage.setItem('user', JSON.stringify(currentUser));
+      // Update header
+      const headerUsername = $('header-username');
+      if (headerUsername) headerUsername.textContent = currentUser.display_name || currentUser.username;
+      // Close modal
+      hide(modalProfile);
+      // Refresh lists to show updated name elsewhere
+      loadConversationList();
+      // If friends modal is open, refresh it too (will reload on next open)
+    } catch (err) {
+      profileError.textContent = err.message;
+    }
+  });
+}
+
 // ---- GROUPS ----
 const btnGroups = $('btn-groups');
 const btnCreateGroupBtn = $('btn-create-group-btn');
@@ -1177,7 +1239,7 @@ async function loadFriendsForGroup() {
       
       const label = document.createElement('label');
       label.htmlFor = `friend-${friend.id}`;
-      label.textContent = friend.username;
+      label.textContent = friend.name || friend.username;
       label.style.flex = '1';
       label.style.cursor = 'pointer';
       
@@ -1263,7 +1325,7 @@ async function showGroupInfo(groupId, groupTitle) {
       leftDiv.style.gap = '0.5rem';
       
       const nameSpan = document.createElement('span');
-      nameSpan.textContent = member.username + (member.id === currentUser.id ? ' (you)' : '');
+      nameSpan.textContent = (member.name || member.username) + (member.id === currentUser.id ? ' (you)' : '');
       leftDiv.appendChild(nameSpan);
       
       const roleSpan = document.createElement('span');
@@ -1579,7 +1641,7 @@ async function loadFriendsToAdd(groupId, groupTitle) {
       const li = document.createElement('li');
       const btn = document.createElement('button');
       btn.type = 'button';
-      btn.textContent = friend.username;
+      btn.textContent = friend.name || friend.username;
       btn.style.width = '100%';
       btn.style.textAlign = 'left';
       btn.style.padding = '0.5rem 1rem';

@@ -71,6 +71,9 @@ async function initDb() {
       ALTER TABLE conversation_participants
       ADD COLUMN IF NOT EXISTS muted_until TIMESTAMPTZ
     `);
+    await client.query(`
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS display_name VARCHAR(64);
+    `);
     await client.query(`CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(user_id);`);
     await client.query(`CREATE INDEX IF NOT EXISTS idx_messages_conversation ON messages(conversation_id);`);
     await client.query(`CREATE INDEX IF NOT EXISTS idx_friends_user ON friends(user_id);`);

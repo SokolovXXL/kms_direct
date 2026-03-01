@@ -1302,3 +1302,22 @@ body {
   padding: 0;
   background: transparent;
 }
+
+.btn-menu {
+  background: none;
+  border: none;
+  color: var(--text);
+  font-size: 1.5rem;
+  cursor: pointer;
+  padding: 0 0.5rem;
+  margin-right: 0.5rem;
+  min-width: 44px;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.btn-menu:hover {
+  background: var(--surface-hover);
+  border-radius: 8px;
+}
