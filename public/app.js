@@ -87,6 +87,45 @@ function renderScreen() {
   }
 }
 
+// Добавить где-то в начале файла (после других функций)
+function fixMojibake(str) {
+  if (typeof str !== 'string') return str;
+  // Пытаемся перекодировать из Latin-1 в UTF-8
+  try {
+    const buf = new Uint8Array(str.length);
+    for (let i = 0; i < str.length; i++) {
+      buf[i] = str.charCodeAt(i) & 0xFF;
+    }
+    const decoder = new TextDecoder('utf-8');
+    const decoded = decoder.decode(buf);
+    // Если результат отличается и содержит не-ASCII символы, считаем исправление удачным
+    if (decoded !== str && /[^\x00-\x7F]/.test(decoded)) {
+      return decoded;
+    }
+  } catch (e) {
+    // ничего не делаем, возвращаем оригинал
+  }
+  return str;
+}
+
+// В функции renderFileMessage после получения fileData добавьте вызов fixMojibake:
+// fileData.name = fixMojibake(fileData.name);
+
+// И измените создание nameDiv:
+if (!(fileData.mime && (fileData.mime.startsWith('image/') || fileData.mime.startsWith('video/')))) {
+  const nameDiv = document.createElement('div');
+  nameDiv.className = 'file-name';
+  nameDiv.textContent = fileData.name || 'Unnamed file';
+  infoDiv.appendChild(nameDiv);
+}
+// Блок с размером создаётся всегда (если есть)
+if (fileData.size) {
+  const sizeDiv = document.createElement('div');
+  sizeDiv.className = 'file-size';
+  sizeDiv.textContent = formatFileSize(fileData.size);
+  infoDiv.appendChild(sizeDiv);
+}
+
 function showSidebar() {
   const layout = document.querySelector('.layout');
   if (!layout) return;
