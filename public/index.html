@@ -86,6 +86,7 @@
       </div>
     </div>
 
+    <!-- Модалка друзей (было) – удалена строка с кнопкой -->
     <div id="modal-friends" class="modal hidden">
       <div class="modal-content">
         <h2>Friends</h2>
@@ -98,7 +99,7 @@
         <p id="friends-error" class="auth-error"></p>
         <ul id="friends-list" class="user-list"></ul>
         <div class="modal-actions">
-          <button type="button" class="btn-danger" id="btn-delete-account">Delete account</button>
+          <!-- Кнопка удаления аккаунта БОЛЬШЕ НЕ ЗДЕСЬ -->
           <button type="button" class="btn-close-modal" id="btn-close-friends">Close</button>
         </div>
       </div>
@@ -135,18 +136,25 @@
       </div>
     </div>
     
+    <!-- Модалка профиля (было) -->
     <div id="modal-profile" class="modal hidden">
       <div class="modal-content">
         <h2>Profile settings</h2>
         <p>Change your display name (how others see you)</p>
         <input type="text" id="profile-display-name" placeholder="Display name" maxlength="50" />
         <p id="profile-error" class="auth-error"></p>
+        <!-- Новая секция с кнопкой удаления аккаунта -->
+        <div class="delete-account-section" style="margin-top: 1.5rem; border-top: 1px solid var(--border); padding-top: 1rem;">
+          <p style="color: var(--text-muted); font-size: 0.85rem; margin-bottom: 0.5rem;">Danger zone</p>
+          <button type="button" class="btn-danger" id="btn-delete-account" style="width: 100%;">Delete account</button>
+        </div>
         <div class="modal-actions">
           <button type="button" class="btn-primary" id="btn-save-display-name">Save</button>
           <button type="button" class="btn-close-modal" id="btn-close-profile">Close</button>
         </div>
       </div>
     </div>
+
     <!-- Modal: Group info (view members) -->
     <div id="modal-group-info" class="modal hidden">
       <div class="modal-content">
