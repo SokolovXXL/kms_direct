@@ -1297,3 +1297,8 @@ body {
   color: white;
   border-color: var(--accent);
 }
+
+.message-file-content:has(.file-preview:only-child) {
+  padding: 0;
+  background: transparent;
+}

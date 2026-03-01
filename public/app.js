@@ -1725,7 +1725,7 @@ function removeUploadProgress(progressId) {
   }
 }
 
-// Обновленная функция рендеринга файлов
+// Обновлённая функция рендеринга файлов
 function renderFileMessage(messageDiv, message) {
   try {
     let fileData;
@@ -1755,116 +1755,105 @@ function renderFileMessage(messageDiv, message) {
       fileData.name = fixMojibake(fileData.name);
     }
 
+    const isImage = fileData.mime && fileData.mime.startsWith('image/');
+    const isVideo = fileData.mime && fileData.mime.startsWith('video/');
+    const isAudio = fileData.mime && fileData.mime.startsWith('audio/');
+
     const fileDiv = document.createElement('div');
     fileDiv.className = 'message-file-content';
 
-    // Заголовок с информацией о файле
-    const headerDiv = document.createElement('div');
-    headerDiv.className = 'file-info-header';
+    // Для изображений и видео — только превью
+    if (isImage || isVideo) {
+      const previewDiv = document.createElement('div');
+      previewDiv.className = 'file-preview';
 
-    const iconSpan = document.createElement('span');
-    iconSpan.className = 'file-icon';
-    iconSpan.textContent = getFileIcon(fileData.mime || '');
-    headerDiv.appendChild(iconSpan);
+      if (isImage) {
+        const img = document.createElement('img');
+        img.src = fileData.url;
+        img.alt = fileData.name || 'Image';
+        img.loading = 'lazy';
+        img.style.maxWidth = '100%';
+        img.style.maxHeight = '300px';
+        img.style.borderRadius = '8px';
+        img.style.cursor = 'pointer';
+        img.addEventListener('click', () => openFullscreen(fileData.url, fileData.mime));
+        previewDiv.appendChild(img);
+      } else if (isVideo) {
+        const video = document.createElement('video');
+        video.src = fileData.url;
+        video.controls = true;
+        video.preload = 'metadata';
+        video.style.maxWidth = '100%';
+        video.style.maxHeight = '300px';
+        video.style.borderRadius = '8px';
+        video.addEventListener('click', () => openFullscreen(fileData.url, fileData.mime));
+        previewDiv.appendChild(video);
+      }
 
-    const infoDiv = document.createElement('div');
-    infoDiv.className = 'file-details';
+      fileDiv.appendChild(previewDiv);
+    } else {
+      // Для всех остальных (аудио, документы и т.д.) — полный блок с информацией и кнопками
+      const headerDiv = document.createElement('div');
+      headerDiv.className = 'file-info-header';
 
-    // Показываем имя только для не-медиафайлов (не изображения и не видео)
-    if (!(fileData.mime && (fileData.mime.startsWith('image/') || fileData.mime.startsWith('video/')))) {
+      const iconSpan = document.createElement('span');
+      iconSpan.className = 'file-icon';
+      iconSpan.textContent = getFileIcon(fileData.mime || '');
+      headerDiv.appendChild(iconSpan);
+
+      const infoDiv = document.createElement('div');
+      infoDiv.className = 'file-details';
+
+      // Имя файла (для аудио и прочих)
       const nameDiv = document.createElement('div');
       nameDiv.className = 'file-name';
       nameDiv.textContent = fileData.name || 'Unnamed file';
       infoDiv.appendChild(nameDiv);
-    }
 
-    // Размер показываем всегда, если есть
-    if (fileData.size) {
-      const sizeDiv = document.createElement('div');
-      sizeDiv.className = 'file-size';
-      sizeDiv.textContent = formatFileSize(fileData.size);
-      infoDiv.appendChild(sizeDiv);
-    }
+      // Размер, если есть
+      if (fileData.size) {
+        const sizeDiv = document.createElement('div');
+        sizeDiv.className = 'file-size';
+        sizeDiv.textContent = formatFileSize(fileData.size);
+        infoDiv.appendChild(sizeDiv);
+      }
 
-    headerDiv.appendChild(infoDiv);
-    fileDiv.appendChild(headerDiv);
+      headerDiv.appendChild(infoDiv);
+      fileDiv.appendChild(headerDiv);
 
-    // Превью для медиафайлов
-    if (fileData.mime && fileData.mime.startsWith('image/')) {
-      const previewDiv = document.createElement('div');
-      previewDiv.className = 'file-preview';
-      
-      const img = document.createElement('img');
-      img.src = fileData.url;
-      img.alt = fileData.name || 'Image';
-      img.loading = 'lazy';
-      img.style.maxWidth = '100%';
-      img.style.maxHeight = '300px';
-      img.style.borderRadius = '8px';
-      img.style.cursor = 'pointer';
-      
-      img.addEventListener('click', () => openFullscreen(fileData.url, fileData.mime));
-      
-      previewDiv.appendChild(img);
-      fileDiv.appendChild(previewDiv);
-      
-    } else if (fileData.mime && fileData.mime.startsWith('video/')) {
-      const previewDiv = document.createElement('div');
-      previewDiv.className = 'file-preview';
-      
-      const video = document.createElement('video');
-      video.src = fileData.url;
-      video.controls = true;
-      video.preload = 'metadata';
-      video.style.maxWidth = '100%';
-      video.style.maxHeight = '300px';
-      video.style.borderRadius = '8px';
-      
-      video.addEventListener('click', () => openFullscreen(fileData.url, fileData.mime));
-      
-      previewDiv.appendChild(video);
-      fileDiv.appendChild(previewDiv);
-      
-    } else if (fileData.mime && fileData.mime.startsWith('audio/')) {
-      const previewDiv = document.createElement('div');
-      previewDiv.className = 'file-preview audio-preview';
-      
-      const audio = document.createElement('audio');
-      audio.src = fileData.url;
-      audio.controls = true;
-      audio.preload = 'metadata';
-      audio.style.width = '100%';
-      
-      previewDiv.appendChild(audio);
-      fileDiv.appendChild(previewDiv);
-    }
+      // Превью для аудио
+      if (isAudio) {
+        const previewDiv = document.createElement('div');
+        previewDiv.className = 'file-preview audio-preview';
+        const audio = document.createElement('audio');
+        audio.src = fileData.url;
+        audio.controls = true;
+        audio.preload = 'metadata';
+        audio.style.width = '100%';
+        previewDiv.appendChild(audio);
+        fileDiv.appendChild(previewDiv);
+      }
 
-    // Кнопки действий
-    const actionsDiv = document.createElement('div');
-    actionsDiv.className = 'file-actions';
+      // Кнопки действий
+      const actionsDiv = document.createElement('div');
+      actionsDiv.className = 'file-actions';
 
-    const downloadBtn = document.createElement('button');
-    downloadBtn.className = 'file-download-btn';
-    downloadBtn.innerHTML = '⬇️ Download';
-    downloadBtn.onclick = (e) => {
-      e.stopPropagation();
-      window.open(fileData.url, '_blank');
-    };
-    actionsDiv.appendChild(downloadBtn);
-
-    // Для изображений и видео добавляем кнопку предпросмотра
-    if (fileData.mime && (fileData.mime.startsWith('image/') || fileData.mime.startsWith('video/'))) {
-      const previewBtn = document.createElement('button');
-      previewBtn.className = 'file-preview-btn';
-      previewBtn.innerHTML = '🔍 Preview';
-      previewBtn.onclick = (e) => {
+      const downloadBtn = document.createElement('button');
+      downloadBtn.className = 'file-download-btn';
+      downloadBtn.innerHTML = '⬇️ Download';
+      downloadBtn.onclick = (e) => {
         e.stopPropagation();
-        openFullscreen(fileData.url, fileData.mime);
+        window.open(fileData.url, '_blank');
       };
-      actionsDiv.appendChild(previewBtn);
+      actionsDiv.appendChild(downloadBtn);
+
+      // Для изображений и видео добавили бы кнопку Preview, но они обработаны выше,
+      // сюда они не попадают, поэтому для аудио и других типов кнопка Preview не нужна.
+      // (можно при желании добавить для изображений/видео, но они уже в отдельной ветке)
+
+      fileDiv.appendChild(actionsDiv);
     }
 
-    fileDiv.appendChild(actionsDiv);
     messageDiv.appendChild(fileDiv);
 
   } catch (e) {
