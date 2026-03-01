@@ -87,7 +87,6 @@ function renderScreen() {
   }
 }
 
-// Добавить где-то в начале файла (после других функций)
 function fixMojibake(str) {
   if (typeof str !== 'string') return str;
   // Пытаемся перекодировать из Latin-1 в UTF-8
@@ -106,24 +105,6 @@ function fixMojibake(str) {
     // ничего не делаем, возвращаем оригинал
   }
   return str;
-}
-
-// В функции renderFileMessage после получения fileData добавьте вызов fixMojibake:
-// fileData.name = fixMojibake(fileData.name);
-
-// И измените создание nameDiv:
-if (!(fileData.mime && (fileData.mime.startsWith('image/') || fileData.mime.startsWith('video/')))) {
-  const nameDiv = document.createElement('div');
-  nameDiv.className = 'file-name';
-  nameDiv.textContent = fileData.name || 'Unnamed file';
-  infoDiv.appendChild(nameDiv);
-}
-// Блок с размером создаётся всегда (если есть)
-if (fileData.size) {
-  const sizeDiv = document.createElement('div');
-  sizeDiv.className = 'file-size';
-  sizeDiv.textContent = formatFileSize(fileData.size);
-  infoDiv.appendChild(sizeDiv);
 }
 
 function showSidebar() {
@@ -1755,7 +1736,6 @@ function renderFileMessage(messageDiv, message) {
         fileData = JSON.parse(message.body);
       } catch (e) {
         console.warn('Failed to parse message body as JSON:', e);
-        // Если не получается распарсить, показываем как обычный текст
         const bodyDiv = document.createElement('div');
         bodyDiv.textContent = message.body;
         messageDiv.appendChild(bodyDiv);
@@ -1768,6 +1748,11 @@ function renderFileMessage(messageDiv, message) {
     // Проверяем, что это действительно файл
     if (!fileData || fileData.type !== 'file') {
       throw new Error('Not a file message');
+    }
+
+    // Исправляем имя файла, если оно повреждено
+    if (fileData.name) {
+      fileData.name = fixMojibake(fileData.name);
     }
 
     const fileDiv = document.createElement('div');
@@ -1785,11 +1770,15 @@ function renderFileMessage(messageDiv, message) {
     const infoDiv = document.createElement('div');
     infoDiv.className = 'file-details';
 
-    const nameDiv = document.createElement('div');
-    nameDiv.className = 'file-name';
-    nameDiv.textContent = fileData.name || 'Unnamed file';
-    infoDiv.appendChild(nameDiv);
+    // Показываем имя только для не-медиафайлов (не изображения и не видео)
+    if (!(fileData.mime && (fileData.mime.startsWith('image/') || fileData.mime.startsWith('video/')))) {
+      const nameDiv = document.createElement('div');
+      nameDiv.className = 'file-name';
+      nameDiv.textContent = fileData.name || 'Unnamed file';
+      infoDiv.appendChild(nameDiv);
+    }
 
+    // Размер показываем всегда, если есть
     if (fileData.size) {
       const sizeDiv = document.createElement('div');
       sizeDiv.className = 'file-size';
