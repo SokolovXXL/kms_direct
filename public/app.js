@@ -1776,9 +1776,21 @@ function renderFileMessage(messageDiv, message) {
         img.style.maxHeight = '300px';
         img.style.borderRadius = '8px';
         img.style.cursor = 'pointer';
+        
+        // Обработка ошибки загрузки
+        img.onerror = () => {
+          img.style.display = 'none';
+          const errorSpan = document.createElement('span');
+          errorSpan.textContent = '⚠️ Не удалось загрузить изображение';
+          errorSpan.style.color = 'var(--danger)';
+          errorSpan.style.fontSize = '0.9rem';
+          previewDiv.appendChild(errorSpan);
+          console.error('Failed to load image:', fileData.url);
+        };
+        
         img.addEventListener('click', () => openFullscreen(fileData.url, fileData.mime));
         previewDiv.appendChild(img);
-      } else if (isVideo) {
+      }else if (isVideo) {
         const video = document.createElement('video');
         video.src = fileData.url;
         video.controls = true;
@@ -1786,6 +1798,17 @@ function renderFileMessage(messageDiv, message) {
         video.style.maxWidth = '100%';
         video.style.maxHeight = '300px';
         video.style.borderRadius = '8px';
+        
+        video.onerror = () => {
+          video.style.display = 'none';
+          const errorSpan = document.createElement('span');
+          errorSpan.textContent = '⚠️ Не удалось загрузить видео';
+          errorSpan.style.color = 'var(--danger)';
+          errorSpan.style.fontSize = '0.9rem';
+          previewDiv.appendChild(errorSpan);
+          console.error('Failed to load video:', fileData.url);
+        };
+        
         video.addEventListener('click', () => openFullscreen(fileData.url, fileData.mime));
         previewDiv.appendChild(video);
       }
@@ -1964,7 +1987,6 @@ function getFileIcon(mime) {
   return '📎';
 }
 
-// Функция для показа тостов
 // Функция для показа тостов
 function showToast(message, type = 'info') {
   // Проверяем, есть ли уже контейнер для тостов

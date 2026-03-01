@@ -1059,7 +1059,7 @@ app.post('/api/upload', authMiddleware, upload.single('file'), (req, res) => {
   }
   // Возвращаем данные о файле
   res.json({
-    url: `/uploads/${req.file.filename}`,
+    url: '/uploads/' + encodeURIComponent(req.file.filename),   // <-- кодируем
     name: req.file.originalname,
     type: req.file.mimetype
   });
