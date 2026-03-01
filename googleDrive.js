@@ -10,7 +10,9 @@ async function uploadToGoogleDrive(fileBuffer, fileName, mimeType) {
     if (!process.env.GOOGLE_DRIVE_FOLDER_ID) {
       throw new Error('GOOGLE_DRIVE_FOLDER_ID environment variable is not set');
     }
-
+    
+    console.log('RAW GOOGLE_CREDENTIALS:', JSON.stringify(process.env.GOOGLE_CREDENTIALS));
+    console.log('LENGTH:', process.env.GOOGLE_CREDENTIALS.length);
     // Парсим JSON из переменной окружения
     const credentials = JSON.parse(process.env.GOOGLE_CREDENTIALS);
 
