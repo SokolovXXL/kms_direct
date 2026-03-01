@@ -2365,7 +2365,7 @@ function hideCallUI() {
   const bar = $('call-status-bar');
   
   if (btn) {
-    btn.style.display = 'none';
+    btn.style.display = 'block';
     btn.disabled = false;
     btn.textContent = '☎️';
   }
