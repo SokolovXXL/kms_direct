@@ -1179,7 +1179,7 @@ async function showGroupInfo(groupId, groupTitle) {
     // Определяем права текущего пользователя
     const currentMember = group.participants.find(p => p.id === currentUser.id);
     const isOwner = currentMember?.role === 'owner';
-    const isAdmin = currentMember?.role === 'admin' || isOwner; // админ или владелец может мутить
+    const isAdmin = currentMember?.role === 'admin' || isOwner;
     
     listEl.innerHTML = ''; // очищаем список
     
@@ -1205,63 +1205,153 @@ async function showGroupInfo(groupId, groupTitle) {
       else if (member.role === 'admin') roleSpan.textContent = '⭐';
       leftDiv.appendChild(roleSpan);
       
-      li.appendChild(leftDiv);
-      
-      // Правая часть: кнопки действий (если есть права)
-      const actionsDiv = document.createElement('div');
-      actionsDiv.style.display = 'flex';
-      actionsDiv.style.gap = '0.5rem';
-      
-      // Кнопка повышения до админа (только для owner и только для не-owner, не себя)
-      if (isOwner && member.id !== currentUser.id && member.role !== 'owner') {
-        const promoteBtn = document.createElement('button');
-        promoteBtn.textContent = '⭐';
-        promoteBtn.title = 'Сделать админом';
-        promoteBtn.className = 'admin-action-btn';
-        promoteBtn.addEventListener('click', async (e) => {
-          e.stopPropagation();
-          try {
-            await api(`/api/groups/${groupId}/promote`, {
-              method: 'POST',
-              body: JSON.stringify({ userId: member.id })
-            });
-            // Обновляем модалку
-            showGroupInfo(groupId, groupTitle);
-          } catch (err) {
-            alert(err.message);
-          }
-        });
-        actionsDiv.appendChild(promoteBtn);
+      // Если участник замучен, показываем иконку 🔇
+      if (member.muted_until && new Date(member.muted_until) > new Date()) {
+        const mutedIcon = document.createElement('span');
+        mutedIcon.textContent = '🔇';
+        mutedIcon.title = `Muted until ${new Date(member.muted_until).toLocaleString()}`;
+        leftDiv.appendChild(mutedIcon);
       }
       
-      // Кнопка мута (для owner/admin, не для себя и не для owner, если мы не owner)
-      if ((isOwner || isAdmin) && member.id !== currentUser.id) {
-        // Нельзя мутить owner, если мы не owner (проверка на сервере уже есть, но можно и на клиенте)
-        if (member.role !== 'owner' || isOwner) {
-          const muteBtn = document.createElement('button');
-          muteBtn.textContent = '🔇';
-          muteBtn.title = 'Замутить на 10 мин';
-          muteBtn.className = 'admin-action-btn';
-          muteBtn.addEventListener('click', async (e) => {
+      li.appendChild(leftDiv);
+      
+      // Правая часть: кнопки действий (если есть права и это не сам пользователь)
+      if (member.id !== currentUser.id) {
+        const actionsDiv = document.createElement('div');
+        actionsDiv.style.display = 'flex';
+        actionsDiv.style.gap = '0.5rem';
+        actionsDiv.style.flexWrap = 'wrap';
+        
+        // Кнопка повышения до админа (только для owner, для member)
+        if (isOwner && member.role === 'member') {
+          const promoteBtn = document.createElement('button');
+          promoteBtn.textContent = '⭐';
+          promoteBtn.title = 'Сделать админом';
+          promoteBtn.className = 'admin-action-btn';
+          promoteBtn.addEventListener('click', async (e) => {
             e.stopPropagation();
             try {
-              await api(`/api/groups/${groupId}/mute`, {
+              await api(`/api/groups/${groupId}/promote`, {
                 method: 'POST',
-                body: JSON.stringify({ userId: member.id, minutes: 10 })
+                body: JSON.stringify({ userId: member.id })
               });
-              alert('Участник замучен на 10 минут');
-              // Можно обновить модалку, чтобы увидеть изменения
               showGroupInfo(groupId, groupTitle);
             } catch (err) {
               alert(err.message);
             }
           });
-          actionsDiv.appendChild(muteBtn);
+          actionsDiv.appendChild(promoteBtn);
         }
-      }
-      
-      if (actionsDiv.children.length > 0) {
-        li.appendChild(actionsDiv);
+        
+        // Кнопка снятия админа (только для owner, для admin)
+        if (isOwner && member.role === 'admin') {
+          const demoteBtn = document.createElement('button');
+          demoteBtn.textContent = '⬇️';
+          demoteBtn.title = 'Снять админа';
+          demoteBtn.className = 'admin-action-btn';
+          demoteBtn.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            try {
+              await api(`/api/groups/${groupId}/demote`, {
+                method: 'POST',
+                body: JSON.stringify({ userId: member.id })
+              });
+              showGroupInfo(groupId, groupTitle);
+            } catch (err) {
+              alert(err.message);
+            }
+          });
+          actionsDiv.appendChild(demoteBtn);
+        }
+        
+        // Кнопка мута (для owner/admin, если участник не owner или мы owner)
+        if ((isOwner || isAdmin) && (member.role !== 'owner' || isOwner)) {
+          // Проверяем, замучен ли уже
+          const isMuted = member.muted_until && new Date(member.muted_until) > new Date();
+          
+          if (isMuted) {
+            // Кнопка размута
+            const unmuteBtn = document.createElement('button');
+            unmuteBtn.textContent = '🔊';
+            unmuteBtn.title = 'Размутить';
+            unmuteBtn.className = 'admin-action-btn';
+            unmuteBtn.addEventListener('click', async (e) => {
+              e.stopPropagation();
+              try {
+                await api(`/api/groups/${groupId}/unmute`, {
+                  method: 'POST',
+                  body: JSON.stringify({ userId: member.id })
+                });
+                showGroupInfo(groupId, groupTitle);
+              } catch (err) {
+                alert(err.message);
+              }
+            });
+            actionsDiv.appendChild(unmuteBtn);
+          } else {
+            // Кнопка мута с выбором длительности
+            const muteSelect = document.createElement('select');
+            muteSelect.className = 'admin-action-btn';
+            muteSelect.style.padding = '4px';
+            muteSelect.style.fontSize = '0.8rem';
+            
+            const durations = [
+              { value: 5, text: '🔇 5 мин' },
+              { value: 10, text: '🔇 10 мин' },
+              { value: 30, text: '🔇 30 мин' },
+              { value: 60, text: '🔇 1 час' },
+              { value: 1440, text: '🔇 24 часа' }
+            ];
+            
+            durations.forEach(d => {
+              const option = document.createElement('option');
+              option.value = d.value;
+              option.textContent = d.text;
+              muteSelect.appendChild(option);
+            });
+            
+            muteSelect.addEventListener('change', async (e) => {
+              e.stopPropagation();
+              const minutes = parseInt(muteSelect.value, 10);
+              try {
+                await api(`/api/groups/${groupId}/mute`, {
+                  method: 'POST',
+                  body: JSON.stringify({ userId: member.id, minutes })
+                });
+                showGroupInfo(groupId, groupTitle);
+              } catch (err) {
+                alert(err.message);
+              }
+            });
+            
+            actionsDiv.appendChild(muteSelect);
+          }
+        }
+        
+        // Кнопка кика (для owner/admin, нельзя кикнуть owner, если мы не owner)
+        if ((isOwner || isAdmin) && (member.role !== 'owner' || isOwner)) {
+          const kickBtn = document.createElement('button');
+          kickBtn.textContent = '❌';
+          kickBtn.title = 'Кикнуть';
+          kickBtn.className = 'admin-action-btn';
+          kickBtn.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            if (!confirm(`Вы уверены, что хотите кикнуть ${member.username}?`)) return;
+            try {
+              await api(`/api/groups/${groupId}/kick/${member.id}`, {
+                method: 'DELETE'
+              });
+              showGroupInfo(groupId, groupTitle);
+            } catch (err) {
+              alert(err.message);
+            }
+          });
+          actionsDiv.appendChild(kickBtn);
+        }
+        
+        if (actionsDiv.children.length > 0) {
+          li.appendChild(actionsDiv);
+        }
       }
       
       listEl.appendChild(li);

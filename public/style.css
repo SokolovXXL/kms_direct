@@ -1280,3 +1280,20 @@ body {
   color: white;
   border-color: var(--accent);
 }
+
+.admin-action-btn select {
+  background: var(--surface-hover);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 4px 8px;
+  color: var(--text);
+  font-size: 0.8rem;
+  cursor: pointer;
+  outline: none;
+}
+
+.admin-action-btn select:hover {
+  background: var(--accent);
+  color: white;
+  border-color: var(--accent);
+}

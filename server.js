@@ -504,7 +504,7 @@ app.get('/api/groups/:id', authMiddleware, async (req, res) => {
   
   const group = await pool.query(`
     SELECT c.id, c.title, c.created_at, 
-           json_agg(json_build_object('id', u.id, 'username', u.username, 'role', cp.role)) as participants
+           json_agg(json_build_object('id', u.id, 'username', u.username, 'role', cp.role, 'muted_until', cp.muted_until)) as participants
     FROM conversations c
     JOIN conversation_participants cp ON cp.conversation_id = c.id
     JOIN users u ON u.id = cp.user_id
@@ -1118,6 +1118,115 @@ app.post('/api/groups/:id/mute', authMiddleware, async (req, res) => {
     SET muted_until = NOW() + ($1 || ' minutes')::interval
     WHERE conversation_id = $2 AND user_id = $3
   `, [minutes, groupId, userId]);
+
+  res.json({ success: true });
+});
+
+// Снять статус админа (только owner)
+app.post('/api/groups/:id/demote', authMiddleware, async (req, res) => {
+  const groupId = parseInt(req.params.id, 10);
+  const { userId } = req.body;
+
+  if (!userId) {
+    return res.status(400).json({ error: 'User ID required' });
+  }
+
+  // Проверяем, что текущий пользователь — owner
+  const requester = await pool.query(`
+    SELECT role FROM conversation_participants
+    WHERE conversation_id = $1 AND user_id = $2
+  `, [groupId, req.userId]);
+
+  if (requester.rows.length === 0 || requester.rows[0].role !== 'owner') {
+    return res.status(403).json({ error: 'Only the group owner can demote admins' });
+  }
+
+  // Понижаем указанного участника (если он admin)
+  await pool.query(`
+    UPDATE conversation_participants
+    SET role = 'member'
+    WHERE conversation_id = $1 AND user_id = $2 AND role = 'admin'
+  `, [groupId, userId]);
+
+  res.json({ success: true });
+});
+
+// Размутить участника (owner или admin)
+app.post('/api/groups/:id/unmute', authMiddleware, async (req, res) => {
+  const groupId = parseInt(req.params.id, 10);
+  const { userId } = req.body;
+
+  if (!userId) {
+    return res.status(400).json({ error: 'User ID required' });
+  }
+
+  // Проверяем права текущего пользователя
+  const requester = await pool.query(`
+    SELECT role FROM conversation_participants
+    WHERE conversation_id = $1 AND user_id = $2
+  `, [groupId, req.userId]);
+
+  if (requester.rows.length === 0) {
+    return res.status(404).json({ error: 'Not a member' });
+  }
+
+  if (requester.rows[0].role !== 'owner' && requester.rows[0].role !== 'admin') {
+    return res.status(403).json({ error: 'Only admins can unmute members' });
+  }
+
+  // Сбрасываем muted_until
+  await pool.query(`
+    UPDATE conversation_participants
+    SET muted_until = NULL
+    WHERE conversation_id = $1 AND user_id = $2
+  `, [groupId, userId]);
+
+  res.json({ success: true });
+});
+
+// Кикнуть участника (owner или admin)
+app.delete('/api/groups/:id/kick/:userId', authMiddleware, async (req, res) => {
+  const groupId = parseInt(req.params.id, 10);
+  const targetUserId = parseInt(req.params.userId, 10);
+
+  if (!targetUserId) {
+    return res.status(400).json({ error: 'User ID required' });
+  }
+
+  // Проверяем права текущего пользователя
+  const requester = await pool.query(`
+    SELECT role FROM conversation_participants
+    WHERE conversation_id = $1 AND user_id = $2
+  `, [groupId, req.userId]);
+
+  if (requester.rows.length === 0) {
+    return res.status(404).json({ error: 'Not a member' });
+  }
+
+  if (requester.rows[0].role !== 'owner' && requester.rows[0].role !== 'admin') {
+    return res.status(403).json({ error: 'Only admins can kick members' });
+  }
+
+  // Проверяем, что целевой участник существует
+  const target = await pool.query(`
+    SELECT role FROM conversation_participants
+    WHERE conversation_id = $1 AND user_id = $2
+  `, [groupId, targetUserId]);
+
+  if (target.rows.length === 0) {
+    return res.status(404).json({ error: 'User not in group' });
+  }
+
+  // Нельзя кикнуть владельца
+  if (target.rows[0].role === 'owner') {
+    return res.status(403).json({ error: 'Cannot kick the group owner' });
+  }
+
+  // Удаляем участника
+  await pool.query(`
+    DELETE FROM conversation_participants
+    WHERE conversation_id = $1 AND user_id = $2
+  `, [groupId, targetUserId]);
 
   res.json({ success: true });
 });
