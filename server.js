@@ -1,4 +1,5 @@
 require('dotenv').config();
+const { uploadToGoogleDrive } = require('./googleDrive');
 const express = require('express');
 const cors = require('cors');
 const bcrypt = require('bcryptjs');
@@ -10,20 +11,10 @@ const path = require('path');
 const multer = require('multer');
 const fs = require('fs');
 
-// Создаем папку uploads, если её нет
-if (!fs.existsSync('uploads')) {
-  fs.mkdirSync('uploads');
-}
-
-// Настройка Multer для загрузки файлов
-const storage = multer.diskStorage({
-  destination: 'uploads/',
-  filename: (req, file, cb) => {
-    // Генерируем уникальное имя файла: время-оригинальноеИмя
-    cb(null, Date.now() + '-' + file.originalname);
-  }
+const upload = multer({ 
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 50 * 1024 * 1024 } // ограничение 50 МБ (как у тебя)
 });
-const upload = multer({ storage });
 
 function generateFriendCode() {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -1093,16 +1084,29 @@ app.get('/api/groups/:id/members', authMiddleware, async (req, res) => {
 });
 
 // ---- FILE UPLOAD ----
-app.post('/api/upload', authMiddleware, upload.single('file'), (req, res) => {
+app.post('/api/upload', authMiddleware, upload.single('file'), async (req, res) => {
   if (!req.file) {
     return res.status(400).json({ error: 'No file uploaded' });
   }
-  // Возвращаем данные о файле
-  res.json({
-    url: '/uploads/' + encodeURIComponent(req.file.filename),   // <-- кодируем
-    name: req.file.originalname,
-    type: req.file.mimetype
-  });
+
+  try {
+    // Загружаем файл в Google Drive
+    const fileUrl = await uploadToGoogleDrive(
+      req.file.buffer,          // данные файла
+      req.file.originalname,    // оригинальное имя
+      req.file.mimetype         // MIME-тип
+    );
+
+    // Возвращаем данные о файле (URL от Google Drive)
+    res.json({
+      url: fileUrl,
+      name: req.file.originalname,
+      type: req.file.mimetype
+    });
+  } catch (error) {
+    console.error('Upload error:', error);
+    res.status(500).json({ error: 'Failed to upload file' });
+  }
 });
 
 // Повысить участника до админа (только owner)
@@ -1344,7 +1348,7 @@ app.delete('/api/groups/:id/kick/:userId', authMiddleware, async (req, res) => {
 });
 
 // Раздаем файлы из папки uploads
-app.use('/uploads', express.static('uploads'));
+//app.use('/uploads', express.static('uploads'));   уже нет
 
 app.get('*', (req, res) => {
   if (req.path.startsWith('/api/')) return res.status(404).json({ error: 'Not found' });
