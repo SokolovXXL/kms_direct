@@ -247,24 +247,73 @@ function startNotificationStream() {
     try {
       const data = JSON.parse(e.data);
       if (data.type === 'new_message') {
-        const convId = data.conversationId;
-        const message = data.message;
-        unreadByConvo[convId] = (unreadByConvo[convId] || 0) + 1;
-        
-        playNotificationSound(convId);
-        
-        if (currentConversationId === convId && message) {
-          appendMessageToChat(message);
-        } else {
-          updateSidebarRow(convId, message ? message.body : null);
-        }
+        // ... (существующий код)
       } else if (data.type === 'new_group') {
-        // Обновляем список разговоров при создании новой группы
         loadConversationList();
       } else if (data.type === 'added_to_group') {
-        // Обновляем список при добавлении в группу
+        loadConversationList();
+      } 
+      // --- НОВЫЕ ОБРАБОТЧИКИ ---
+      else if (data.type === 'message_deleted') {
+        // Если удалённое сообщение находится в текущем открытом чате
+        if (currentConversationId === data.conversationId) {
+          const msgElement = document.querySelector(`.message[data-message-id="${data.messageId}"]`);
+          if (msgElement) {
+            msgElement.remove();
+          }
+        }
+        // Обновляем список чатов, чтобы превью обновилось
         loadConversationList();
       }
+      else if (data.type === 'kicked_from_group') {
+        // Удаляем группу из кэша
+        conversationListCache = conversationListCache.filter(c => c.id !== data.conversationId);
+        // Если это текущий открытый чат – закрываем его
+        if (currentConversationId === data.conversationId) {
+          currentConversationId = null;
+          currentConversationIsGroup = false;
+          const chatPlaceholder = $('chat-placeholder');
+          const chatActive = $('chat-active');
+          if (chatPlaceholder) show(chatPlaceholder);
+          if (chatActive) hide(chatActive);
+          document.querySelectorAll('.dm-item').forEach(el => {
+            el.classList.remove('active');
+          });
+          hideGroupInfoButton();
+          if (isMobile()) {
+            showSidebar();
+          }
+        }
+        loadConversationList();
+        showToast('Вас удалили из группы', 'info');
+      }
+      else if (data.type === 'member_removed') {
+        // Обновляем список чатов (чтобы обновился состав группы)
+        loadConversationList();
+        // Если текущий открытый чат – эта группа, можно обновить информацию (опционально)
+      }
+      else if (data.type === 'group_deleted') {
+        // Группа полностью удалена
+        conversationListCache = conversationListCache.filter(c => c.id !== data.conversationId);
+        if (currentConversationId === data.conversationId) {
+          currentConversationId = null;
+          currentConversationIsGroup = false;
+          const chatPlaceholder = $('chat-placeholder');
+          const chatActive = $('chat-active');
+          if (chatPlaceholder) show(chatPlaceholder);
+          if (chatActive) hide(chatActive);
+          document.querySelectorAll('.dm-item').forEach(el => {
+            el.classList.remove('active');
+          });
+          hideGroupInfoButton();
+          if (isMobile()) {
+            showSidebar();
+          }
+        }
+        loadConversationList();
+        showToast('Группа удалена', 'info');
+      }
+      // --- КОНЕЦ НОВЫХ ОБРАБОТЧИКОВ ---
     } catch (_) {}
   };
   

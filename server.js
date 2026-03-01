@@ -885,9 +885,8 @@ app.delete('/api/messages/:id', authMiddleware, async (req, res) => {
 
   const message = r.rows[0];
 
-  // Проверяем, что пользователь — автор
+  // Проверяем права (автор или админ)
   if (message.sender_id !== req.userId) {
-    // Проверяем, является ли пользователь админом в этом чате
     const roleCheck = await pool.query(`
       SELECT role FROM conversation_participants
       WHERE conversation_id = $1 AND user_id = $2
@@ -897,20 +896,36 @@ app.delete('/api/messages/:id', authMiddleware, async (req, res) => {
         (roleCheck.rows[0].role !== 'owner' && roleCheck.rows[0].role !== 'admin')) {
       return res.status(403).json({ error: 'No permission to delete this message' });
     }
-    // Если админ — пропускаем, разрешаем удаление
   }
 
   // Удаляем уведомления по этому сообщению
-  await pool.query(
-    'DELETE FROM notifications WHERE message_id = $1',
-    [messageId]
-  );
+  await pool.query('DELETE FROM notifications WHERE message_id = $1', [messageId]);
 
   // Удаляем сообщение
-  await pool.query(
-    'DELETE FROM messages WHERE id = $1',
-    [messageId]
+  await pool.query('DELETE FROM messages WHERE id = $1', [messageId]);
+
+  // --- НОВЫЙ КОД: уведомляем всех участников беседы об удалении сообщения ---
+  const participants = await pool.query(
+    'SELECT user_id FROM conversation_participants WHERE conversation_id = $1',
+    [message.conversation_id]
   );
+
+  const deletePayload = {
+    type: 'message_deleted',
+    conversationId: message.conversation_id,
+    messageId: message.id
+  };
+
+  for (const row of participants.rows) {
+    const uid = row.user_id;
+    const clients = sseClients.get(uid);
+    if (clients) {
+      clients.forEach(r => {
+        try { r.write(`data: ${JSON.stringify(deletePayload)}\n\n`); } catch (_) {}
+      });
+    }
+  }
+  // --- КОНЕЦ НОВОГО КОДА ---
 
   res.json({ success: true });
 });
@@ -1193,6 +1208,13 @@ app.delete('/api/groups/:id/kick/:userId', authMiddleware, async (req, res) => {
     return res.status(400).json({ error: 'User ID required' });
   }
 
+  // Получаем список всех участников ДО удаления (для последующей рассылки)
+  const allParticipants = await pool.query(
+    'SELECT user_id FROM conversation_participants WHERE conversation_id = $1',
+    [groupId]
+  );
+  const allUserIds = allParticipants.rows.map(row => row.user_id);
+
   // Проверяем права текущего пользователя
   const requester = await pool.query(`
     SELECT role FROM conversation_participants
@@ -1227,6 +1249,56 @@ app.delete('/api/groups/:id/kick/:userId', authMiddleware, async (req, res) => {
     DELETE FROM conversation_participants
     WHERE conversation_id = $1 AND user_id = $2
   `, [groupId, targetUserId]);
+
+  // Проверяем, остались ли участники
+  const remaining = await pool.query(
+    'SELECT COUNT(*)::int AS c FROM conversation_participants WHERE conversation_id = $1',
+    [groupId]
+  );
+
+  if (remaining.rows[0].c === 0) {
+    // Группа удалена – уведомляем всех бывших участников
+    const groupDeletedPayload = {
+      type: 'group_deleted',
+      conversationId: groupId
+    };
+    for (const uid of allUserIds) {
+      const clients = sseClients.get(uid);
+      if (clients) {
+        clients.forEach(r => {
+          try { r.write(`data: ${JSON.stringify(groupDeletedPayload)}\n\n`); } catch (_) {}
+        });
+      }
+    }
+  } else {
+    // Группа осталась – уведомляем кикнутого
+    const kickedPayload = {
+      type: 'kicked_from_group',
+      conversationId: groupId
+    };
+    const kickedClients = sseClients.get(targetUserId);
+    if (kickedClients) {
+      kickedClients.forEach(r => {
+        try { r.write(`data: ${JSON.stringify(kickedPayload)}\n\n`); } catch (_) {}
+      });
+    }
+
+    // Уведомляем остальных участников об удалении участника
+    const memberRemovedPayload = {
+      type: 'member_removed',
+      conversationId: groupId,
+      userId: targetUserId
+    };
+    for (const uid of allUserIds) {
+      if (uid === targetUserId) continue; // кикнутому уже отправили
+      const clients = sseClients.get(uid);
+      if (clients) {
+        clients.forEach(r => {
+          try { r.write(`data: ${JSON.stringify(memberRemovedPayload)}\n\n`); } catch (_) {}
+        });
+      }
+    }
+  }
 
   res.json({ success: true });
 });
