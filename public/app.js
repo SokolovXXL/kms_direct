@@ -8,6 +8,12 @@ let unreadByConvo = {};
 let conversationListCache = [];
 let isAtBottom = true;
 let currentConversationIsGroup = false;
+let callActive = false;
+let localStream = null;
+let peerConnections = new Map(); // userId -> RTCPeerConnection
+let remoteStreams = new Map();   // userId -> MediaStream
+let signalingChannel = null;
+let currentCallId = null;
 
 const $ = (id) => document.getElementById(id);
 
@@ -618,7 +624,7 @@ async function selectConversation(convId) {
     if (conversation.isGroup) {
       displayName = conversation.title || 'Group';
     } else {
-      displayName = conversation.otherUser?.username || '…';
+      displayName = conversation.otherUser?.name || conversation.otherUser?.username || '…';
     }
   }
   if (chatWithName) chatWithName.textContent = displayName;
@@ -2096,12 +2102,6 @@ style.textContent = `
 `;
 document.head.appendChild(style);
 // ---- CALL HANDLING ----
-let callActive = false;
-let localStream = null;
-let peerConnections = new Map(); // userId -> RTCPeerConnection
-let remoteStreams = new Map(); // userId -> MediaStream
-let signalingChannel = null;
-let currentCallId = null;
 
 function initSignalingChannel() {
   if (!currentUser) return;
