@@ -247,28 +247,31 @@ function startNotificationStream() {
     try {
       const data = JSON.parse(e.data);
       if (data.type === 'new_message') {
-        // ... (существующий код)
+        const convId = data.conversationId;
+        const message = data.message;
+        unreadByConvo[convId] = (unreadByConvo[convId] || 0) + 1;
+        
+        playNotificationSound(convId);
+        
+        if (currentConversationId === convId && message) {
+          appendMessageToChat(message);
+        } else {
+          updateSidebarRow(convId, message ? message.body : null);
+        }
       } else if (data.type === 'new_group') {
         loadConversationList();
       } else if (data.type === 'added_to_group') {
         loadConversationList();
-      } 
-      // --- НОВЫЕ ОБРАБОТЧИКИ ---
-      else if (data.type === 'message_deleted') {
-        // Если удалённое сообщение находится в текущем открытом чате
+      } else if (data.type === 'message_deleted') {
         if (currentConversationId === data.conversationId) {
           const msgElement = document.querySelector(`.message[data-message-id="${data.messageId}"]`);
           if (msgElement) {
             msgElement.remove();
           }
         }
-        // Обновляем список чатов, чтобы превью обновилось
         loadConversationList();
-      }
-      else if (data.type === 'kicked_from_group') {
-        // Удаляем группу из кэша
+      } else if (data.type === 'kicked_from_group') {
         conversationListCache = conversationListCache.filter(c => c.id !== data.conversationId);
-        // Если это текущий открытый чат – закрываем его
         if (currentConversationId === data.conversationId) {
           currentConversationId = null;
           currentConversationIsGroup = false;
@@ -286,14 +289,9 @@ function startNotificationStream() {
         }
         loadConversationList();
         showToast('Вас удалили из группы', 'info');
-      }
-      else if (data.type === 'member_removed') {
-        // Обновляем список чатов (чтобы обновился состав группы)
+      } else if (data.type === 'member_removed') {
         loadConversationList();
-        // Если текущий открытый чат – эта группа, можно обновить информацию (опционально)
-      }
-      else if (data.type === 'group_deleted') {
-        // Группа полностью удалена
+      } else if (data.type === 'group_deleted') {
         conversationListCache = conversationListCache.filter(c => c.id !== data.conversationId);
         if (currentConversationId === data.conversationId) {
           currentConversationId = null;
@@ -313,7 +311,6 @@ function startNotificationStream() {
         loadConversationList();
         showToast('Группа удалена', 'info');
       }
-      // --- КОНЕЦ НОВЫХ ОБРАБОТЧИКОВ ---
     } catch (_) {}
   };
   
