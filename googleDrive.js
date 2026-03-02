@@ -10,7 +10,6 @@ async function uploadToGoogleDrive(fileBuffer, fileName, mimeType) {
     if (!process.env.GOOGLE_DRIVE_FOLDER_ID) {
       throw new Error('GOOGLE_DRIVE_FOLDER_ID environment variable is not set');
     }
-
     // Парсим JSON из переменной окружения
     const credentials = JSON.parse(process.env.GOOGLE_CREDENTIALS);
 
@@ -38,15 +37,16 @@ async function uploadToGoogleDrive(fileBuffer, fileName, mimeType) {
       resource: fileMetadata,
       media: media,
       fields: 'id, webViewLink',
+      supportsAllDrives: true,   // ← обязательно
     });
 
-    // Делаем файл общедоступным
     await drive.permissions.create({
       fileId: response.data.id,
       requestBody: {
         role: 'reader',
         type: 'anyone',
       },
+      supportsAllDrives: true,   // ← и здесь
     });
 
     console.log('File uploaded to Google Drive, ID:', response.data.id);
