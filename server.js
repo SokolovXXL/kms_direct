@@ -9,21 +9,64 @@ const { pool, initDb } = require('./db');
 const path = require('path');
 const multer = require('multer');
 const fs = require('fs');
+const crypto = require('crypto');
+
+
+
+
+// Функция для генерации безопасного имени
+function generateSafeFileName(originalName) {
+  const ext = path.extname(originalName).toLowerCase();
+  const allowedExt = ['.jpg', '.jpeg', '.png', '.gif', '.mp4', '.webm', '.mp3', '.pdf', '.txt'];
+  if (!allowedExt.includes(ext)) {
+    throw new Error('Недопустимое расширение файла');
+  }
+  const randomName = crypto.randomBytes(16).toString('hex');
+  return randomName + ext;
+}
+
+// Настройка multer
+const storage = multer.diskStorage({
+  destination: 'uploads/',
+  filename: (req, file, cb) => {
+    try {
+      const safeName = generateSafeFileName(file.originalname);
+      cb(null, safeName);
+    } catch (err) {
+      cb(err);
+    }
+  }
+});
+
+const upload = multer({
+  storage,
+  limits: { fileSize: 50 * 1024 * 1024 }, // 50 MB
+  fileFilter: (req, file, cb) => {
+    const allowedMimes = [
+      'image/jpeg', 'image/png', 'image/gif',
+      'video/mp4', 'video/webm',
+      'audio/mpeg', 'audio/ogg',
+      'application/pdf', 'text/plain'
+    ];
+    if (allowedMimes.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error('Недопустимый тип файла'));
+    }
+  }
+});
+
+
+
+
+
+
 
 // Создаем папку uploads, если её нет
 if (!fs.existsSync('uploads')) {
   fs.mkdirSync('uploads');
 }
 
-// Настройка Multer для загрузки файлов
-const storage = multer.diskStorage({
-  destination: 'uploads/',
-  filename: (req, file, cb) => {
-    // Генерируем уникальное имя файла: время-оригинальноеИмя
-    cb(null, Date.now() + '-' + file.originalname);
-  }
-});
-const upload = multer({ storage });
 
 function generateFriendCode() {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -706,6 +749,12 @@ app.post('/api/groups/:id/leave', authMiddleware, async (req, res) => {
   res.json({ success: true });
 });
 
+
+
+
+
+
+
 // ---- Messages ----
 // FIXED: Returns messages with sender username
 app.get('/api/conversations/:id/messages', authMiddleware, async (req, res) => {
@@ -738,6 +787,27 @@ app.post('/api/conversations/:id/messages', authMiddleware, async (req, res) => 
   const convId = parseInt(req.params.id, 10);
   const { body } = req.body || {};
   
+  // После получения body проверяем, не является ли оно файловым сообщением
+let parsedBody;
+try {
+  parsedBody = JSON.parse(body);
+} catch {
+  parsedBody = null;
+}
+
+if (parsedBody && parsedBody.type === 'file' && parsedBody.url) {
+  // Проверяем, что url ведёт на наши uploads и не содержит path traversal
+  const url = parsedBody.url;
+  if (!url.startsWith('/uploads/')) {
+    return res.status(400).json({ error: 'Invalid file URL' });
+  }
+  const filePath = path.join(__dirname, url);
+  if (!filePath.startsWith(path.join(__dirname, 'uploads'))) {
+    return res.status(400).json({ error: 'Invalid file path' });
+  }
+  // Можно также проверить существование файла (асинхронно, но для простоты пропустим)
+}
+
   if (!body || !String(body).trim()) return res.status(400).json({ error: 'Message body required' });
   
   const part = await pool.query(
@@ -750,6 +820,12 @@ app.post('/api/conversations/:id/messages', authMiddleware, async (req, res) => 
   const isMember = part.rows.some(p => p.user_id === req.userId);
   if (!isMember) return res.status(403).json({ error: 'Not in this conversation' });
   
+
+
+
+
+
+
   // Проверка, не замучен ли пользователь
   const muteCheck = await pool.query(`
     SELECT muted_until FROM conversation_participants

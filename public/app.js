@@ -1798,6 +1798,11 @@ function renderFileMessage(messageDiv, message) {
   try {
     let fileData;
     
+    if (!fileData.url.startsWith('/uploads/')) {
+      alert('Недопустимый URL файла');
+      return;
+    }
+    
     // Парсим сообщение
     if (typeof message.body === 'string') {
       try {
@@ -1958,6 +1963,14 @@ function renderFileMessage(messageDiv, message) {
 
 // Функция для открытия полноэкранного просмотра
 function openFullscreen(url, mimeType) {
+  
+  // Проверяем допустимость URL
+  if (!url.startsWith('/uploads/') && !url.startsWith('http://') && !url.startsWith('https://')) {
+    alert('Недопустимый URL файла');
+    return;
+  }
+
+  
   // Проверяем, не открыто ли уже модальное окно
   const existingModal = document.querySelector('.file-fullscreen-modal');
   if (existingModal) {
