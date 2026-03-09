@@ -80,6 +80,7 @@ function renderScreen() {
     if (!currentUser.friend_code) fetchMe();
     
     startNotificationStream();
+    initSignalingChannel(); 
     loadConversationList();
     loadNotificationCount();
     
@@ -350,6 +351,11 @@ function stopNotificationStream() {
   if (eventSource) {
     eventSource.close();
     eventSource = null;
+  }
+
+  if (signalingChannel) {
+    signalingChannel.close();
+    signalingChannel = null;
   }
 }
 
@@ -2156,6 +2162,17 @@ function initSignalingChannel() {
         endPeerConnection(data.fromUserId);
       } catch (err) {
         console.error('Error parsing call-ended:', err);
+      }
+    });
+    
+    // ДОБАВИТЬ обработчик отклонённого вызова
+    signalingChannel.addEventListener('call-rejected', (e) => {
+      try {
+        const data = JSON.parse(e.data);
+        alert(`User ${data.fromUserId} rejected the call`);
+        if (callActive) endCall();
+      } catch (err) {
+        console.error('Error parsing call-rejected:', err);
       }
     });
     
