@@ -77,7 +77,6 @@ function renderScreen() {
     if (!currentUser.friend_code) fetchMe();
     
     startNotificationStream();
-    initSignalingChannel(); 
     loadConversationList();
     loadNotificationCount();
     
@@ -363,11 +362,6 @@ function stopNotificationStream() {
   if (eventSource) {
     eventSource.close();
     eventSource = null;
-  }
-
-  if (signalingChannel) {
-    signalingChannel.close();
-    signalingChannel = null;
   }
 }
 
@@ -1778,173 +1772,6 @@ function removeUploadProgress(progressId) {
   }
 }
 
-<<<<<<< Updated upstream
-// Обновлённая функция рендеринга файлов
-function renderFileMessage(messageDiv, message) {
-  try {
-    let fileData;
-    
-    if (!fileData.url.startsWith('/uploads/')) {
-      alert('Недопустимый URL файла');
-      return;
-    }
-    
-    // Парсим сообщение
-    if (typeof message.body === 'string') {
-      try {
-        fileData = JSON.parse(message.body);
-      } catch (e) {
-        console.warn('Failed to parse message body as JSON:', e);
-        const bodyDiv = document.createElement('div');
-        bodyDiv.textContent = message.body;
-        messageDiv.appendChild(bodyDiv);
-        return;
-      }
-    } else {
-      fileData = message.body;
-    }
-
-    // Проверяем, что это действительно файл
-    if (!fileData || fileData.type !== 'file') {
-      throw new Error('Not a file message');
-    }
-
-    // Исправляем имя файла, если оно повреждено
-    if (fileData.name) {
-      fileData.name = fixMojibake(fileData.name);
-    }
-
-    const isImage = fileData.mime && fileData.mime.startsWith('image/');
-    const isVideo = fileData.mime && fileData.mime.startsWith('video/');
-    const isAudio = fileData.mime && fileData.mime.startsWith('audio/');
-
-    const fileDiv = document.createElement('div');
-    fileDiv.className = 'message-file-content';
-
-    // Для изображений и видео — только превью
-    if (isImage || isVideo) {
-      const previewDiv = document.createElement('div');
-      previewDiv.className = 'file-preview';
-
-      if (isImage) {
-        const img = document.createElement('img');
-        img.src = fileData.url;
-        img.alt = fileData.name || 'Image';
-        img.loading = 'lazy';
-        img.style.maxWidth = '100%';
-        img.style.maxHeight = '300px';
-        img.style.borderRadius = '8px';
-        img.style.cursor = 'pointer';
-        
-        // Обработка ошибки загрузки
-        img.onerror = () => {
-          img.style.display = 'none';
-          const errorSpan = document.createElement('span');
-          errorSpan.textContent = '⚠️ Не удалось загрузить изображение';
-          errorSpan.style.color = 'var(--danger)';
-          errorSpan.style.fontSize = '0.9rem';
-          previewDiv.appendChild(errorSpan);
-          console.error('Failed to load image:', fileData.url);
-        };
-        
-        img.addEventListener('click', () => openFullscreen(fileData.url, fileData.mime));
-        previewDiv.appendChild(img);
-      }else if (isVideo) {
-        const video = document.createElement('video');
-        video.src = fileData.url;
-        video.controls = true;
-        video.preload = 'metadata';
-        video.style.maxWidth = '100%';
-        video.style.maxHeight = '300px';
-        video.style.borderRadius = '8px';
-        
-        video.onerror = () => {
-          video.style.display = 'none';
-          const errorSpan = document.createElement('span');
-          errorSpan.textContent = '⚠️ Не удалось загрузить видео';
-          errorSpan.style.color = 'var(--danger)';
-          errorSpan.style.fontSize = '0.9rem';
-          previewDiv.appendChild(errorSpan);
-          console.error('Failed to load video:', fileData.url);
-        };
-        
-        video.addEventListener('click', () => openFullscreen(fileData.url, fileData.mime));
-        previewDiv.appendChild(video);
-      }
-
-      fileDiv.appendChild(previewDiv);
-    } else {
-      // Для всех остальных (аудио, документы и т.д.) — полный блок с информацией и кнопками
-      const headerDiv = document.createElement('div');
-      headerDiv.className = 'file-info-header';
-
-      const iconSpan = document.createElement('span');
-      iconSpan.className = 'file-icon';
-      iconSpan.textContent = getFileIcon(fileData.mime || '');
-      headerDiv.appendChild(iconSpan);
-
-      const infoDiv = document.createElement('div');
-      infoDiv.className = 'file-details';
-
-      // Имя файла (для аудио и прочих)
-      const nameDiv = document.createElement('div');
-      nameDiv.className = 'file-name';
-      nameDiv.textContent = fileData.name || 'Unnamed file';
-      infoDiv.appendChild(nameDiv);
-
-      // Размер, если есть
-      if (fileData.size) {
-        const sizeDiv = document.createElement('div');
-        sizeDiv.className = 'file-size';
-        sizeDiv.textContent = formatFileSize(fileData.size);
-        infoDiv.appendChild(sizeDiv);
-      }
-
-      headerDiv.appendChild(infoDiv);
-      fileDiv.appendChild(headerDiv);
-
-      // Превью для аудио
-      if (isAudio) {
-        const previewDiv = document.createElement('div');
-        previewDiv.className = 'file-preview audio-preview';
-        const audio = document.createElement('audio');
-        audio.src = fileData.url;
-        audio.controls = true;
-        audio.preload = 'metadata';
-        audio.style.width = '100%';
-        previewDiv.appendChild(audio);
-        fileDiv.appendChild(previewDiv);
-      }
-
-      // Кнопки действий
-      const actionsDiv = document.createElement('div');
-      actionsDiv.className = 'file-actions';
-
-      const downloadBtn = document.createElement('button');
-      downloadBtn.className = 'file-download-btn';
-      downloadBtn.innerHTML = '⬇️ Download';
-      downloadBtn.onclick = (e) => {
-        e.stopPropagation();
-        window.open(fileData.url, '_blank');
-      };
-      actionsDiv.appendChild(downloadBtn);
-
-      // Для изображений и видео добавили бы кнопку Preview, но они обработаны выше,
-      // сюда они не попадают, поэтому для аудио и других типов кнопка Preview не нужна.
-      // (можно при желании добавить для изображений/видео, но они уже в отдельной ветке)
-
-      fileDiv.appendChild(actionsDiv);
-    }
-
-    messageDiv.appendChild(fileDiv);
-
-  } catch (e) {
-    console.warn('Failed to render file message:', e);
-    // Если не удалось распарсить как файл, показываем как обычный текст
-    const bodyDiv = document.createElement('div');
-    bodyDiv.textContent = typeof message.body === 'string' ? message.body : JSON.stringify(message.body);
-    messageDiv.appendChild(bodyDiv);
-=======
 function renderFileMessage(messageDiv, fileData) {
   if (!fileData.url) {
     console.warn('File URL is missing');
@@ -1952,7 +1779,6 @@ function renderFileMessage(messageDiv, fileData) {
     errorDiv.textContent = '[File error: missing URL]';
     messageDiv.appendChild(errorDiv);
     return;
->>>>>>> Stashed changes
   }
 
   const isImage = fileData.mime && fileData.mime.startsWith('image/');
@@ -2070,18 +1896,6 @@ function renderFileMessage(messageDiv, fileData) {
 }
 
 function openFullscreen(url, mimeType) {
-<<<<<<< Updated upstream
-  
-  // Проверяем допустимость URL
-  if (!url.startsWith('/uploads/') && !url.startsWith('http://') && !url.startsWith('https://')) {
-    alert('Недопустимый URL файла');
-    return;
-  }
-
-  
-  // Проверяем, не открыто ли уже модальное окно
-=======
->>>>>>> Stashed changes
   const existingModal = document.querySelector('.file-fullscreen-modal');
   if (existingModal) {
     document.body.removeChild(existingModal);
@@ -2234,67 +2048,6 @@ function findConversationByUserId(userId) {
 function initSignalingChannel() {
   if (!currentUser) return;
   
-<<<<<<< Updated upstream
-  if (!signalingChannel) {
-    const url = `${API}/api/signaling`;
-    signalingChannel = new EventSource(url, { withCredentials: true });
-    
-    signalingChannel.addEventListener('offer', (e) => {
-      try {
-        const data = JSON.parse(e.data);
-        handleRemoteOffer(data);
-      } catch (err) {
-        console.error('Error parsing offer:', err);
-      }
-    });
-    
-    signalingChannel.addEventListener('answer', (e) => {
-      try {
-        const data = JSON.parse(e.data);
-        handleRemoteAnswer(data);
-      } catch (err) {
-        console.error('Error parsing answer:', err);
-      }
-    });
-    
-    signalingChannel.addEventListener('ice-candidate', (e) => {
-      try {
-        const data = JSON.parse(e.data);
-        handleRemoteCandidate(data);
-      } catch (err) {
-        console.error('Error parsing ice-candidate:', err);
-      }
-    });
-    
-    signalingChannel.addEventListener('call-ended', (e) => {
-      try {
-        const data = JSON.parse(e.data);
-        endPeerConnection(data.fromUserId);
-      } catch (err) {
-        console.error('Error parsing call-ended:', err);
-      }
-    });
-    
-    // ДОБАВИТЬ обработчик отклонённого вызова
-    signalingChannel.addEventListener('call-rejected', (e) => {
-      try {
-        const data = JSON.parse(e.data);
-        alert(`User ${data.fromUserId} rejected the call`);
-        if (callActive) endCall();
-      } catch (err) {
-        console.error('Error parsing call-rejected:', err);
-      }
-    });
-    
-    signalingChannel.onerror = () => {
-      console.error('Signaling error');
-      signalingChannel.close();
-      signalingChannel = null;
-      // Auto-reconnect in a few seconds
-      setTimeout(initSignalingChannel, 3000);
-    };
-  }
-=======
   if (signalingChannel) return;
   
   const url = `${API}/api/signaling`;
@@ -2353,7 +2106,6 @@ function initSignalingChannel() {
     signalingChannel = null;
     setTimeout(initSignalingChannel, 3000);
   };
->>>>>>> Stashed changes
 }
 
 async function startCall() {
