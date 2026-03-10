@@ -1253,16 +1253,24 @@ app.get('/api/groups/:id/members', authMiddleware, async (req, res) => {
 
 // ---- FILE UPLOAD ----
 app.post('/api/upload', authMiddleware, upload.single('file'), (req, res) => {
+  // Сначала проверяем, есть ли файл
   if (!req.file) {
     return res.status(400).json({ error: 'No file uploaded' });
   }
+
+  const originalName = req.file.originalname;
+  const fixedName = /[Ð-ÿ]/.test(originalName)
+    ? Buffer.from(originalName, 'latin1').toString('utf8')
+    : originalName;
+
+  console.log('Original filename:', originalName, 'Fixed:', fixedName);
+
   res.json({
     url: '/uploads/' + encodeURIComponent(req.file.filename),
-    name: req.file.originalname,
+    name: fixedName,
     type: req.file.mimetype
   });
-}, 
-(error, req, res, next) => {
+}, (error, req, res, next) => {
   if (error instanceof multer.MulterError) {
     if (error.code === 'LIMIT_FILE_SIZE') {
       return res.status(400).json({ error: 'File too large. Max 10MB.' });

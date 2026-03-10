@@ -635,10 +635,6 @@ async function restoreLastConversation() {
 async function selectConversation(convId) {
   convId = parseInt(convId, 10);
   
-  if (callActive) {
-    await endCall();
-  }
-  
   currentConversationId = convId;
   localStorage.setItem('lastConversationId', convId);
   
@@ -683,10 +679,14 @@ async function selectConversation(convId) {
   });
   
   const btn = $('btn-call');
-  if (btn && conversation) {
-    btn.style.display = 'block';
-  } else if (btn) {
-    btn.style.display = 'none';
+  if (btn) {
+    if (callActive) {
+      btn.style.display = 'none';
+    } else if (conversation) {
+      btn.style.display = 'block';
+    } else {
+      btn.style.display = 'none';
+    }
   }
   
   loadMessages(convId);
