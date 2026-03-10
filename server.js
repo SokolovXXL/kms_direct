@@ -41,12 +41,16 @@ const upload = multer({
       'video/mp4', 'video/webm', 'video/ogg',
       'audio/mpeg', 'audio/ogg', 'audio/wav',
       'application/pdf', 'text/plain', 'application/msword',
-      'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'application/zip', 'application/x-zip-compressed',
+      'application/x-rar-compressed', 'application/x-7z-compressed',
+      'application/vnd.ms-excel', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'application/vnd.ms-powerpoint', 'application/vnd.openxmlformats-officedocument.presentationml.presentation'
     ];
     if (allowedTypes.includes(file.mimetype)) {
       cb(null, true);
     } else {
-      cb(new Error('Invalid file type. Only images, documents, videos and audio are allowed.'));
+      cb(new Error('Invalid file type. Only images, documents, videos, audio and archives are allowed.'));
     }
   }
 });
@@ -1257,13 +1261,18 @@ app.post('/api/upload', authMiddleware, upload.single('file'), (req, res) => {
     name: req.file.originalname,
     type: req.file.mimetype
   });
-}, (error, req, res, next) => {
+}, 
+(error, req, res, next) => {
   if (error instanceof multer.MulterError) {
     if (error.code === 'LIMIT_FILE_SIZE') {
       return res.status(400).json({ error: 'File too large. Max 10MB.' });
     }
+    // Другие возможные ошибки Multer
+    console.error('Multer error:', error);
+    return res.status(400).json({ error: 'File upload failed: ' + error.message });
   }
-  // Не раскрываем детали ошибки
+  // Другие ошибки
+  console.error('Upload error:', error);
   res.status(400).json({ error: 'File upload failed.' });
 });
 

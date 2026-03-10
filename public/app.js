@@ -2128,13 +2128,18 @@ async function startCall() {
     audioTrack.onended = () => {
       endCall();
     };
-    
+
+    const conversation = conversationListCache.find(c => c.id === currentConversationId);
+    if (!conversation) {
+      throw new Error('Conversation not found');
+    }
+
     updateCallStatus('Starting call...');
     currentCallId = `call_${Date.now()}`;
-    
+
     if (!conversation.isGroup && conversation.otherUser) {
       await createPeerConnection(conversation.otherUser.id, true);
-    } 
+    }
     else if (conversation.isGroup) {
       try {
         const groupData = await api(`/api/groups/${currentConversationId}`);

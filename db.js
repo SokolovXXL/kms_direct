@@ -7,6 +7,10 @@ const pool = new Pool({
   statement_timeout: 10000,
 });
 
+pool.on('connect', (client) => {
+  client.query("SET client_encoding TO 'UTF8'");
+});
+
 async function initDb() {
   const client = await pool.connect();
   try {
