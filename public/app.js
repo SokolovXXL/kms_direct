@@ -2111,16 +2111,18 @@ function initSignalingChannel() {
 async function startCall() {
   if (!currentConversationId) return;
   if (callActive) return;
-  
+
   try {
-    const conversation = conversationListCache.find(c => c.id === currentConversationId);
-    if (!conversation) return;
-    
     callActive = true;
     currentCallConversationId = currentConversationId;
     showCallUI();
     initSignalingChannel();
-    
+
+    // Проверить поддержку getUserMedia
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      throw new Error('Your browser does not support audio calls.');
+    }
+
     localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
     const audioTrack = localStream.getAudioTracks()[0];
     audioTrack.onended = () => {
@@ -2151,10 +2153,17 @@ async function startCall() {
     
   } catch (error) {
     console.error('Error starting call:', error);
-    alert('Failed to start call: ' + error.message);
+    let message = error.message;
+    if (error.name === 'NotAllowedError' || error.message.includes('Permission denied')) {
+      message = 'Microphone access denied. Please allow microphone permissions in your browser.';
+    } else if (error.name === 'NotFoundError') {
+      message = 'No microphone found. Please connect a microphone.';
+    }
+    alert('Failed to start call: ' + message);
     callActive = false;
     currentCallConversationId = null;
     updateCallStatus('');
+    hideCallUI();
     if (localStream) {
       localStream.getTracks().forEach(t => t.stop());
       localStream = null;
