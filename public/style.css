@@ -1723,3 +1723,22 @@ button,
     border-radius: 12px;
     cursor: pointer;
 }
+/* Исправление для Chrome и других браузеров */
+.message-audio {
+    max-width: 95%;
+    width: fit-content; /* Для совместимости */
+}
+
+.message-audio .media-message {
+    width: 100%;
+    display: block;
+}
+
+.message-audio .media-message audio {
+    width: 100% !important;   /* Принудительно */
+    min-width: 100%;
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+    border-radius: 8px;       /* Скругление, если нужно */
+}

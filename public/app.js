@@ -1835,7 +1835,6 @@ function renderFileMessage(messageDiv, fileData) {
       audio.src = fileData.url;
       audio.controls = true;
       audio.preload = 'metadata';
-      audio.style.width = '100%';
       audio.style.borderRadius = '8px';
       audio.onerror = () => {
           audio.style.display = 'none';
