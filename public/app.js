@@ -1832,27 +1832,22 @@ function renderFileMessage(messageDiv, fileData) {
     } else if (isAudio) {
         messageDiv.classList.add('message-audio');
 
-        // Создаём скрытый нативный аудиоэлемент
         const audio = document.createElement('audio');
         audio.src = fileData.url;
         audio.preload = 'metadata';
 
-        // Контейнер кастомного плеера
         const customPlayer = document.createElement('div');
         customPlayer.className = 'custom-audio-player';
 
-        // Кнопка play/pause
         const playBtn = document.createElement('button');
         playBtn.className = 'audio-play-btn';
         playBtn.innerHTML = '▶️';
         playBtn.setAttribute('aria-label', 'Play');
 
-        // Текущее время
         const timeCurrent = document.createElement('span');
         timeCurrent.className = 'audio-time-current';
         timeCurrent.textContent = '0:00';
 
-        // Контейнер прогресс-бара
         const progressContainer = document.createElement('div');
         progressContainer.className = 'audio-progress-container';
 
@@ -1860,14 +1855,16 @@ function renderFileMessage(messageDiv, fileData) {
         progressBar.className = 'audio-progress-bar';
         progressBar.style.width = '0%';
 
-        progressContainer.appendChild(progressBar);
+        const progressThumb = document.createElement('div');
+        progressThumb.className = 'audio-progress-thumb';
 
-        // Общее время
+        progressContainer.appendChild(progressBar);
+        progressContainer.appendChild(progressThumb);
+
         const timeTotal = document.createElement('span');
         timeTotal.className = 'audio-time-total';
         timeTotal.textContent = '0:00';
 
-        // Кнопка скачивания
         const downloadBtn = document.createElement('button');
         downloadBtn.className = 'audio-download-btn';
         downloadBtn.innerHTML = '⬇️';
@@ -1877,19 +1874,16 @@ function renderFileMessage(messageDiv, fileData) {
             window.open(fileData.url, '_blank');
         };
 
-        // Собираем плеер
         customPlayer.appendChild(playBtn);
         customPlayer.appendChild(timeCurrent);
         customPlayer.appendChild(progressContainer);
         customPlayer.appendChild(timeTotal);
         customPlayer.appendChild(downloadBtn);
 
-        // Добавляем в mediaContainer
         mediaContainer.appendChild(customPlayer);
-        // Скрытый audio тоже добавляем (нужен для работы)
         mediaContainer.appendChild(audio);
 
-        // Логика плеера
+        // Логика
         audio.addEventListener('loadedmetadata', () => {
             timeTotal.textContent = formatTime(audio.duration);
         });
@@ -1897,6 +1891,7 @@ function renderFileMessage(messageDiv, fileData) {
         audio.addEventListener('timeupdate', () => {
             const percent = (audio.currentTime / audio.duration) * 100 || 0;
             progressBar.style.width = percent + '%';
+            progressThumb.style.left = percent + '%';
             timeCurrent.textContent = formatTime(audio.currentTime);
         });
 
@@ -1913,6 +1908,7 @@ function renderFileMessage(messageDiv, fileData) {
         audio.addEventListener('ended', () => {
             playBtn.innerHTML = '▶️';
             progressBar.style.width = '0%';
+            progressThumb.style.left = '0%';
             timeCurrent.textContent = '0:00';
         });
 
@@ -1921,13 +1917,12 @@ function renderFileMessage(messageDiv, fileData) {
             const rect = progressContainer.getBoundingClientRect();
             const clickX = e.clientX - rect.left;
             const width = rect.width;
-            const percent = clickX / width;
+            const percent = Math.max(0, Math.min(1, clickX / width));
             if (audio.duration) {
                 audio.currentTime = percent * audio.duration;
             }
         });
 
-        // Обработка ошибок
         audio.onerror = () => {
             customPlayer.innerHTML = '⚠️ Не удалось загрузить аудио';
             customPlayer.style.color = 'var(--danger)';
