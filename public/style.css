@@ -1736,3 +1736,133 @@ button,
     box-sizing: border-box;
     border-radius: 8px;
 }
+
+/* Кастомный аудиоплеер */
+.custom-audio-player {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    background: var(--surface-hover);
+    border-radius: 24px;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.audio-play-btn {
+    background: var(--accent);
+    border: none;
+    border-radius: 50%;
+    width: 32px;
+    height: 32px;
+    font-size: 16px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    transition: background 0.2s;
+    flex-shrink: 0;
+    padding: 0;
+}
+
+.audio-play-btn:hover {
+    background: var(--accent-hover);
+}
+
+.audio-time-current,
+.audio-time-total {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    min-width: 40px;
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+}
+
+.audio-progress-container {
+    flex: 1;
+    height: 6px;
+    background: var(--border);
+    border-radius: 3px;
+    overflow: hidden;
+    cursor: pointer;
+    position: relative;
+    min-width: 60px;
+}
+
+.audio-progress-bar {
+    height: 100%;
+    background: var(--accent);
+    width: 0%;
+    border-radius: 3px;
+    transition: width 0.1s linear;
+}
+
+.audio-download-btn {
+    background: none;
+    border: none;
+    font-size: 1.2rem;
+    cursor: pointer;
+    color: var(--text-muted);
+    padding: 4px;
+    border-radius: 4px;
+    transition: background 0.2s;
+    flex-shrink: 0;
+    line-height: 1;
+}
+
+.audio-download-btn:hover {
+    background: var(--surface);
+    color: var(--text);
+}
+
+/* Скрываем нативный аудиоэлемент */
+.message-audio audio {
+    display: none;
+}
+
+/* Стили для своих сообщений */
+.message.mine .custom-audio-player {
+    background: rgba(255, 255, 255, 0.15);
+}
+
+.message.mine .audio-time-current,
+.message.mine .audio-time-total {
+    color: rgba(255, 255, 255, 0.8);
+}
+
+.message.mine .audio-progress-container {
+    background: rgba(255, 255, 255, 0.3);
+}
+
+.message.mine .audio-progress-bar {
+    background: white;
+}
+
+.message.mine .audio-download-btn {
+    color: rgba(255, 255, 255, 0.8);
+}
+
+.message.mine .audio-download-btn:hover {
+    background: rgba(255, 255, 255, 0.2);
+}
+
+/* Адаптация под мобильные */
+@media (max-width: 768px) {
+    .custom-audio-player {
+        padding: 6px 8px;
+        gap: 4px;
+    }
+
+    .audio-play-btn {
+        width: 28px;
+        height: 28px;
+        font-size: 14px;
+    }
+
+    .audio-time-current,
+    .audio-time-total {
+        font-size: 0.7rem;
+        min-width: 35px;
+    }
+}

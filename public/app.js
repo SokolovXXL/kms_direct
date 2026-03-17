@@ -1830,21 +1830,108 @@ function renderFileMessage(messageDiv, fileData) {
       video.addEventListener('click', () => openFullscreen(fileData.url, fileData.mime));
       mediaContainer.appendChild(video);
     } else if (isAudio) {
-      messageDiv.classList.add('message-audio');  // новый класс для расширения
-      const audio = document.createElement('audio');
-      audio.src = fileData.url;
-      audio.controls = true;
-      audio.preload = 'metadata';
-      audio.onerror = () => {
-          audio.style.display = 'none';
-          const errorSpan = document.createElement('span');
-          errorSpan.textContent = '⚠️ Не удалось загрузить аудио';
-          errorSpan.style.color = 'var(--danger)';
-          errorSpan.style.fontSize = '0.9rem';
-          mediaContainer.appendChild(errorSpan);
-          console.error('Failed to load audio:', fileData.url);
-      };
-      mediaContainer.appendChild(audio);
+        messageDiv.classList.add('message-audio');
+
+        // Создаём скрытый нативный аудиоэлемент
+        const audio = document.createElement('audio');
+        audio.src = fileData.url;
+        audio.preload = 'metadata';
+
+        // Контейнер кастомного плеера
+        const customPlayer = document.createElement('div');
+        customPlayer.className = 'custom-audio-player';
+
+        // Кнопка play/pause
+        const playBtn = document.createElement('button');
+        playBtn.className = 'audio-play-btn';
+        playBtn.innerHTML = '▶️';
+        playBtn.setAttribute('aria-label', 'Play');
+
+        // Текущее время
+        const timeCurrent = document.createElement('span');
+        timeCurrent.className = 'audio-time-current';
+        timeCurrent.textContent = '0:00';
+
+        // Контейнер прогресс-бара
+        const progressContainer = document.createElement('div');
+        progressContainer.className = 'audio-progress-container';
+
+        const progressBar = document.createElement('div');
+        progressBar.className = 'audio-progress-bar';
+        progressBar.style.width = '0%';
+
+        progressContainer.appendChild(progressBar);
+
+        // Общее время
+        const timeTotal = document.createElement('span');
+        timeTotal.className = 'audio-time-total';
+        timeTotal.textContent = '0:00';
+
+        // Кнопка скачивания
+        const downloadBtn = document.createElement('button');
+        downloadBtn.className = 'audio-download-btn';
+        downloadBtn.innerHTML = '⬇️';
+        downloadBtn.setAttribute('aria-label', 'Download');
+        downloadBtn.onclick = (e) => {
+            e.stopPropagation();
+            window.open(fileData.url, '_blank');
+        };
+
+        // Собираем плеер
+        customPlayer.appendChild(playBtn);
+        customPlayer.appendChild(timeCurrent);
+        customPlayer.appendChild(progressContainer);
+        customPlayer.appendChild(timeTotal);
+        customPlayer.appendChild(downloadBtn);
+
+        // Добавляем в mediaContainer
+        mediaContainer.appendChild(customPlayer);
+        // Скрытый audio тоже добавляем (нужен для работы)
+        mediaContainer.appendChild(audio);
+
+        // Логика плеера
+        audio.addEventListener('loadedmetadata', () => {
+            timeTotal.textContent = formatTime(audio.duration);
+        });
+
+        audio.addEventListener('timeupdate', () => {
+            const percent = (audio.currentTime / audio.duration) * 100 || 0;
+            progressBar.style.width = percent + '%';
+            timeCurrent.textContent = formatTime(audio.currentTime);
+        });
+
+        playBtn.addEventListener('click', () => {
+            if (audio.paused) {
+                audio.play();
+                playBtn.innerHTML = '⏸️';
+            } else {
+                audio.pause();
+                playBtn.innerHTML = '▶️';
+            }
+        });
+
+        audio.addEventListener('ended', () => {
+            playBtn.innerHTML = '▶️';
+            progressBar.style.width = '0%';
+            timeCurrent.textContent = '0:00';
+        });
+
+        // Перемотка по клику на прогресс-бар
+        progressContainer.addEventListener('click', (e) => {
+            const rect = progressContainer.getBoundingClientRect();
+            const clickX = e.clientX - rect.left;
+            const width = rect.width;
+            const percent = clickX / width;
+            if (audio.duration) {
+                audio.currentTime = percent * audio.duration;
+            }
+        });
+
+        // Обработка ошибок
+        audio.onerror = () => {
+            customPlayer.innerHTML = '⚠️ Не удалось загрузить аудио';
+            customPlayer.style.color = 'var(--danger)';
+        };
     }
 
     messageDiv.appendChild(mediaContainer);
@@ -1895,6 +1982,13 @@ function renderFileMessage(messageDiv, fileData) {
 
   fileDiv.appendChild(actionsDiv);
   messageDiv.appendChild(fileDiv);
+}
+
+function formatTime(seconds) {
+    if (isNaN(seconds) || seconds === Infinity) return '0:00';
+    const mins = Math.floor(seconds / 60);
+    const secs = Math.floor(seconds % 60);
+    return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
 }
 
 function openFullscreen(url, mimeType) {
