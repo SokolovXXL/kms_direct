@@ -1785,12 +1785,10 @@ function renderFileMessage(messageDiv, fileData) {
   const isVideo = fileData.mime && fileData.mime.startsWith('video/');
   const isAudio = fileData.mime && fileData.mime.startsWith('audio/');
 
-  const fileDiv = document.createElement('div');
-  fileDiv.className = 'message-file-content';
-
+  // --- Обработка изображений и видео (без рамки) ---
   if (isImage || isVideo) {
-    const previewDiv = document.createElement('div');
-    previewDiv.className = 'file-preview';
+    const mediaContainer = document.createElement('div');
+    mediaContainer.className = 'media-message'; // новый класс
 
     if (isImage) {
       const img = document.createElement('img');
@@ -1801,19 +1799,19 @@ function renderFileMessage(messageDiv, fileData) {
       img.style.maxHeight = '300px';
       img.style.borderRadius = '8px';
       img.style.cursor = 'pointer';
-      
+
       img.onerror = () => {
         img.style.display = 'none';
         const errorSpan = document.createElement('span');
         errorSpan.textContent = '⚠️ Не удалось загрузить изображение';
         errorSpan.style.color = 'var(--danger)';
         errorSpan.style.fontSize = '0.9rem';
-        previewDiv.appendChild(errorSpan);
+        mediaContainer.appendChild(errorSpan);
         console.error('Failed to load image:', fileData.url);
       };
-      
+
       img.addEventListener('click', () => openFullscreen(fileData.url, fileData.mime));
-      previewDiv.appendChild(img);
+      mediaContainer.appendChild(img);
     } else if (isVideo) {
       const video = document.createElement('video');
       video.src = fileData.url;
@@ -1822,76 +1820,81 @@ function renderFileMessage(messageDiv, fileData) {
       video.style.maxWidth = '100%';
       video.style.maxHeight = '300px';
       video.style.borderRadius = '8px';
-      
+
       video.onerror = () => {
         video.style.display = 'none';
         const errorSpan = document.createElement('span');
         errorSpan.textContent = '⚠️ Не удалось загрузить видео';
         errorSpan.style.color = 'var(--danger)';
         errorSpan.style.fontSize = '0.9rem';
-        previewDiv.appendChild(errorSpan);
+        mediaContainer.appendChild(errorSpan);
         console.error('Failed to load video:', fileData.url);
       };
-      
+
       video.addEventListener('click', () => openFullscreen(fileData.url, fileData.mime));
-      previewDiv.appendChild(video);
+      mediaContainer.appendChild(video);
     }
 
-    fileDiv.appendChild(previewDiv);
-  } else {
-    const headerDiv = document.createElement('div');
-    headerDiv.className = 'file-info-header';
-
-    const iconSpan = document.createElement('span');
-    iconSpan.className = 'file-icon';
-    iconSpan.textContent = getFileIcon(fileData.mime || '');
-    headerDiv.appendChild(iconSpan);
-
-    const infoDiv = document.createElement('div');
-    infoDiv.className = 'file-details';
-
-    const nameDiv = document.createElement('div');
-    nameDiv.className = 'file-name';
-    nameDiv.textContent = fileData.name || 'Unnamed file';
-    infoDiv.appendChild(nameDiv);
-
-    if (fileData.size) {
-      const sizeDiv = document.createElement('div');
-      sizeDiv.className = 'file-size';
-      sizeDiv.textContent = formatFileSize(fileData.size);
-      infoDiv.appendChild(sizeDiv);
-    }
-
-    headerDiv.appendChild(infoDiv);
-    fileDiv.appendChild(headerDiv);
-
-    if (isAudio) {
-      const previewDiv = document.createElement('div');
-      previewDiv.className = 'file-preview audio-preview';
-      const audio = document.createElement('audio');
-      audio.src = fileData.url;
-      audio.controls = true;
-      audio.preload = 'metadata';
-      audio.style.width = '100%';
-      previewDiv.appendChild(audio);
-      fileDiv.appendChild(previewDiv);
-    }
-
-    const actionsDiv = document.createElement('div');
-    actionsDiv.className = 'file-actions';
-
-    const downloadBtn = document.createElement('button');
-    downloadBtn.className = 'file-download-btn';
-    downloadBtn.innerHTML = '⬇️ Download';
-    downloadBtn.onclick = (e) => {
-      e.stopPropagation();
-      window.open(fileData.url, '_blank');
-    };
-    actionsDiv.appendChild(downloadBtn);
-
-    fileDiv.appendChild(actionsDiv);
+    messageDiv.appendChild(mediaContainer);
+    return; // Выходим, чтобы не добавлять стандартную обёртку
   }
 
+  // --- Далее идёт код для остальных файлов (документы, архивы, аудио) ---
+  // (он остаётся без изменений, просто перепечатан для целостности)
+  const fileDiv = document.createElement('div');
+  fileDiv.className = 'message-file-content';
+
+  const headerDiv = document.createElement('div');
+  headerDiv.className = 'file-info-header';
+
+  const iconSpan = document.createElement('span');
+  iconSpan.className = 'file-icon';
+  iconSpan.textContent = getFileIcon(fileData.mime || '');
+  headerDiv.appendChild(iconSpan);
+
+  const infoDiv = document.createElement('div');
+  infoDiv.className = 'file-details';
+
+  const nameDiv = document.createElement('div');
+  nameDiv.className = 'file-name';
+  nameDiv.textContent = fileData.name || 'Unnamed file';
+  infoDiv.appendChild(nameDiv);
+
+  if (fileData.size) {
+    const sizeDiv = document.createElement('div');
+    sizeDiv.className = 'file-size';
+    sizeDiv.textContent = formatFileSize(fileData.size);
+    infoDiv.appendChild(sizeDiv);
+  }
+
+  headerDiv.appendChild(infoDiv);
+  fileDiv.appendChild(headerDiv);
+
+  if (isAudio) {
+    const previewDiv = document.createElement('div');
+    previewDiv.className = 'file-preview audio-preview';
+    const audio = document.createElement('audio');
+    audio.src = fileData.url;
+    audio.controls = true;
+    audio.preload = 'metadata';
+    audio.style.width = '100%';
+    previewDiv.appendChild(audio);
+    fileDiv.appendChild(previewDiv);
+  }
+
+  const actionsDiv = document.createElement('div');
+  actionsDiv.className = 'file-actions';
+
+  const downloadBtn = document.createElement('button');
+  downloadBtn.className = 'file-download-btn';
+  downloadBtn.innerHTML = '⬇️ Download';
+  downloadBtn.onclick = (e) => {
+    e.stopPropagation();
+    window.open(fileData.url, '_blank');
+  };
+  actionsDiv.appendChild(downloadBtn);
+
+  fileDiv.appendChild(actionsDiv);
   messageDiv.appendChild(fileDiv);
 }
 
