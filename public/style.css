@@ -1719,20 +1719,20 @@ button,
 
 .message-audio {
     max-width: 95%;
-    width: fit-content; /* Для браузеров, поддерживающих fit-content */
+    width: fit-content;
 }
 
 .message-audio .media-message {
-    display: block;
     width: 100%;
+    display: block;
 }
 
 .message-audio .media-message audio {
     display: block;
     width: 100% !important;
     min-width: 100% !important;
-    max-width: 100% !important;
+    min-height: 40px;  /* критично для Chrome/Edge */
     height: auto;
     box-sizing: border-box;
-    border-radius: 8px; /* Опционально */
+    border-radius: 8px;
 }
