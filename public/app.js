@@ -1858,6 +1858,34 @@ function renderFileMessage(messageDiv, fileData) {
         const progressThumb = document.createElement('div');
         progressThumb.className = 'audio-progress-thumb';
 
+        let isDragging = false;
+        const onMouseMove = (e) => {
+            if (!isDragging) return;
+            e.preventDefault();
+            const rect = progressContainer.getBoundingClientRect();
+            let x = e.clientX - rect.left;
+            x = Math.max(0, Math.min(rect.width, x));
+            const percent = x / rect.width;
+            if (audio.duration) {
+                audio.currentTime = percent * audio.duration;
+            }
+        };
+
+        const onMouseUp = () => {
+            if (isDragging) {
+                isDragging = false;
+                document.removeEventListener('mousemove', onMouseMove);
+                document.removeEventListener('mouseup', onMouseUp);
+            }
+        };
+
+        progressThumb.addEventListener('mousedown', (e) => {
+            e.preventDefault();
+            isDragging = true;
+            document.addEventListener('mousemove', onMouseMove);
+            document.addEventListener('mouseup', onMouseUp);
+        });
+
         progressContainer.appendChild(progressBar);
         progressContainer.appendChild(progressThumb);
 
@@ -1889,10 +1917,12 @@ function renderFileMessage(messageDiv, fileData) {
         });
 
         audio.addEventListener('timeupdate', () => {
-            const percent = (audio.currentTime / audio.duration) * 100 || 0;
-            progressBar.style.width = percent + '%';
-            progressThumb.style.left = percent + '%';
-            timeCurrent.textContent = formatTime(audio.currentTime);
+            if (!isDragging) {
+                const percent = (audio.currentTime / audio.duration) * 100 || 0;
+                progressBar.style.width = percent + '%';
+                progressThumb.style.left = percent + '%';
+                timeCurrent.textContent = formatTime(audio.currentTime);
+            }
         });
 
         playBtn.addEventListener('click', () => {

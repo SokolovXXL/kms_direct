@@ -2029,3 +2029,171 @@ button,
         height: 10px;
     }
 }
+
+/* Кастомный аудиоплеер — тёмный, квадратный стиль */
+.custom-audio-player {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    background: var(--surface);
+    border-radius: 8px;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.audio-play-btn {
+    background: #2a2a32;
+    border: none;
+    border-radius: 4px;
+    width: 32px;
+    height: 32px;
+    font-size: 16px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #e8e8ec;
+    transition: background 0.2s;
+    flex-shrink: 0;
+    padding: 0;
+}
+
+.audio-play-btn:hover {
+    background: #3a3a44;
+}
+
+.audio-time-current,
+.audio-time-total {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    min-width: 40px;
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+}
+
+.audio-progress-container {
+    flex: 1;
+    height: 4px;
+    background: var(--border);
+    border-radius: 2px;
+    cursor: pointer;
+    position: relative;
+    min-width: 60px;
+}
+
+.audio-progress-bar {
+    position: absolute;
+    top: 0;
+    left: 0;
+    height: 100%;
+    background: var(--accent);
+    width: 0%;
+    border-radius: 2px;
+    pointer-events: none;
+}
+
+.audio-progress-thumb {
+    position: absolute;
+    top: 50%;
+    left: 0;
+    width: 14px;
+    height: 14px;
+    background: white;
+    border-radius: 50%;
+    transform: translate(-50%, -50%);
+    box-shadow: 0 1px 4px rgba(0,0,0,0.5);
+    cursor: grab;
+    z-index: 2;
+    opacity: 1;
+}
+
+.audio-progress-thumb:active {
+    cursor: grabbing;
+}
+
+.audio-download-btn {
+    background: #2a2a32;
+    border: none;
+    border-radius: 4px;
+    width: 32px;
+    height: 32px;
+    font-size: 1.2rem;
+    cursor: pointer;
+    color: #e8e8ec;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.2s;
+    flex-shrink: 0;
+    padding: 0;
+    line-height: 1;
+}
+
+.audio-download-btn:hover {
+    background: #3a3a44;
+}
+
+/* Скрываем нативный аудиоэлемент */
+.message-audio audio {
+    display: none;
+}
+
+/* Стили для своих сообщений */
+.message.mine .custom-audio-player {
+    background: rgba(255, 255, 255, 0.15);
+}
+
+.message.mine .audio-play-btn,
+.message.mine .audio-download-btn {
+    background: rgba(255, 255, 255, 0.2);
+    color: white;
+}
+
+.message.mine .audio-play-btn:hover,
+.message.mine .audio-download-btn:hover {
+    background: rgba(255, 255, 255, 0.3);
+}
+
+.message.mine .audio-time-current,
+.message.mine .audio-time-total {
+    color: rgba(255, 255, 255, 0.8);
+}
+
+.message.mine .audio-progress-container {
+    background: rgba(255, 255, 255, 0.3);
+}
+
+.message.mine .audio-progress-bar {
+    background: white;
+}
+
+.message.mine .audio-progress-thumb {
+    background: white;
+}
+
+/* Адаптация под мобильные */
+@media (max-width: 768px) {
+    .custom-audio-player {
+        padding: 6px 8px;
+        gap: 4px;
+    }
+
+    .audio-play-btn,
+    .audio-download-btn {
+        width: 28px;
+        height: 28px;
+        font-size: 14px;
+    }
+
+    .audio-time-current,
+    .audio-time-total {
+        font-size: 0.7rem;
+        min-width: 35px;
+    }
+
+    .audio-progress-thumb {
+        width: 12px;
+        height: 12px;
+    }
+}
