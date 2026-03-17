@@ -1704,16 +1704,8 @@ button,
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
 }
 
-/* Сообщения с аудио занимают почти всю ширину */
-.message-audio {
-    max-width: 95%;
-}
 
-.message-audio .media-message audio {
-    width: 100%;
-    display: block;
-    border-radius: 8px;
-}
+
 
 /* Для изображений и видео оставляем стандартную ширину */
 .media-message img,
@@ -1723,22 +1715,24 @@ button,
     border-radius: 12px;
     cursor: pointer;
 }
-/* Исправление для Chrome и других браузеров */
+
+
 .message-audio {
     max-width: 95%;
-    width: fit-content; /* Для совместимости */
+    width: fit-content; /* Для браузеров, поддерживающих fit-content */
 }
 
 .message-audio .media-message {
-    width: 100%;
     display: block;
+    width: 100%;
 }
 
 .message-audio .media-message audio {
-    width: 100% !important;   /* Принудительно */
-    min-width: 100%;
+    display: block;
+    width: 100% !important;
+    min-width: 100% !important;
+    max-width: 100% !important;
+    height: auto;
     box-sizing: border-box;
-    margin: 0;
-    padding: 0;
-    border-radius: 8px;       /* Скругление, если нужно */
+    border-radius: 8px; /* Опционально */
 }
