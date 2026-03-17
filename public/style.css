@@ -1676,6 +1676,11 @@ button,
   max-width: 100%;
 }
 
+.media-message audio {
+  margin: 0;
+  display: block;
+}
+
 .media-message img,
 .media-message video {
   border-radius: 12px;

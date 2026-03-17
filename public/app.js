@@ -1785,10 +1785,10 @@ function renderFileMessage(messageDiv, fileData) {
   const isVideo = fileData.mime && fileData.mime.startsWith('video/');
   const isAudio = fileData.mime && fileData.mime.startsWith('audio/');
 
-  // --- Обработка изображений и видео (без рамки) ---
-  if (isImage || isVideo) {
+  // --- Обработка изображений, видео и аудио (без дополнительной обёртки, только медиа) ---
+  if (isImage || isVideo || isAudio) {
     const mediaContainer = document.createElement('div');
-    mediaContainer.className = 'media-message'; // новый класс
+    mediaContainer.className = 'media-message';
 
     if (isImage) {
       const img = document.createElement('img');
@@ -1799,7 +1799,6 @@ function renderFileMessage(messageDiv, fileData) {
       img.style.maxHeight = '300px';
       img.style.borderRadius = '8px';
       img.style.cursor = 'pointer';
-
       img.onerror = () => {
         img.style.display = 'none';
         const errorSpan = document.createElement('span');
@@ -1809,7 +1808,6 @@ function renderFileMessage(messageDiv, fileData) {
         mediaContainer.appendChild(errorSpan);
         console.error('Failed to load image:', fileData.url);
       };
-
       img.addEventListener('click', () => openFullscreen(fileData.url, fileData.mime));
       mediaContainer.appendChild(img);
     } else if (isVideo) {
@@ -1820,7 +1818,6 @@ function renderFileMessage(messageDiv, fileData) {
       video.style.maxWidth = '100%';
       video.style.maxHeight = '300px';
       video.style.borderRadius = '8px';
-
       video.onerror = () => {
         video.style.display = 'none';
         const errorSpan = document.createElement('span');
@@ -1830,17 +1827,33 @@ function renderFileMessage(messageDiv, fileData) {
         mediaContainer.appendChild(errorSpan);
         console.error('Failed to load video:', fileData.url);
       };
-
       video.addEventListener('click', () => openFullscreen(fileData.url, fileData.mime));
       mediaContainer.appendChild(video);
+    } else if (isAudio) {
+      const audio = document.createElement('audio');
+      audio.src = fileData.url;
+      audio.controls = true;
+      audio.preload = 'metadata';
+      audio.style.width = '100%'; // Растягиваем на всю ширину контейнера
+      audio.style.borderRadius = '8px';
+      audio.onerror = () => {
+        audio.style.display = 'none';
+        const errorSpan = document.createElement('span');
+        errorSpan.textContent = '⚠️ Не удалось загрузить аудио';
+        errorSpan.style.color = 'var(--danger)';
+        errorSpan.style.fontSize = '0.9rem';
+        mediaContainer.appendChild(errorSpan);
+        console.error('Failed to load audio:', fileData.url);
+      };
+      // Для аудио не добавляем обработчик клика (полноэкранный режим не нужен)
+      mediaContainer.appendChild(audio);
     }
 
     messageDiv.appendChild(mediaContainer);
-    return; // Выходим, чтобы не добавлять стандартную обёртку
+    return; // Завершаем, чтобы не создавать стандартную обёртку
   }
 
-  // --- Далее идёт код для остальных файлов (документы, архивы, аудио) ---
-  // (он остаётся без изменений, просто перепечатан для целостности)
+  // --- Остальные файлы (документы, архивы и т.д.) ---
   const fileDiv = document.createElement('div');
   fileDiv.className = 'message-file-content';
 
@@ -1869,18 +1882,6 @@ function renderFileMessage(messageDiv, fileData) {
 
   headerDiv.appendChild(infoDiv);
   fileDiv.appendChild(headerDiv);
-
-  if (isAudio) {
-    const previewDiv = document.createElement('div');
-    previewDiv.className = 'file-preview audio-preview';
-    const audio = document.createElement('audio');
-    audio.src = fileData.url;
-    audio.controls = true;
-    audio.preload = 'metadata';
-    audio.style.width = '100%';
-    previewDiv.appendChild(audio);
-    fileDiv.appendChild(previewDiv);
-  }
 
   const actionsDiv = document.createElement('div');
   actionsDiv.className = 'file-actions';
