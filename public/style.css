@@ -134,12 +134,12 @@ body {
 
 @media (max-width: 768px) {
   .logo {
-    height: 24px;
+    height: 60px;
   }
 }
 
 .logo {
-  height: 30px;
+  height: 90px;
   width: auto;
   display: inline-block;
   vertical-align: middle;
