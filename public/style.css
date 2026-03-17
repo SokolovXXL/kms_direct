@@ -1703,3 +1703,23 @@ button,
 .message.mine .media-message video {
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
 }
+
+/* Сообщения с аудио занимают почти всю ширину */
+.message-audio {
+    max-width: 95%;
+}
+
+.message-audio .media-message audio {
+    width: 100%;
+    display: block;
+    border-radius: 8px;
+}
+
+/* Для изображений и видео оставляем стандартную ширину */
+.media-message img,
+.media-message video {
+    max-width: 100%;
+    max-height: 300px;
+    border-radius: 12px;
+    cursor: pointer;
+}

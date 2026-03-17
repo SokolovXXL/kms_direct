@@ -1830,22 +1830,22 @@ function renderFileMessage(messageDiv, fileData) {
       video.addEventListener('click', () => openFullscreen(fileData.url, fileData.mime));
       mediaContainer.appendChild(video);
     } else if (isAudio) {
+      messageDiv.classList.add('message-audio');  // новый класс для расширения
       const audio = document.createElement('audio');
       audio.src = fileData.url;
       audio.controls = true;
       audio.preload = 'metadata';
-      audio.style.width = '100%'; // Растягиваем на всю ширину контейнера
+      audio.style.width = '100%';
       audio.style.borderRadius = '8px';
       audio.onerror = () => {
-        audio.style.display = 'none';
-        const errorSpan = document.createElement('span');
-        errorSpan.textContent = '⚠️ Не удалось загрузить аудио';
-        errorSpan.style.color = 'var(--danger)';
-        errorSpan.style.fontSize = '0.9rem';
-        mediaContainer.appendChild(errorSpan);
-        console.error('Failed to load audio:', fileData.url);
+          audio.style.display = 'none';
+          const errorSpan = document.createElement('span');
+          errorSpan.textContent = '⚠️ Не удалось загрузить аудио';
+          errorSpan.style.color = 'var(--danger)';
+          errorSpan.style.fontSize = '0.9rem';
+          mediaContainer.appendChild(errorSpan);
+          console.error('Failed to load audio:', fileData.url);
       };
-      // Для аудио не добавляем обработчик клика (полноэкранный режим не нужен)
       mediaContainer.appendChild(audio);
     }
 
