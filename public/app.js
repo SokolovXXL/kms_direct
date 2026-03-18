@@ -1440,17 +1440,33 @@ async function showGroupInfo(groupId, groupTitle) {
       const nameSpan = document.createElement('span');
       nameSpan.textContent = (member.name || member.username) + (member.id === currentUser.id ? ' (you)' : '');
       leftDiv.appendChild(nameSpan);
-      
+
+      const ownerImg = document.createElement('img');
+      const adminImg = document.createElement('img');
       const roleSpan = document.createElement('span');
-      if (member.role === 'owner') roleSpan.textContent = '👑';
-      else if (member.role === 'admin') roleSpan.textContent = '⭐';
+      if (member.role === 'owner'){
+        ownerImg.src = '/images/owner.png';
+        ownerImg.alt = 'Owner';
+        ownerImg.style.width = '20px';
+        ownerImg.style.height = '20px';
+        roleSpan.appendChild(ownerImg);
+      } else if (member.role === 'admin'){
+        adminImg.src = '/images/admin.png';
+        adminImg.alt = 'Admin';
+        adminImg.style.width = '20px';
+        adminImg.style.height = '20px';
+        roleSpan.appendChild(adminImg);
+      }
       leftDiv.appendChild(roleSpan);
       
       if (member.muted_until && new Date(member.muted_until) > new Date()) {
-        const mutedIcon = document.createElement('span');
-        mutedIcon.textContent = '🔇';
-        mutedIcon.title = `Muted until ${new Date(member.muted_until).toLocaleString()}`;
-        leftDiv.appendChild(mutedIcon);
+        const mutedImg = document.createElement('img');
+        mutedImg.src = '/images/mute.png';
+        mutedImg.alt = 'Muted';
+        mutedImg.style.width = '18px';
+        mutedImg.style.height = '18px';
+        mutedImg.title = `Muted until ${new Date(member.muted_until).toLocaleString()}`;
+        leftDiv.appendChild(mutedImg);
       }
       
       li.appendChild(leftDiv);
@@ -1505,59 +1521,74 @@ async function showGroupInfo(groupId, groupTitle) {
           const isMuted = member.muted_until && new Date(member.muted_until) > new Date();
           
           if (isMuted) {
-            const unmuteBtn = document.createElement('button');
-            unmuteBtn.textContent = '🔊';
-            unmuteBtn.title = 'Размутить';
-            unmuteBtn.className = 'admin-action-btn';
-            unmuteBtn.addEventListener('click', async (e) => {
-              e.stopPropagation();
-              try {
-                await api(`/api/groups/${groupId}/unmute`, {
-                  method: 'POST',
-                  body: JSON.stringify({ userId: member.id })
-                });
-                showGroupInfo(groupId, groupTitle);
-              } catch (err) {
-                alert(err.message);
-              }
-            });
-            actionsDiv.appendChild(unmuteBtn);
+  // Кнопка размута (как и была)
+  const unmuteBtn = document.createElement('button');
+  unmuteBtn.innerHTML = '<img src="/images/unmute.png" alt="Unmute" style="width:16px;height:16px;">'; // если есть иконка размута, иначе текст
+  unmuteBtn.title = 'Размутить';
+  unmuteBtn.className = 'admin-action-btn';
+  unmuteBtn.addEventListener('click', async (e) => {
+    e.stopPropagation();
+    try {
+      await api(`/api/groups/${groupId}/unmute`, {
+        method: 'POST',
+        body: JSON.stringify({ userId: member.id })
+      });
+      showGroupInfo(groupId, groupTitle);
+    } catch (err) {
+      alert(err.message);
+    }
+  });
+  actionsDiv.appendChild(unmuteBtn);
           } else {
-            const muteSelect = document.createElement('select');
-            muteSelect.className = 'admin-action-btn';
-            muteSelect.style.padding = '4px';
-            muteSelect.style.fontSize = '0.8rem';
-            
+            // Вместо селекта создаём группу кнопок
+            const muteContainer = document.createElement('div');
+            muteContainer.style.display = 'flex';
+            muteContainer.style.gap = '4px';
+            muteContainer.style.flexWrap = 'wrap';
+
             const durations = [
-              { value: 5, text: '🔇 5 мин' },
-              { value: 10, text: '🔇 10 мин' },
-              { value: 30, text: '🔇 30 мин' },
-              { value: 60, text: '🔇 1 час' },
-              { value: 1440, text: '🔇 24 часа' }
+              { value: 5, label: '5 мин' },
+              { value: 10, label: '10 мин' },
+              { value: 30, label: '30 мин' },
+              { value: 60, label: '1 час' },
+              { value: 1440, label: '24 часа' }
             ];
-            
+
             durations.forEach(d => {
-              const option = document.createElement('option');
-              option.value = d.value;
-              option.textContent = d.text;
-              muteSelect.appendChild(option);
+              const btn = document.createElement('button');
+              btn.className = 'admin-action-btn';
+              btn.style.display = 'inline-flex';
+              btn.style.alignItems = 'center';
+              btn.style.gap = '4px';
+              btn.style.padding = '4px 8px';
+
+              // Иконка mute.png для всех кнопок
+              const icon = document.createElement('img');
+              icon.src = '/images/mute.png';
+              icon.alt = 'Mute';
+              icon.style.width = '16px';
+              icon.style.height = '16px';
+
+              btn.appendChild(icon);
+              btn.appendChild(document.createTextNode(d.label));
+
+              btn.addEventListener('click', async (e) => {
+                e.stopPropagation();
+                try {
+                  await api(`/api/groups/${groupId}/mute`, {
+                    method: 'POST',
+                    body: JSON.stringify({ userId: member.id, minutes: d.value })
+                  });
+                  showGroupInfo(groupId, groupTitle);
+                } catch (err) {
+                  alert(err.message);
+                }
+              });
+
+              muteContainer.appendChild(btn);
             });
-            
-            muteSelect.addEventListener('change', async (e) => {
-              e.stopPropagation();
-              const minutes = parseInt(muteSelect.value, 10);
-              try {
-                await api(`/api/groups/${groupId}/mute`, {
-                  method: 'POST',
-                  body: JSON.stringify({ userId: member.id, minutes })
-                });
-                showGroupInfo(groupId, groupTitle);
-              } catch (err) {
-                alert(err.message);
-              }
-            });
-            
-            actionsDiv.appendChild(muteSelect);
+
+            actionsDiv.appendChild(muteContainer);
           }
         }
         
@@ -1565,9 +1596,16 @@ async function showGroupInfo(groupId, groupTitle) {
         const canKick = (isOwner && member.role !== 'owner') || (isAdmin && member.role === 'member');
         if (canKick) {
           const kickBtn = document.createElement('button');
-          kickBtn.textContent = '❌';
           kickBtn.title = 'Кикнуть';
           kickBtn.className = 'admin-action-btn';
+          
+          const kickImg = document.createElement('img');
+          kickImg.src = '/images/kick.png';
+          kickImg.alt = 'Kick';
+          kickImg.style.width = '20px';
+          kickImg.style.height = '20px';
+          kickBtn.appendChild(kickImg);
+          
           kickBtn.addEventListener('click', async (e) => {
             e.stopPropagation();
             if (!confirm(`Вы уверены, что хотите кикнуть ${member.username}?`)) return;
@@ -1611,7 +1649,7 @@ async function showGroupInfo(groupId, groupTitle) {
     
     const leaveBtn = document.createElement('button');
     leaveBtn.id = 'leave-group-btn';
-    leaveBtn.textContent = '🚪 Покинуть группу';
+    leaveBtn.innerHTML = '<img src="/images/leave.png" alt="Leave" style="width:20px; height:20px; vertical-align:middle;"> Покинуть группу';
     leaveBtn.style.width = '100%';
     leaveBtn.style.padding = '0.75rem';
     leaveBtn.style.backgroundColor = 'var(--danger)';
@@ -1791,7 +1829,7 @@ if (modalAddMember) {
 }
 
 // ---- FILE HANDLING ----
-const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
+const MAX_FILE_SIZE = 1024 * 1024 * 1024; // 1 GB
 
 const fileInput = $('file-input');
 const fileInfo = $('fileInfo');
@@ -1957,7 +1995,7 @@ function renderFileMessage(messageDiv, fileData) {
 
         const playBtn = document.createElement('button');
         playBtn.className = 'audio-play-btn';
-        playBtn.innerHTML = '▶️';
+        playBtn.innerHTML = '<img src="/images/play.png" alt="Play" style="width:16px; height:16px;">';
         playBtn.setAttribute('aria-label', 'Play');
 
         const timeCurrent = document.createElement('span');
@@ -2011,7 +2049,7 @@ function renderFileMessage(messageDiv, fileData) {
 
         const downloadBtn = document.createElement('button');
         downloadBtn.className = 'audio-download-btn';
-        downloadBtn.innerHTML = '⬇️';
+        downloadBtn.innerHTML = '<img src="/images/download.png" alt="Download" style="width:16px; height:16px;">';
         downloadBtn.setAttribute('aria-label', 'Download');
         downloadBtn.onclick = (e) => {
             e.stopPropagation();
@@ -2047,12 +2085,12 @@ function renderFileMessage(messageDiv, fileData) {
                 playBtn.innerHTML = '⏸️';
             } else {
                 audio.pause();
-                playBtn.innerHTML = '▶️';
+                playBtn.innerHTML = '<img src="/images/play.png" alt="Play" style="width:16px; height:16px;">';
             }
         });
 
         audio.addEventListener('ended', () => {
-            playBtn.innerHTML = '▶️';
+            playBtn.innerHTML = '<img src="/images/play.png" alt="Play" style="width:16px; height:16px;">';
             progressBar.style.width = '0%';
             progressThumb.style.left = '0%';
             timeCurrent.textContent = '0:00';
@@ -2088,9 +2126,18 @@ function renderFileMessage(messageDiv, fileData) {
 
   const iconSpan = document.createElement('span');
   iconSpan.className = 'file-icon';
-  iconSpan.textContent = getFileIcon(fileData.mime || '');
+
+
+  iconSpan.innerHTML = ''; // очищаем
+  const iconImg = document.createElement('img');
+  iconImg.src = '/images/file.png'; // новая функция
+  iconImg.alt = getFileIconAlt(fileData.mime);
+  iconImg.style.width = '24px';
+  iconImg.style.height = '24px';
+  iconSpan.appendChild(iconImg);
   headerDiv.appendChild(iconSpan);
 
+  
   const infoDiv = document.createElement('div');
   infoDiv.className = 'file-details';
 

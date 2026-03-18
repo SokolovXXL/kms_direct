@@ -2257,3 +2257,10 @@ button,
     transform: scale(1);
   }
 }
+
+.icon {
+  width: 20px;
+  height: 20px;
+  vertical-align: middle;
+  margin-right: 4px;
+}

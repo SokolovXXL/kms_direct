@@ -32,8 +32,10 @@
 
     <div id="main-screen" class="hidden">
       <header class="header">
-        <button type="button" class="btn-menu" id="btn-menu">☰</button>
-        <img src="/ksmgif.gif" alt="Messenger" class="logo" />
+        <button type="button" class="btn-menu" id="btn-menu">
+          <img src="/images/menu.png" alt="Menu" style="width:24px; height:24px;">
+        </button>
+        <img src="/images/ksmgif.gif" alt="Messenger" class="logo" />
         <span class="user-name" id="header-username"></span>
         <button type="button" class="btn-header" id="btn-friends">Friends</button>
         <button type="button" class="btn-logout" id="btn-logout">Sign out</button>
@@ -53,7 +55,9 @@
           <div id="chat-active" class="hidden">
             <div class="chat-header" id="chat-header">
               <span id="chat-with-name"></span>
-              <button type="button" class="btn-header" id="btn-call" title="Start call" style="margin-left:auto;background:none;border:none;color:var(--text);font-size:1.2rem;cursor:pointer;padding:0 10px;display:none;">☎️</button>
+              <button type="button" class="btn-header" id="btn-call" title="Start call" style="margin-left:auto;background:none;border:none;color:var(--text);font-size:1.2rem;cursor:pointer;padding:0 10px;display:none;">
+                <img src="/images/call.png" alt="Call" style="width:20px; height:20px;">
+              </button>
             </div>
             <div class="chat-messages-wrapper" id="chat-messages-wrapper">
               <div id="messages-container">
@@ -62,11 +66,15 @@
             </div>
             <div id="call-status-bar" class="hidden" style="background:var(--surface-hover);padding:0.75rem;text-align:center;border-top:1px solid var(--border);font-size:0.9rem;">
               <span id="call-status-text"></span>
-              <button type="button" id="btn-end-call" style="margin-left:1rem;padding:0.25rem 0.75rem;background:var(--danger);color:white;border:none;border-radius:4px;cursor:pointer;">End</button>
+              <button type="button" id="btn-end-call" style="margin-left:1rem;padding:0.25rem 0.75rem;background:var(--danger);color:white;border:none;border-radius:4px;cursor:pointer;">
+                <img src="/images/end.png" alt="End call" style="width:16px; height:16px;">
+              </button>
             </div>
             <form id="send-form" class="send-form">
               <input type="text" id="message-input" placeholder="Type a message..." autocomplete="off" />
-              <label for="file-input" style="cursor:pointer;background:var(--surface-hover);border:none;padding:0.5rem 1rem;border-radius:4px;color:var(--text);text-align:center;">📎 File</label>
+              <label for="file-input" style="cursor:pointer;background:var(--surface-hover);border:none;padding:0.5rem 1rem;border-radius:4px;color:var(--text);text-align:center;">
+                <img src="/images/file.png" alt="Attach" style="width:18px; height:18px; vertical-align:middle;"> File
+              </label>
               <input type="file" id="file-input" multiple style="display:none;" />
               <button type="submit">Send</button>
             </form>
