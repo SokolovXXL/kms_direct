@@ -1091,7 +1091,6 @@ body {
   background: var(--accent);
   color: white;
   border: none;
-  border-radius: 2px;
   cursor: pointer;
   font-weight: 500;
   transition: all 0.2s ease;

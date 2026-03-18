@@ -2083,7 +2083,7 @@ function renderFileMessage(messageDiv, fileData) {
         playBtn.addEventListener('click', () => {
             if (audio.paused) {
                 audio.play();
-                playBtn.innerHTML = '⏸️';
+                playBtn.innerHTML = '<img src="/images/pause.png" alt="Group info" style="width:20px; height:20px;">';
             } else {
                 audio.pause();
                 playBtn.innerHTML = '<img src="/images/play.png" alt="Play" style="width:16px; height:16px;">';
