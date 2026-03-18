@@ -103,6 +103,11 @@ process.on('uncaughtException', (err) => {
 const sseClients = new Map(); // userId -> array of response objects
 const MAX_SSE_PER_USER = 5;   // Максимум одновременных SSE соединений на пользователя
 
+function isUserOnline(userId) {
+  const clients = sseClients.get(userId);
+  return clients && clients.length > 0;
+}
+
 // Вспомогательная функция для безопасной рассылки SSE
 function broadcastToUser(userId, payload) {
   const clients = sseClients.get(userId);
@@ -378,14 +383,19 @@ app.delete('/api/account', authMiddleware, async (req, res) => {
 // ---- Friends ----
 app.get('/api/friends', authMiddleware, async (req, res) => {
   const r = await pool.query(`
-    SELECT u.id, u.username, u.display_name, u.friend_code,
+    SELECT u.id, u.username, u.display_name, u.friend_code, u.last_seen,
            COALESCE(u.display_name, u.username) AS name
     FROM friends f
     JOIN users u ON u.id = f.friend_id
     WHERE f.user_id = $1
     ORDER BY u.username
   `, [req.userId]);
-  res.json(r.rows);
+
+  const friends = r.rows.map(u => ({
+    ...u,
+    online: isUserOnline(u.id)
+  }));
+  res.json(friends);
 });
 
 app.post('/api/friends', authMiddleware, async (req, res) => {
@@ -427,7 +437,8 @@ app.get('/api/conversations', authMiddleware, async (req, res) => {
             'id', u.id,
             'username', u.username,
             'display_name', u.display_name,
-            'name', COALESCE(u.display_name, u.username)
+            'name', COALESCE(u.display_name, u.username),
+            'last_seen', u.last_seen
           )
         ) FILTER (WHERE u.id != $1),
         '[]'::json
@@ -462,14 +473,17 @@ app.get('/api/conversations', authMiddleware, async (req, res) => {
 
   const convos = r.rows.map(row => {
     const participants = row.participants || [];
-    const otherUsers = participants.filter(p => p.id !== req.userId);
+    const otherUsers = participants.filter(p => p.id !== req.userId).map(p => ({
+      ...p,
+      online: isUserOnline(p.id)
+    }));
     const lastMessage = row.last_message;
 
     return {
       id: row.id,
       isGroup: row.is_group || false,
       title: row.title,
-      participants: participants,
+      participants: participants, // original
       otherUsers: otherUsers,
       otherUser: !row.is_group && otherUsers.length > 0 ? otherUsers[0] : null,
       lastMessage: lastMessage ? lastMessage.body : null,
@@ -552,6 +566,42 @@ app.post('/api/dms', authMiddleware, async (req, res) => {
   }
 });
 
+// ---- IsTyping ----
+app.post('/api/typing', authMiddleware, async (req, res) => {
+  const { conversationId, action } = req.body;
+  const convId = parseInt(conversationId, 10);
+  if (isNaN(convId) || convId <= 0) {
+    return res.status(400).json({ error: 'Invalid conversation ID' });
+  }
+  if (action !== 'start' && action !== 'stop') {
+    return res.status(400).json({ error: 'Action must be "start" or "stop"' });
+  }
+
+  // Проверяем, является ли пользователь участником беседы
+  const part = await pool.query(
+    'SELECT user_id FROM conversation_participants WHERE conversation_id = $1',
+    [convId]
+  );
+  if (!part.rows.some(p => p.user_id === req.userId)) {
+    return res.status(403).json({ error: 'Not in this conversation' });
+  }
+
+  const otherUserIds = part.rows.filter(p => p.user_id !== req.userId).map(p => p.user_id);
+
+  const payload = {
+    type: 'typing',
+    conversationId: convId,
+    userId: req.userId,
+    action: action
+  };
+
+  for (const uid of otherUserIds) {
+    broadcastToUser(uid, payload);
+  }
+
+  res.json({ ok: true });
+});
+
 // ---- Groups ----
 app.post('/api/groups', authMiddleware, async (req, res) => {
   const { title, userIds } = req.body || {};
@@ -627,7 +677,7 @@ app.get('/api/groups/:id', authMiddleware, async (req, res) => {
   const groupId = parseInt(req.params.id, 10);
   if (isNaN(groupId) || groupId <= 0) return res.status(400).json({ error: 'Invalid group ID' });
 
-  const group = await pool.query(`
+  const result = await pool.query(`
     SELECT c.id, c.title, c.created_at, 
            json_agg(json_build_object(
               'id', u.id, 
@@ -635,7 +685,8 @@ app.get('/api/groups/:id', authMiddleware, async (req, res) => {
               'display_name', u.display_name,
               'name', COALESCE(u.display_name, u.username),
               'role', cp.role, 
-              'muted_until', cp.muted_until
+              'muted_until', cp.muted_until,
+              'last_seen', u.last_seen   -- добавили last_seen
             )) as participants
     FROM conversations c
     JOIN conversation_participants cp ON cp.conversation_id = c.id
@@ -644,16 +695,23 @@ app.get('/api/groups/:id', authMiddleware, async (req, res) => {
     GROUP BY c.id
   `, [groupId]);
 
-  if (group.rows.length === 0) {
+  if (result.rows.length === 0) {
     return res.status(404).json({ error: 'Group not found' });
   }
 
-  const isMember = group.rows[0].participants.some(p => p.id === req.userId);
+  const group = result.rows[0];
+  const isMember = group.participants.some(p => p.id === req.userId);
   if (!isMember) {
     return res.status(403).json({ error: 'Not a member of this group' });
   }
 
-  res.json(group.rows[0]);
+  // Добавляем online статус каждому участнику
+  group.participants = group.participants.map(p => ({
+    ...p,
+    online: isUserOnline(p.id)
+  }));
+
+  res.json(group);
 });
 
 app.post('/api/groups/:id/members', authMiddleware, async (req, res) => {
@@ -1090,19 +1148,25 @@ app.get('/api/notifications/stream', streamAuthMiddleware, sseConnectionLimiter,
   if (!sseClients.has(userId)) sseClients.set(userId, []);
   sseClients.get(userId).push(res);
 
-  res.on('close', () => {
+  res.on('close', async () => {
     const list = sseClients.get(userId);
     if (list) {
       const i = list.indexOf(res);
       if (i !== -1) {
         list.splice(i, 1);
-        // Закрываем ответ, если он ещё не закрыт
         res.end();
       }
-      if (list.length === 0) sseClients.delete(userId);
+      if (list.length === 0) {
+        sseClients.delete(userId);
+        try {
+          await pool.query('UPDATE users SET last_seen = NOW() WHERE id = $1', [userId]);
+        } catch (err) {
+          console.error('Failed to update last_seen:', err);
+        }
+      }
     }
   });
-});
+  });
 
 app.post('/api/notifications/read', authMiddleware, async (req, res) => {
   const { conversationId } = req.body || {};
@@ -1525,6 +1589,10 @@ app.get('*', (req, res) => {
 async function main() {
   try {
     await initDb();
+    await pool.query(`
+      ALTER TABLE users
+      ADD COLUMN IF NOT EXISTS last_seen TIMESTAMPTZ DEFAULT NOW()
+    `);
     console.log('Database ready');
 
     // Миграция для добавления полей user1_id и user2_id в таблицу conversations (для DM)

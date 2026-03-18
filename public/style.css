@@ -2263,3 +2263,25 @@ button,
   vertical-align: middle;
   margin-right: 4px;
 }
+.dm-status {
+  display: block;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  margin-top: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.dm-status.online {
+  color: #2ecc71;
+}
+.dm-status.typing {
+  color: var(--accent);
+  font-style: italic;
+}
+.chat-status {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  margin-left: 10px;
+  display: inline-block;
+}

@@ -23,6 +23,9 @@ async function initDb() {
       );
     `);
     await client.query(`
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS last_seen TIMESTAMPTZ DEFAULT NOW()
+    `);
+    await client.query(`
       ALTER TABLE users ADD COLUMN IF NOT EXISTS friend_code VARCHAR(16) UNIQUE;
     `);
     await client.query(`

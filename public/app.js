@@ -19,6 +19,35 @@ let remoteAudioElements = new Map();   // userId -> HTMLAudioElement
 
 const $ = (id) => document.getElementById(id);
 
+function formatLastSeen(timestamp) {
+  if (!timestamp) return '';
+  const date = new Date(timestamp);
+  const now = new Date();
+  const diffSeconds = Math.floor((now - date) / 1000);
+  const diffMinutes = Math.floor(diffSeconds / 60);
+  const diffHours = Math.floor(diffMinutes / 60);
+  const diffDays = Math.floor(diffHours / 24);
+
+  if (diffSeconds < 60) return 'только что';
+  if (diffMinutes < 60) return `${diffMinutes} ${pluralize(diffMinutes, 'минуту', 'минуты', 'минут')} назад`;
+  if (diffHours < 24) return `${diffHours} ${pluralize(diffHours, 'час', 'часа', 'часов')} назад`;
+  if (diffDays === 1) return 'вчера';
+  if (diffDays < 7) return `${diffDays} ${pluralize(diffDays, 'день', 'дня', 'дней')} назад`;
+
+  // Иначе показываем дату
+  const options = { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' };
+  return date.toLocaleString('ru-RU', options);
+}
+
+function pluralize(n, one, few, many) {
+  n = Math.abs(n) % 100;
+  const n1 = n % 10;
+  if (n > 10 && n < 20) return many;
+  if (n1 > 1 && n1 < 5) return few;
+  if (n1 === 1) return one;
+  return many;
+}
+
 // Определяем мобильное устройство
 const isMobile = () => window.innerWidth <= 768;
 
@@ -275,7 +304,9 @@ function startNotificationStream() {
         } else {
           updateSidebarRow(convId, message ? message.body : null);
         }
-      } else if (data.type === 'new_group') {
+      }else if (data.type === 'typing') {
+        handleTypingEvent(data);
+      }else if (data.type === 'new_group') {
         loadConversationList();
       } else if (data.type === 'added_to_group') {
         loadConversationList();
@@ -499,6 +530,174 @@ function updateSidebarRow(convId, lastMessageText) {
     unreadEl.remove();
   }
 }
+// ---- istyping ----
+let typingTimeouts = {}; // userId -> setTimeout
+
+function handleTypingEvent(data) {
+  const { conversationId, userId, action } = data;
+  const conversation = conversationListCache.find(c => c.id === conversationId);
+  if (!conversation) return;
+
+  // Определяем отображаемое имя
+  let displayName = 'Кто-то';
+  if (!conversation.isGroup && conversation.otherUser?.id === userId) {
+    displayName = conversation.otherUser.name || conversation.otherUser.username;
+  } else if (conversation.isGroup) {
+    // Можно улучшить, загружая данные участников, но для простоты используем userId
+    displayName = `Пользователь ${userId}`;
+  }
+
+  const isCurrent = (conversationId === currentConversationId);
+
+  if (action === 'start') {
+    // Сбрасываем старый таймер
+    if (typingTimeouts[userId]) clearTimeout(typingTimeouts[userId]);
+
+    if (isCurrent) {
+      showTypingIndicator(displayName, conversation);
+    } else {
+      updateTypingStatusInSidebar(conversationId, displayName, true);
+    }
+
+    // Автоматически снимаем через 5 секунд (на случай, если stop не пришёл)
+    typingTimeouts[userId] = setTimeout(() => {
+      handleTypingEvent({ ...data, action: 'stop' });
+    }, 5000);
+  } else { // stop
+    if (typingTimeouts[userId]) {
+      clearTimeout(typingTimeouts[userId]);
+      delete typingTimeouts[userId];
+    }
+    if (isCurrent) {
+      hideTypingIndicator(conversation);
+    } else {
+      updateTypingStatusInSidebar(conversationId, displayName, false);
+    }
+  }
+}
+
+function showTypingIndicator(displayName, conversation) {
+  const statusEl = $('#chat-status');
+  if (!statusEl) return;
+  if (!conversation.isGroup) {
+    statusEl.textContent = 'печатает...';
+    statusEl.style.color = 'var(--accent)';
+  } else {
+    statusEl.textContent = `${displayName} печатает...`;
+    statusEl.style.color = 'var(--accent)';
+  }
+}
+
+function hideTypingIndicator(conversation) {
+  const statusEl = $('#chat-status');
+  if (!statusEl) return;
+  // Восстанавливаем обычный статус онлайн/был
+  updateChatHeaderStatus(conversation);
+}
+
+function updateTypingStatusInSidebar(conversationId, displayName, isTyping) {
+  const row = document.querySelector(`.dm-item[data-id="${conversationId}"] .dm-status`);
+  if (!row) return;
+  if (isTyping) {
+    row.innerHTML = 'печатает...';
+    row.classList.add('typing');
+  } else {
+    // Вернуть обычный статус, перезагрузив из кэша
+    const conversation = conversationListCache.find(c => c.id === conversationId);
+    if (conversation && !conversation.isGroup && conversation.otherUser) {
+      if (conversation.otherUser.online) {
+        row.innerHTML = '● онлайн';
+        row.classList.remove('typing');
+      } else if (conversation.otherUser.last_seen) {
+        row.innerHTML = `был(а) ${formatLastSeen(conversation.otherUser.last_seen)}`;
+        row.classList.remove('typing');
+      }
+    }
+  }
+}
+
+function updateChatHeaderStatus(conversation) {
+  const statusEl = $('#chat-status');
+  if (!statusEl) return;
+  if (!conversation) return;
+  if (conversation.isGroup) {
+    statusEl.textContent = ''; // Для группы можно показать количество участников или ничего
+  } else if (conversation.otherUser) {
+    if (conversation.otherUser.online) {
+      statusEl.textContent = 'онлайн';
+      statusEl.style.color = 'var(--success)';
+    } else if (conversation.otherUser.last_seen) {
+      statusEl.textContent = `был(а) ${formatLastSeen(conversation.otherUser.last_seen)}`;
+      statusEl.style.color = 'var(--text-muted)';
+    } else {
+      statusEl.textContent = '';
+    }
+  }
+}
+let typingTimeout = null;
+let lastTypingSent = 0;
+const TYPING_INTERVAL = 3000; // мс
+
+function sendTyping(action) {
+  if (!currentConversationId) return;
+  fetch(API + '/api/typing', {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ conversationId: currentConversationId, action })
+  }).catch(e => console.error('Failed to send typing:', e));
+}
+
+const messageInput = $('#message-input');
+if (messageInput) {
+  messageInput.addEventListener('input', () => {
+    const now = Date.now();
+    const hasText = messageInput.value.trim().length > 0;
+
+    if (hasText) {
+      // Отправляем start при начале печати, если не отправляли недавно
+      if (now - lastTypingSent > TYPING_INTERVAL) {
+        sendTyping('start');
+        lastTypingSent = now;
+      }
+      // Сбрасываем таймер на отправку stop
+      if (typingTimeout) clearTimeout(typingTimeout);
+      typingTimeout = setTimeout(() => {
+        if (messageInput.value.trim().length === 0) {
+          sendTyping('stop');
+          lastTypingSent = 0;
+        } else {
+          // Если через 3 секунды всё ещё есть текст, отправим ещё start (поддержание)
+          sendTyping('start');
+          lastTypingSent = Date.now();
+          typingTimeout = setTimeout(() => {
+            if (messageInput.value.trim().length === 0) {
+              sendTyping('stop');
+              lastTypingSent = 0;
+            }
+          }, TYPING_INTERVAL);
+        }
+      }, 2000); // ждём 2 секунды после последнего ввода перед stop
+    } else {
+      // Поле пусто – отправляем stop
+      if (typingTimeout) clearTimeout(typingTimeout);
+      typingTimeout = null;
+      sendTyping('stop');
+      lastTypingSent = 0;
+    }
+  });
+
+  // При отправке формы – stop
+  const sendForm = $('#send-form');
+  if (sendForm) {
+    sendForm.addEventListener('submit', () => {
+      if (typingTimeout) clearTimeout(typingTimeout);
+      typingTimeout = null;
+      sendTyping('stop');
+      lastTypingSent = 0;
+    });
+  }
+}
 
 // ---- Контекстное меню сообщений ----
 let contextMenu = null;
@@ -689,6 +888,16 @@ async function loadConversationList() {
       
       let nameHtml = '';
       let previewText = conv.lastMessage || 'No messages yet';
+      let statusHtml = '';
+
+      if (!conv.isGroup && conv.otherUser) {
+        if (conv.otherUser.online) {
+          statusHtml = '<span class="dm-status online">● онлайн</span>';
+        } else if (conv.otherUser.last_seen) {
+          statusHtml = `<span class="dm-status">был(а) ${formatLastSeen(conv.otherUser.last_seen)}</span>`;
+        }
+      }
+
       
       if (previewText.startsWith('{')) {
         try {
@@ -711,6 +920,7 @@ async function loadConversationList() {
         <div style="flex:1;min-width:0;">
           ${nameHtml}
           <span class="dm-preview">${escapeHtml(previewText)}</span>
+          ${statusHtml}
         </div>
         ${unread > 0 ? `<span class="dm-unread">${unread > 99 ? '99+' : unread}</span>` : ''}
       `;
@@ -789,7 +999,8 @@ async function selectConversation(convId) {
     }
   }
   if (chatWithName) chatWithName.textContent = displayName;
-  
+  updateChatHeaderStatus(conversation);
+
   document.querySelectorAll('.dm-item').forEach(el => {
     el.classList.toggle('active', parseInt(el.dataset.id, 10) === convId);
   });
