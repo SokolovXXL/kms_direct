@@ -484,7 +484,7 @@ app.get('/api/conversations', authMiddleware, async (req, res) => {
             'username', u.username,
             'display_name', u.display_name,
             'name', COALESCE(u.display_name, u.username),
-            'role', cp.role,   // роль тоже добавить (если нет)
+            'role', cp.role,
             'last_seen', u.last_seen
           )
         ) FILTER (WHERE u.id != $1),
