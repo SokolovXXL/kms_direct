@@ -665,6 +665,7 @@ function handleUserStatusChange(data) {
         updateChatHeaderStatus(conv);
       }
     }
+    loadConversationList();
   }
 }
 
