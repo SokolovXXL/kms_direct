@@ -135,14 +135,10 @@ body {
 @media (max-width: 768px) {
   .logo {
     height: 30px;
+    max-width: 120px;
+    width: auto;
+    object-fit: contain;
   }
-}
-
-.logo {
-  height: 90px;
-  width: auto;
-  display: inline-block;
-  vertical-align: middle;
 }
 
 .user-name {
