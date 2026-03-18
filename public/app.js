@@ -543,6 +543,109 @@ function updateSidebarRow(convId, lastMessageText) {
   }
 }
 
+// ---- Контекстное меню сообщений ----
+let contextMenu = null;
+let currentContextMessage = null;
+
+function initContextMenu() {
+  contextMenu = document.getElementById('message-context-menu');
+  if (!contextMenu) return;
+
+  // Закрытие по клику вне меню
+  document.addEventListener('click', (e) => {
+    if (!contextMenu.classList.contains('hidden') && 
+        !contextMenu.contains(e.target) && 
+        !e.target.closest('.message')) {
+      hideContextMenu();
+    }
+  });
+
+  // Закрытие по прокрутке
+  const messagesWrapper = document.getElementById('chat-messages-wrapper');
+  if (messagesWrapper) {
+    messagesWrapper.addEventListener('scroll', () => {
+      hideContextMenu();
+    });
+  }
+
+  // Закрытие по Escape
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      hideContextMenu();
+    }
+  });
+}
+
+function showContextMenu(messageElement, clickX, clickY) {
+  if (!contextMenu) return;
+
+  // Сохраняем текущее сообщение (для будущих действий)
+  currentContextMessage = messageElement;
+
+  // Позиционируем меню
+  const menuWidth = contextMenu.offsetWidth || 180;
+  const menuHeight = contextMenu.offsetHeight || 100;
+  
+  let left = clickX;
+  let top = clickY;
+
+  // Корректировка, чтобы меню не выходило за границы экрана
+  const viewportWidth = window.innerWidth;
+  const viewportHeight = window.innerHeight;
+
+  if (left + menuWidth > viewportWidth - 10) {
+    left = viewportWidth - menuWidth - 10;
+  }
+  if (top + menuHeight > viewportHeight - 10) {
+    top = viewportHeight - menuHeight - 10;
+  }
+
+  contextMenu.style.left = left + 'px';
+  contextMenu.style.top = top + 'px';
+
+  // Позиционируем стрелочку (примерно под курсором)
+  const arrow = contextMenu.querySelector('.context-menu-arrow');
+  if (arrow) {
+    const arrowLeft = clickX - left;
+    arrow.style.left = Math.min(Math.max(arrowLeft - 6, 10), menuWidth - 20) + 'px';
+  }
+
+  contextMenu.classList.remove('hidden');
+}
+
+function hideContextMenu() {
+  if (contextMenu) {
+    contextMenu.classList.add('hidden');
+    currentContextMessage = null;
+  }
+}
+
+// Обработчик клика на сообщения (через делегирование)
+const messagesList = document.getElementById('messages-list');
+if (messagesList) {
+  messagesList.addEventListener('click', (e) => {
+    // Ищем ближайшее сообщение
+    const message = e.target.closest('.message');
+    if (!message) return;
+
+    // Проверяем, не был ли клик на интерактивном элементе
+    const interactive = e.target.closest('button, a, .audio-play-btn, .audio-download-btn, .delete-message-btn, input, label, video, audio');
+    if (interactive) return; // Не показываем меню на кнопках управления
+
+    // Показываем меню по координатам клика
+    showContextMenu(message, e.clientX, e.clientY);
+
+    // Предотвращаем всплытие, чтобы не закрылось сразу
+    e.stopPropagation();
+  });
+}
+
+// Инициализируем при загрузке страницы
+document.addEventListener('DOMContentLoaded', () => {
+  initContextMenu();
+  // ... остальной код инициализации
+});
+
 // ---- Conversations List ----
 async function loadConversationList() {
   const list = $('dm-list');
