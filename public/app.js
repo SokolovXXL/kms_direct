@@ -16,6 +16,8 @@ let signalingChannel = null;
 let currentCallId = null;
 let currentCallConversationId = null; // ID чата, в котором идёт звонок
 let remoteAudioElements = new Map();   // userId -> HTMLAudioElement
+let currentConversationIsChannel = false;
+let creatingChannel = false; // флаг для модалки создания канала
 
 const $ = (id) => document.getElementById(id);
 
@@ -918,8 +920,12 @@ async function loadConversationList(retryCount = 3) {
       ]);
       
       unreadByConvo = notifByConvoResp;
-      conversationListCache = conversations.map(c => ({ ...c, typingUserId: null }));
-      
+      conversationListCache = conversations.map(c => ({ 
+        ...c, 
+        typingUserId: null,
+        isChannel: c.isChannel || false
+      }));
+
       if (conversations.length === 0) {
         list.innerHTML = '<p style="padding:1rem;color:var(--text-muted)">No conversations yet. Start a new message!</p>';
         return;
@@ -933,6 +939,14 @@ async function loadConversationList(retryCount = 3) {
         item.dataset.id = conv.id;
         
         let nameHtml = '';
+        if (conv.isChannel) {
+          nameHtml = `<span class="dm-name"><img src="/images/channel.png" alt="Channel" style="width:18px;height:18px;vertical-align:middle;"> ${escapeHtml(conv.title || 'Channel')}</span>`;
+        } else if (conv.isGroup) {
+          nameHtml = `<span class="dm-name"><img src="/images/group.png" alt="Group" style="width:18px;height:18px;vertical-align:middle;"> ${escapeHtml(conv.title || 'Group')}</span>`;
+        } else {
+          const otherUserName = conv.otherUser?.name || conv.otherUser?.username || 'Unknown';
+          nameHtml = `<span class="dm-name">${escapeHtml(otherUserName)}</span>`;
+        }
         let previewText = conv.lastMessage || 'No messages yet';
         let statusHtml = '';
         
@@ -956,12 +970,6 @@ async function loadConversationList(retryCount = 3) {
         }
         previewText = truncate(previewText);
         
-        if (conv.isGroup) {
-          nameHtml = `<span class="dm-name"><img src="/images/group.png" alt="Group" style="width:18px; height:18px; vertical-align:middle;"> ${escapeHtml(conv.title || 'Group')}</span>`;
-        } else {
-          const otherUserName = conv.otherUser?.name || conv.otherUser?.username || 'Unknown';
-          nameHtml = `<span class="dm-name">${escapeHtml(otherUserName)}</span>`;
-        }
         
         item.innerHTML = `
           <div style="flex:1;min-width:0;">
@@ -1019,6 +1027,7 @@ async function selectConversation(convId) {
   currentConversationId = convId;
   localStorage.setItem('lastConversationId', convId);
   
+  // Помечаем уведомления как прочитанные
   try {
     await api('/api/notifications/read', { 
       method: 'POST', 
@@ -1030,14 +1039,51 @@ async function selectConversation(convId) {
   updateBadgeFromCache();
   updateSidebarRow(convId, null);
   
+  // Получаем информацию о диалоге из кэша
   let conversation = conversationListCache.find(c => c.id === convId);
   if (!conversation) {
     await loadConversationList();
     conversation = conversationListCache.find(c => c.id === convId);
   }
   
-  currentConversationIsGroup = conversation ? conversation.isGroup : false;
+  // Определяем роль текущего пользователя (нужно для каналов)
+  let userRole = 'member';
+  if (conversation && conversation.participants) {
+    const me = conversation.participants.find(p => p.id === currentUser.id);
+    if (me) userRole = me.role;
+  }
+  window.currentUserRole = userRole; // если нужно в других местах
   
+  currentConversationIsGroup = conversation ? conversation.isGroup : false;
+  currentConversationIsChannel = conversation ? conversation.isChannel : false;
+  
+  // Управление видимостью поля ввода и кнопки звонка
+  const sendForm = $('send-form');
+  const btnCall = $('btn-call');
+  
+  if (conversation && conversation.isChannel) {
+    // Канал: писать могут только админы, звонков нет
+    if (userRole === 'owner' || userRole === 'admin') {
+      show(sendForm);
+    } else {
+      hide(sendForm);
+    }
+    hide(btnCall);
+  } else {
+    // Группа или личный чат: поле ввода всегда видно
+    show(sendForm);
+    if (btnCall) {
+      if (callActive) {
+        btnCall.style.display = 'none';
+      } else if (conversation) {
+        btnCall.style.display = 'block';
+      } else {
+        btnCall.style.display = 'none';
+      }
+    }
+  }
+  
+  // Обновление шапки чата
   const chatPlaceholder = $('chat-placeholder');
   const chatActive = $('chat-active');
   const chatWithName = $('chat-with-name');
@@ -1055,24 +1101,16 @@ async function selectConversation(convId) {
   }
   if (chatWithName) chatWithName.textContent = displayName;
   updateChatHeaderStatus(conversation);
-
+  
+  // Подсветка активного элемента в списке
   document.querySelectorAll('.dm-item').forEach(el => {
     el.classList.toggle('active', parseInt(el.dataset.id, 10) === convId);
   });
   
-  const btn = $('btn-call');
-  if (btn) {
-    if (callActive) {
-      btn.style.display = 'none';
-    } else if (conversation) {
-      btn.style.display = 'block';
-    } else {
-      btn.style.display = 'none';
-    }
-  }
-  
+  // Загружаем сообщения
   loadMessages(convId);
   
+  // Скролл вниз
   setTimeout(() => {
     isAtBottom = true;
     scrollMessagesToBottom();
@@ -1501,7 +1539,6 @@ if (btnSaveDisplayName) {
 // ---- GROUPS ----
 const btnGroups = $('btn-groups');
 const btnCreateGroupBtn = $('btn-create-group-btn');
-const modalCreateGroup = $('modal-create-group');
 const modalGroupInfo = $('modal-group-info');
 const modalAddMember = $('modal-add-member');
 
@@ -1567,7 +1604,25 @@ if (btnCreateGroupBtn) {
 
 const btnCloseGroup = $('btn-close-group');
 if (btnCloseGroup) {
-  btnCloseGroup.addEventListener('click', () => hide(modalCreateGroup));
+  btnCloseGroup.addEventListener('click', () => {
+    hide($('modal-create-group'));
+    creatingChannel = false;
+    document.querySelector('#modal-create-group h2').textContent = 'Create group';
+    $('btn-create-group').textContent = 'Create group';
+  });
+}
+
+// Также в обработчике клика по модалке (если есть)
+const modalCreateGroup = $('modal-create-group');
+if (modalCreateGroup) {
+  modalCreateGroup.addEventListener('click', (e) => {
+    if (e.target.id === 'modal-create-group') {
+      hide(modalCreateGroup);
+      creatingChannel = false;
+      document.querySelector('#modal-create-group h2').textContent = 'Create group';
+      $('btn-create-group').textContent = 'Create group';
+    }
+  });
 }
 
 if (modalCreateGroup) {
@@ -1645,28 +1700,72 @@ if (btnCreateGroup) {
       errorEl.textContent = 'Group name required';
       return;
     }
-    
     if (userIds.length === 0) {
       errorEl.textContent = 'Select at least one friend';
       return;
     }
     
     try {
-      const data = await api('/api/groups', {
-        method: 'POST',
-        body: JSON.stringify({ title, userIds })
-      });
+      let data;
+      if (creatingChannel) {
+        data = await api('/api/channels', {
+          method: 'POST',
+          body: JSON.stringify({ title, userIds })
+        });
+      } else {
+        data = await api('/api/groups', {
+          method: 'POST',
+          body: JSON.stringify({ title, userIds })
+        });
+      }
       
-      hide(modalCreateGroup);
+      hide($('modal-create-group'));
+      // Сбрасываем флаг и восстанавливаем заголовки
+      creatingChannel = false;
+      document.querySelector('#modal-create-group h2').textContent = 'Create group';
+      $('btn-create-group').textContent = 'Create group';
+      
       await loadConversationList();
-      
       selectConversation(data.conversationId);
-      showGroupInfoButton(data.conversationId, title);
-      if (isMobile()) showChat();
       
+      // Для канала не показываем кнопку информации (можно убрать), для группы показываем
+      if (!creatingChannel) { // но creatingChannel уже false, нужно по data понять, канал ли это
+        // Пока сервер не возвращает isChannel, можно ориентироваться на флаг, но флаг сброшен.
+        // Лучше добавить в ответ сервера поле isChannel. Но для простоты пока сделаем так:
+        if (data.conversationId) {
+          // Перезагрузим диалоги и попробуем найти
+          setTimeout(() => {
+            const conv = conversationListCache.find(c => c.id === data.conversationId);
+            if (conv && !conv.isChannel) {
+              showGroupInfoButton(data.conversationId, title);
+            } else {
+              hideGroupInfoButton();
+            }
+          }, 500);
+        }
+      }
+      
+      if (isMobile()) showChat();
     } catch (err) {
       errorEl.textContent = err.message;
     }
+  });
+}
+
+const btnCreateChannel = $('btn-create-channel');
+if (btnCreateChannel) {
+  btnCreateChannel.addEventListener('click', async () => {
+    // Используем ту же модалку, что и для группы
+    show($('modal-create-group'));
+    // Меняем заголовок
+    document.querySelector('#modal-create-group h2').textContent = 'Create channel';
+    // Меняем текст кнопки создания
+    const createBtn = $('btn-create-group');
+    createBtn.textContent = 'Create channel';
+    // Устанавливаем флаг
+    creatingChannel = true;
+    // Загружаем список друзей
+    await loadFriendsForGroup(); // эта функция уже существует
   });
 }
 
@@ -1679,11 +1778,11 @@ async function showGroupInfo(groupId, groupTitle) {
   
   titleEl.textContent = groupTitle || 'Group';
   listEl.innerHTML = '<li style="color:var(--text-muted);">Loading...</li>';
-  
   show(modal);
   
   try {
     const group = await api(`/api/groups/${groupId}`);
+    const isChannel = group.isChannel || false;
     
     const currentMember = group.participants.find(p => p.id === currentUser.id);
     const isOwner = currentMember?.role === 'owner';
@@ -1707,23 +1806,22 @@ async function showGroupInfo(groupId, groupTitle) {
       nameSpan.textContent = (member.name || member.username) + (member.id === currentUser.id ? ' (you)' : '');
       leftDiv.appendChild(nameSpan);
 
-      const ownerImg = document.createElement('img');
-      const adminImg = document.createElement('img');
-      const roleSpan = document.createElement('span');
-      if (member.role === 'owner'){
+      // Иконки ролей
+      if (member.role === 'owner') {
+        const ownerImg = document.createElement('img');
         ownerImg.src = '/images/owner.png';
         ownerImg.alt = 'Owner';
         ownerImg.style.width = '20px';
         ownerImg.style.height = '20px';
-        roleSpan.appendChild(ownerImg);
-      } else if (member.role === 'admin'){
+        leftDiv.appendChild(ownerImg);
+      } else if (member.role === 'admin') {
+        const adminImg = document.createElement('img');
         adminImg.src = '/images/admin.png';
         adminImg.alt = 'Admin';
         adminImg.style.width = '20px';
         adminImg.style.height = '20px';
-        roleSpan.appendChild(adminImg);
+        leftDiv.appendChild(adminImg);
       }
-      leftDiv.appendChild(roleSpan);
       
       if (member.muted_until && new Date(member.muted_until) > new Date()) {
         const mutedImg = document.createElement('img');
@@ -1737,155 +1835,157 @@ async function showGroupInfo(groupId, groupTitle) {
       
       li.appendChild(leftDiv);
       
+      // Правая часть — кнопки действий (только для других участников)
       if (member.id !== currentUser.id) {
         const actionsDiv = document.createElement('div');
         actionsDiv.style.display = 'flex';
         actionsDiv.style.gap = '0.5rem';
         actionsDiv.style.flexWrap = 'wrap';
         
-        if (isOwner && member.role === 'member') {
-          const promoteBtn = document.createElement('button');
-          promoteBtn.textContent = '⭐';
-          promoteBtn.title = 'Сделать админом';
-          promoteBtn.className = 'admin-action-btn';
-          promoteBtn.addEventListener('click', async (e) => {
-            e.stopPropagation();
-            try {
-              await api(`/api/groups/${groupId}/promote`, {
-                method: 'POST',
-                body: JSON.stringify({ userId: member.id })
-              });
-              showGroupInfo(groupId, groupTitle);
-            } catch (err) {
-              alert(err.message);
-            }
-          });
-          actionsDiv.appendChild(promoteBtn);
-        }
-        
-        if (isOwner && member.role === 'admin') {
-          const demoteBtn = document.createElement('button');
-          demoteBtn.textContent = '⬇️';
-          demoteBtn.title = 'Снять админа';
-          demoteBtn.className = 'admin-action-btn';
-          demoteBtn.addEventListener('click', async (e) => {
-            e.stopPropagation();
-            try {
-              await api(`/api/groups/${groupId}/demote`, {
-                method: 'POST',
-                body: JSON.stringify({ userId: member.id })
-              });
-              showGroupInfo(groupId, groupTitle);
-            } catch (err) {
-              alert(err.message);
-            }
-          });
-          actionsDiv.appendChild(demoteBtn);
-        }
-        
-        if ((isOwner || isAdmin) && (member.role !== 'owner' || isOwner)) {
-          const isMuted = member.muted_until && new Date(member.muted_until) > new Date();
+        // Если это канал и текущий пользователь не админ — не показываем кнопки
+        if (isChannel && !isAdmin) {
+          // ничего
+        } else {
+          // Существующие кнопки (promote, demote, mute, kick)
+          if (isOwner && member.role === 'member') {
+            const promoteBtn = document.createElement('button');
+            promoteBtn.textContent = '⭐';
+            promoteBtn.title = 'Сделать админом';
+            promoteBtn.className = 'admin-action-btn';
+            promoteBtn.addEventListener('click', async (e) => {
+              e.stopPropagation();
+              try {
+                await api(`/api/groups/${groupId}/promote`, {
+                  method: 'POST',
+                  body: JSON.stringify({ userId: member.id })
+                });
+                showGroupInfo(groupId, groupTitle);
+              } catch (err) {
+                alert(err.message);
+              }
+            });
+            actionsDiv.appendChild(promoteBtn);
+          }
           
-          if (isMuted) {
-  // Кнопка размута (как и была)
-  const unmuteBtn = document.createElement('button');
-  unmuteBtn.innerHTML = '<img src="/images/unmute.png" alt="Unmute" style="width:16px;height:16px;">'; // если есть иконка размута, иначе текст
-  unmuteBtn.title = 'Размутить';
-  unmuteBtn.className = 'admin-action-btn';
-  unmuteBtn.addEventListener('click', async (e) => {
-    e.stopPropagation();
-    try {
-      await api(`/api/groups/${groupId}/unmute`, {
-        method: 'POST',
-        body: JSON.stringify({ userId: member.id })
-      });
-      showGroupInfo(groupId, groupTitle);
-    } catch (err) {
-      alert(err.message);
-    }
-  });
-  actionsDiv.appendChild(unmuteBtn);
-          } else {
-            // Создаём контейнер с иконкой и select
-            const muteContainer = document.createElement('div');
-            muteContainer.style.display = 'flex';
-            muteContainer.style.alignItems = 'center';
-            muteContainer.style.gap = '4px';
+          if (isOwner && member.role === 'admin') {
+            const demoteBtn = document.createElement('button');
+            demoteBtn.textContent = '⬇️';
+            demoteBtn.title = 'Снять админа';
+            demoteBtn.className = 'admin-action-btn';
+            demoteBtn.addEventListener('click', async (e) => {
+              e.stopPropagation();
+              try {
+                await api(`/api/groups/${groupId}/demote`, {
+                  method: 'POST',
+                  body: JSON.stringify({ userId: member.id })
+                });
+                showGroupInfo(groupId, groupTitle);
+              } catch (err) {
+                alert(err.message);
+              }
+            });
+            actionsDiv.appendChild(demoteBtn);
+          }
+          
+          if ((isOwner || isAdmin) && (member.role !== 'owner' || isOwner)) {
+            const isMuted = member.muted_until && new Date(member.muted_until) > new Date();
+            
+            if (isMuted) {
+              const unmuteBtn = document.createElement('button');
+              unmuteBtn.innerHTML = '<img src="/images/unmute.png" alt="Unmute" style="width:16px;height:16px;">';
+              unmuteBtn.title = 'Размутить';
+              unmuteBtn.className = 'admin-action-btn';
+              unmuteBtn.addEventListener('click', async (e) => {
+                e.stopPropagation();
+                try {
+                  await api(`/api/groups/${groupId}/unmute`, {
+                    method: 'POST',
+                    body: JSON.stringify({ userId: member.id })
+                  });
+                  showGroupInfo(groupId, groupTitle);
+                } catch (err) {
+                  alert(err.message);
+                }
+              });
+              actionsDiv.appendChild(unmuteBtn);
+            } else {
+              const muteContainer = document.createElement('div');
+              muteContainer.style.display = 'flex';
+              muteContainer.style.alignItems = 'center';
+              muteContainer.style.gap = '4px';
 
-            // Иконка mute
-            const muteIcon = document.createElement('img');
-            muteIcon.src = '/images/mute.png';
-            muteIcon.alt = 'Mute';
-            muteIcon.style.width = '16px';
-            muteIcon.style.height = '16px';
-            muteContainer.appendChild(muteIcon);
+              const muteIcon = document.createElement('img');
+              muteIcon.src = '/images/mute.png';
+              muteIcon.alt = 'Mute';
+              muteIcon.style.width = '16px';
+              muteIcon.style.height = '16px';
+              muteContainer.appendChild(muteIcon);
 
-            // Выпадающий список с вариантами длительности
-            const muteSelect = document.createElement('select');
-            muteSelect.className = 'admin-action-btn';
-            muteSelect.style.padding = '4px 8px';
+              const muteSelect = document.createElement('select');
+              muteSelect.className = 'admin-action-btn';
+              muteSelect.style.padding = '4px 8px';
 
-            const durations = [
+              const durations = [
                 { value: 5, label: '5 мин' },
                 { value: 10, label: '10 мин' },
                 { value: 30, label: '30 мин' },
                 { value: 60, label: '1 час' },
                 { value: 1440, label: '24 часа' }
-            ];
+              ];
 
-            durations.forEach(d => {
+              durations.forEach(d => {
                 const option = document.createElement('option');
                 option.value = d.value;
                 option.textContent = d.label;
                 muteSelect.appendChild(option);
-            });
+              });
 
-            muteSelect.addEventListener('change', async (e) => {
+              muteSelect.addEventListener('change', async (e) => {
                 e.stopPropagation();
                 const minutes = parseInt(muteSelect.value, 10);
                 try {
-                    await api(`/api/groups/${groupId}/mute`, {
-                        method: 'POST',
-                        body: JSON.stringify({ userId: member.id, minutes })
-                    });
-                    showGroupInfo(groupId, groupTitle);
+                  await api(`/api/groups/${groupId}/mute`, {
+                    method: 'POST',
+                    body: JSON.stringify({ userId: member.id, minutes })
+                  });
+                  showGroupInfo(groupId, groupTitle);
                 } catch (err) {
-                    alert(err.message);
+                  alert(err.message);
                 }
-            });
-
-            muteContainer.appendChild(muteSelect);
-            actionsDiv.appendChild(muteContainer);
-          }
-        }
-        
-        // Исправленное условие для кика: владелец может кикнуть всех, админ только обычных участников
-        const canKick = (isOwner && member.role !== 'owner') || (isAdmin && member.role === 'member');
-        if (canKick) {
-          const kickBtn = document.createElement('button');
-          kickBtn.title = 'Кикнуть';
-          kickBtn.className = 'admin-action-btn';
-          
-          const kickImg = document.createElement('img');
-          kickImg.src = '/images/kick.png';
-          kickImg.alt = 'Kick';
-          kickImg.style.width = '20px';
-          kickImg.style.height = '20px';
-          kickBtn.appendChild(kickImg);
-          
-          kickBtn.addEventListener('click', async (e) => {
-            e.stopPropagation();
-            if (!confirm(`Вы уверены, что хотите кикнуть ${member.username}?`)) return;
-            try {
-              await api(`/api/groups/${groupId}/kick/${member.id}`, {
-                method: 'DELETE'
               });
-              showGroupInfo(groupId, groupTitle);
-            } catch (err) {
-              alert(err.message);
+
+              muteContainer.appendChild(muteSelect);
+              actionsDiv.appendChild(muteContainer);
             }
-          });
-          actionsDiv.appendChild(kickBtn);
+          }
+          
+          const canKick = (isOwner && member.role !== 'owner') || (isAdmin && member.role === 'member');
+          if (canKick) {
+            const kickBtn = document.createElement('button');
+            kickBtn.title = 'Кикнуть';
+            kickBtn.className = 'admin-action-btn';
+            
+            const kickImg = document.createElement('img');
+            kickImg.src = '/images/kick.png';
+            kickImg.alt = 'Kick';
+            kickImg.style.width = '20px';
+            kickImg.style.height = '20px';
+            kickBtn.appendChild(kickImg);
+            
+            kickBtn.addEventListener('click', async (e) => {
+              e.stopPropagation();
+              if (!confirm(`Вы уверены, что хотите кикнуть ${member.username}?`)) return;
+              try {
+                await api(`/api/groups/${groupId}/kick/${member.id}`, {
+                  method: 'DELETE'
+                });
+                showGroupInfo(groupId, groupTitle);
+              } catch (err) {
+                alert(err.message);
+              }
+            });
+            actionsDiv.appendChild(kickBtn);
+          }
         }
         
         if (actionsDiv.children.length > 0) {
@@ -1896,12 +1996,20 @@ async function showGroupInfo(groupId, groupTitle) {
       listEl.appendChild(li);
     });
     
+    // Кнопка добавления участника
     const addBtn = $('btn-add-member');
     if (addBtn) {
-      addBtn.dataset.groupId = groupId;
-      addBtn.dataset.groupTitle = groupTitle;
+      // В каналах показываем кнопку только админам
+      if (isChannel && !isAdmin) {
+        hide(addBtn);
+      } else {
+        show(addBtn);
+        addBtn.dataset.groupId = groupId;
+        addBtn.dataset.groupTitle = groupTitle;
+      }
     }
     
+    // Кнопка выхода из группы/канала (есть у всех)
     let leaveBtnContainer = document.getElementById('leave-group-container');
     if (!leaveBtnContainer) {
       leaveBtnContainer = document.createElement('div');
@@ -1916,7 +2024,7 @@ async function showGroupInfo(groupId, groupTitle) {
     
     const leaveBtn = document.createElement('button');
     leaveBtn.id = 'leave-group-btn';
-    leaveBtn.innerHTML = '<img src="/images/leave.png" alt="Leave" style="width:20px; height:20px; vertical-align:middle;"> Покинуть группу';
+    leaveBtn.innerHTML = '<img src="/images/leave.png" alt="Leave" style="width:20px; height:20px; vertical-align:middle;"> Покинуть ' + (isChannel ? 'канал' : 'группу');
     leaveBtn.style.width = '100%';
     leaveBtn.style.padding = '0.75rem';
     leaveBtn.style.backgroundColor = 'var(--danger)';
@@ -1932,7 +2040,8 @@ async function showGroupInfo(groupId, groupTitle) {
     leaveBtn.onmouseout = () => { leaveBtn.style.opacity = '1'; };
     
     leaveBtn.onclick = async () => {
-      if (!confirm(`Вы уверены, что хотите покинуть группу "${groupTitle}"?`)) return;
+      const type = isChannel ? 'канал' : 'группу';
+      if (!confirm(`Вы уверены, что хотите покинуть ${type} "${groupTitle}"?`)) return;
       
       try {
         await api(`/api/groups/${groupId}/leave`, { method: 'POST' });
@@ -1942,6 +2051,7 @@ async function showGroupInfo(groupId, groupTitle) {
         if (currentConversationId === groupId) {
           currentConversationId = null;
           currentConversationIsGroup = false;
+          currentConversationIsChannel = false;
           
           const chatPlaceholder = $('chat-placeholder');
           const chatActive = $('chat-active');
@@ -1960,10 +2070,10 @@ async function showGroupInfo(groupId, groupTitle) {
         }
         
         await loadConversationList();
-        showToast(`Вы покинули группу "${groupTitle}"`, 'info');
+        showToast(`Вы покинули ${type} "${groupTitle}"`, 'info');
         
       } catch (err) {
-        alert('Ошибка при выходе из группы: ' + err.message);
+        alert('Ошибка при выходе: ' + err.message);
       }
     };
     

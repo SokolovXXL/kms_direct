@@ -476,6 +476,7 @@ app.get('/api/conversations', authMiddleware, async (req, res) => {
       c.created_at,
       c.is_group,
       c.title,
+      c.is_channel,  // <-- добавить эту строку
       COALESCE(
         json_agg(
           DISTINCT jsonb_build_object(
@@ -483,6 +484,7 @@ app.get('/api/conversations', authMiddleware, async (req, res) => {
             'username', u.username,
             'display_name', u.display_name,
             'name', COALESCE(u.display_name, u.username),
+            'role', cp.role,   // роль тоже добавить (если нет)
             'last_seen', u.last_seen
           )
         ) FILTER (WHERE u.id != $1),
@@ -527,6 +529,7 @@ app.get('/api/conversations', authMiddleware, async (req, res) => {
     return {
       id: row.id,
       isGroup: row.is_group || false,
+      isChannel: row.is_channel || false,
       title: row.title,
       participants: participants, // original
       otherUsers: otherUsers,
@@ -723,15 +726,15 @@ app.get('/api/groups/:id', authMiddleware, async (req, res) => {
   if (isNaN(groupId) || groupId <= 0) return res.status(400).json({ error: 'Invalid group ID' });
 
   const result = await pool.query(`
-    SELECT c.id, c.title, c.created_at, 
-           json_agg(json_build_object(
+    SELECT c.id, c.title, c.created_at, c.is_channel,
+          json_agg(json_build_object(
               'id', u.id, 
               'username', u.username,
               'display_name', u.display_name,
               'name', COALESCE(u.display_name, u.username),
               'role', cp.role, 
               'muted_until', cp.muted_until,
-              'last_seen', u.last_seen   -- добавили last_seen
+              'last_seen', u.last_seen
             )) as participants
     FROM conversations c
     JOIN conversation_participants cp ON cp.conversation_id = c.id
@@ -756,79 +759,79 @@ app.get('/api/groups/:id', authMiddleware, async (req, res) => {
     online: isUserOnline(p.id)
   }));
 
-  res.json(group);
+  res.json({
+    ...group,
+    isChannel: group.is_channel || false,
+    participants: group.participants
+  });
 });
 
-app.post('/api/groups/:id/members', authMiddleware, async (req, res) => {
-  const groupId = parseInt(req.params.id, 10);
-  if (isNaN(groupId) || groupId <= 0) return res.status(400).json({ error: 'Invalid group ID' });
+// ---- Channels ----
+app.post('/api/channels', authMiddleware, async (req, res) => {
+  const { title, userIds } = req.body || {};
 
-  const { userId } = req.body || {};
-  const targetUserId = parseInt(userId, 10);
-  if (isNaN(targetUserId) || targetUserId <= 0) {
-    return res.status(400).json({ error: 'Valid user ID required' });
+  if (!title || !Array.isArray(userIds) || userIds.length < 1) {
+    return res.status(400).json({ error: 'Title and at least 1 other user required' });
   }
 
-  const check = await pool.query(`
-    SELECT c.is_group, cp.role
-    FROM conversations c
-    JOIN conversation_participants cp ON cp.conversation_id = c.id
-    WHERE c.id = $1 AND cp.user_id = $2
-  `, [groupId, req.userId]);
-
-  if (check.rows.length === 0 || !check.rows[0].is_group) {
-    return res.status(404).json({ error: 'Group not found or not a member' });
+  const otherUserIds = userIds.map(id => parseInt(id, 10)).filter(id => !isNaN(id) && id > 0 && id !== req.userId);
+  if (otherUserIds.length === 0) {
+    return res.status(400).json({ error: 'At least one valid other user ID required' });
   }
 
-  if (check.rows[0].role !== 'owner' && check.rows[0].role !== 'admin') {
-    return res.status(403).json({ error: 'Only admins can add members' });
+  // Проверяем существование и дружбу
+  for (const uid of otherUserIds) {
+    const userExists = await pool.query('SELECT id FROM users WHERE id = $1', [uid]);
+    if (userExists.rows.length === 0) {
+      return res.status(404).json({ error: `User with ID ${uid} does not exist` });
+    }
+    const isFriend = await pool.query(
+      'SELECT 1 FROM friends WHERE (user_id = $1 AND friend_id = $2) OR (user_id = $2 AND friend_id = $1)',
+      [req.userId, uid]
+    );
+    if (isFriend.rows.length === 0) {
+      return res.status(403).json({ error: `User ${uid} is not your friend` });
+    }
   }
 
-  const userExists = await pool.query('SELECT id FROM users WHERE id = $1', [targetUserId]);
-  if (userExists.rows.length === 0) {
-    return res.status(404).json({ error: 'User does not exist' });
-  }
-
-  const isFriend = await pool.query(
-    'SELECT 1 FROM friends WHERE (user_id = $1 AND friend_id = $2) OR (user_id = $2 AND friend_id = $1)',
-    [req.userId, targetUserId]
-  );
-
-  if (isFriend.rows.length === 0) {
-    return res.status(403).json({ error: 'You can only add friends to groups' });
-  }
+  const allUserIds = [req.userId, ...otherUserIds];
+  const client = await pool.connect();
 
   try {
-    await pool.query(
-      'INSERT INTO conversation_participants (conversation_id, user_id) VALUES ($1, $2)',
-      [groupId, targetUserId]
-    );
+    await client.query('BEGIN');
 
-    // Уведомляем добавляемого
-    broadcastToUser(targetUserId, {
-      type: 'added_to_group',
-      conversationId: groupId
-    });
-
-    // Уведомляем остальных участников
-    const participants = await pool.query(
-      'SELECT user_id FROM conversation_participants WHERE conversation_id = $1 AND user_id != $2',
-      [groupId, targetUserId]
+    // Вставляем канал с is_channel = true
+    const ins = await client.query(
+      'INSERT INTO conversations (is_group, is_channel, title) VALUES (true, true, $1) RETURNING id',
+      [title]
     );
-    for (const row of participants.rows) {
-      broadcastToUser(row.user_id, {
-        type: 'member_added',
-        conversationId: groupId,
-        userId: targetUserId
+    const cid = ins.rows[0].id;
+
+    for (const uid of allUserIds) {
+      const role = uid === req.userId ? 'owner' : 'member';
+      await client.query(
+        'INSERT INTO conversation_participants (conversation_id, user_id, role) VALUES ($1, $2, $3)',
+        [cid, uid, role]
+      );
+    }
+
+    await client.query('COMMIT');
+
+    // Уведомляем новых участников (кроме создателя)
+    for (const uid of otherUserIds) {
+      broadcastToUser(uid, {
+        type: 'new_channel',
+        conversationId: cid,
+        channelTitle: title
       });
     }
 
-    res.json({ success: true });
+    res.json({ conversationId: cid });
   } catch (e) {
-    if (e.code === '23505') {
-      return res.status(400).json({ error: 'User already in group' });
-    }
+    await client.query('ROLLBACK');
     throw e;
+  } finally {
+    client.release();
   }
 });
 
@@ -956,6 +959,22 @@ app.post('/api/conversations/:id/messages', authMiddleware, async (req, res) => 
 
   const isMember = part.rows.some(p => p.user_id === req.userId);
   if (!isMember) return res.status(403).json({ error: 'Not in this conversation' });
+
+  // Проверка, является ли диалог каналом
+  const convCheck = await pool.query(
+    'SELECT is_channel FROM conversations WHERE id = $1',
+    [convId]
+  );
+  if (convCheck.rows.length > 0 && convCheck.rows[0].is_channel) {
+    const roleCheck = await pool.query(
+      'SELECT role FROM conversation_participants WHERE conversation_id = $1 AND user_id = $2',
+      [convId, req.userId]
+    );
+    const role = roleCheck.rows[0]?.role;
+    if (role !== 'owner' && role !== 'admin') {
+      return res.status(403).json({ error: 'Only admins can post in channels' });
+    }
+  }
 
   const muteCheck = await pool.query(`
     SELECT muted_until FROM conversation_participants
@@ -1672,6 +1691,18 @@ async function main() {
       // Не выходим, так как приложение может работать и без этого (но DM будут не защищены)
     } finally {
       client.release();
+    }
+    const client2 = await pool.connect();
+    try {
+      await client2.query(`
+        ALTER TABLE conversations 
+        ADD COLUMN IF NOT EXISTS is_channel BOOLEAN DEFAULT false
+      `);
+      console.log('Column is_channel added/verified');
+    } catch (err) {
+      console.error('Failed to add is_channel column:', err);
+    } finally {
+      client2.release();
     }
   } catch (e) {
     console.error('DB init failed:', e.message);
