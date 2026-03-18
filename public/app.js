@@ -1540,54 +1540,55 @@ async function showGroupInfo(groupId, groupTitle) {
   });
   actionsDiv.appendChild(unmuteBtn);
           } else {
-            // Вместо селекта создаём группу кнопок
+            // Создаём контейнер с иконкой и select
             const muteContainer = document.createElement('div');
             muteContainer.style.display = 'flex';
+            muteContainer.style.alignItems = 'center';
             muteContainer.style.gap = '4px';
-            muteContainer.style.flexWrap = 'wrap';
+
+            // Иконка mute
+            const muteIcon = document.createElement('img');
+            muteIcon.src = '/images/mute.png';
+            muteIcon.alt = 'Mute';
+            muteIcon.style.width = '16px';
+            muteIcon.style.height = '16px';
+            muteContainer.appendChild(muteIcon);
+
+            // Выпадающий список с вариантами длительности
+            const muteSelect = document.createElement('select');
+            muteSelect.className = 'admin-action-btn';
+            muteSelect.style.padding = '4px 8px';
 
             const durations = [
-              { value: 5, label: '5 мин' },
-              { value: 10, label: '10 мин' },
-              { value: 30, label: '30 мин' },
-              { value: 60, label: '1 час' },
-              { value: 1440, label: '24 часа' }
+                { value: 5, label: '5 мин' },
+                { value: 10, label: '10 мин' },
+                { value: 30, label: '30 мин' },
+                { value: 60, label: '1 час' },
+                { value: 1440, label: '24 часа' }
             ];
 
             durations.forEach(d => {
-              const btn = document.createElement('button');
-              btn.className = 'admin-action-btn';
-              btn.style.display = 'inline-flex';
-              btn.style.alignItems = 'center';
-              btn.style.gap = '4px';
-              btn.style.padding = '4px 8px';
-
-              // Иконка mute.png для всех кнопок
-              const icon = document.createElement('img');
-              icon.src = '/images/mute.png';
-              icon.alt = 'Mute';
-              icon.style.width = '16px';
-              icon.style.height = '16px';
-
-              btn.appendChild(icon);
-              btn.appendChild(document.createTextNode(d.label));
-
-              btn.addEventListener('click', async (e) => {
-                e.stopPropagation();
-                try {
-                  await api(`/api/groups/${groupId}/mute`, {
-                    method: 'POST',
-                    body: JSON.stringify({ userId: member.id, minutes: d.value })
-                  });
-                  showGroupInfo(groupId, groupTitle);
-                } catch (err) {
-                  alert(err.message);
-                }
-              });
-
-              muteContainer.appendChild(btn);
+                const option = document.createElement('option');
+                option.value = d.value;
+                option.textContent = d.label;
+                muteSelect.appendChild(option);
             });
 
+            muteSelect.addEventListener('change', async (e) => {
+                e.stopPropagation();
+                const minutes = parseInt(muteSelect.value, 10);
+                try {
+                    await api(`/api/groups/${groupId}/mute`, {
+                        method: 'POST',
+                        body: JSON.stringify({ userId: member.id, minutes })
+                    });
+                    showGroupInfo(groupId, groupTitle);
+                } catch (err) {
+                    alert(err.message);
+                }
+            });
+
+            muteContainer.appendChild(muteSelect);
             actionsDiv.appendChild(muteContainer);
           }
         }
@@ -1716,7 +1717,7 @@ function showGroupInfoButton(groupId, groupTitle) {
   
   const btn = document.createElement('button');
   btn.id = 'group-info-btn';
-  btn.innerHTML = 'ℹ️';
+  btn.innerHTML = '<img src="/images/info.png" alt="Group info" style="width:20px; height:20px;">';
   btn.style.marginLeft = 'auto';
   btn.style.background = 'none';
   btn.style.border = 'none';
@@ -2131,7 +2132,7 @@ function renderFileMessage(messageDiv, fileData) {
   iconSpan.innerHTML = ''; // очищаем
   const iconImg = document.createElement('img');
   iconImg.src = '/images/file.png'; // новая функция
-  iconImg.alt = getFileIconAlt(fileData.mime);
+  iconImg.alt = 'File';
   iconImg.style.width = '24px';
   iconImg.style.height = '24px';
   iconSpan.appendChild(iconImg);
@@ -2747,7 +2748,7 @@ function showCallUI() {
   if (btn) {
     btn.style.display = 'inline-block';
     btn.disabled = true;
-    btn.textContent = '☎️ 📞';
+    btn.innerHTML = '<img src="/images/call.png" alt="Call" style="width:20px; height:20px;">';
   }
   
   if (btnEnd) {
@@ -2763,7 +2764,7 @@ function hideCallUI() {
   if (btn) {
     btn.style.display = 'block';
     btn.disabled = false;
-    btn.textContent = '☎️';
+    btn.innerHTML = '<img src="/images/call.png" alt="Call" style="width:20px; height:20px;">';
   }
   
   if (btnEnd) {
