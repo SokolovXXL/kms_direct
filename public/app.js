@@ -904,90 +904,98 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 // ---- Conversations List ----
-async function loadConversationList() {
+async function loadConversationList(retryCount = 3) {
   const list = $('dm-list');
   if (!list) return;
   
   list.innerHTML = '';
   
-  try {
-    const [conversations, notifByConvoResp] = await Promise.all([
-      api('/api/conversations'),
-      api('/api/notifications')
-    ]);
-    
-    unreadByConvo = notifByConvoResp;
-    conversationListCache = conversations.map(c => ({ ...c, typingUserId: null }));
-    
-    if (conversations.length === 0) {
-      list.innerHTML = '<p style="padding:1rem;color:var(--text-muted)">No conversations yet. Start a new message!</p>';
-      return;
-    }
-    
-    for (const conv of conversations) {
-      const unread = notifByConvoResp[conv.id] || 0;
-      const item = document.createElement('button');
-      item.type = 'button';
-      item.className = 'dm-item' + (conv.id === currentConversationId ? ' active' : '');
-      item.dataset.id = conv.id;
+  for (let attempt = 1; attempt <= retryCount; attempt++) {
+    try {
+      const [conversations, notifByConvoResp] = await Promise.all([
+        api('/api/conversations'),
+        api('/api/notifications')
+      ]);
       
-      let nameHtml = '';
-      let previewText = conv.lastMessage || 'No messages yet';
-      let statusHtml = '';
+      unreadByConvo = notifByConvoResp;
+      conversationListCache = conversations.map(c => ({ ...c, typingUserId: null }));
       
-      if (!conv.isGroup && conv.otherUser) {
-        if (conv.typingUserId) {
-          statusHtml = '<span class="dm-status typing">печатает...</span>';
-        } else if (conv.otherUser.online) {
-          statusHtml = '<span class="dm-status online">● онлайн</span>';
-        } else if (conv.otherUser.last_seen) {
-          statusHtml = `<span class="dm-status">был(а) ${formatLastSeen(conv.otherUser.last_seen)}</span>`;
-        }
+      if (conversations.length === 0) {
+        list.innerHTML = '<p style="padding:1rem;color:var(--text-muted)">No conversations yet. Start a new message!</p>';
+        return;
       }
-
-
-      if (previewText.startsWith('{')) {
-        try {
-          const fileData = JSON.parse(previewText);
-          if (fileData.type === 'file') {
-            previewText = `📎 ${fileData.name || 'File'}`;
+      
+      for (const conv of conversations) {
+        const unread = notifByConvoResp[conv.id] || 0;
+        const item = document.createElement('button');
+        item.type = 'button';
+        item.className = 'dm-item' + (conv.id === currentConversationId ? ' active' : '');
+        item.dataset.id = conv.id;
+        
+        let nameHtml = '';
+        let previewText = conv.lastMessage || 'No messages yet';
+        let statusHtml = '';
+        
+        if (!conv.isGroup && conv.otherUser) {
+          if (conv.typingUserId) {
+            statusHtml = '<span class="dm-status typing">печатает...</span>';
+          } else if (conv.otherUser.online) {
+            statusHtml = '<span class="dm-status online">● онлайн</span>';
+          } else if (conv.otherUser.last_seen) {
+            statusHtml = `<span class="dm-status">был ${formatLastSeen(conv.otherUser.last_seen)}</span>`;
           }
-        } catch (e) {}
-      }
-      previewText = truncate(previewText);
-      
-      if (conv.isGroup) {
-        nameHtml = `<span class="dm-name"><img src="/images/group.png" alt="Group" style="width:18px; height:18px; vertical-align:middle;"> ${escapeHtml(conv.title || 'Group')}</span>`;
-      } else {
-        const otherUserName = conv.otherUser?.name || conv.otherUser?.username || 'Unknown';
-        nameHtml = `<span class="dm-name">${escapeHtml(otherUserName)}</span>`;
-      }
-      
-      item.innerHTML = `
-        <div style="flex:1;min-width:0;">
-          ${nameHtml}
-          <span class="dm-preview">${escapeHtml(previewText)}</span>
-          ${statusHtml}
-        </div>
-        ${unread > 0 ? `<span class="dm-unread">${unread > 99 ? '99+' : unread}</span>` : ''}
-      `;
-      
-      item.addEventListener('click', () => {
-        selectConversation(conv.id);
-        if (conv.isGroup) {
-          showGroupInfoButton(conv.id, conv.title);
-        } else {
-          hideGroupInfoButton();
         }
-        if (isMobile()) setTimeout(() => showChat(), 10);
-      });
-      list.appendChild(item);
+
+        if (previewText.startsWith('{')) {
+          try {
+            const fileData = JSON.parse(previewText);
+            if (fileData.type === 'file') {
+              previewText = `📎 ${fileData.name || 'File'}`;
+            }
+          } catch (e) {}
+        }
+        previewText = truncate(previewText);
+        
+        if (conv.isGroup) {
+          nameHtml = `<span class="dm-name"><img src="/images/group.png" alt="Group" style="width:18px; height:18px; vertical-align:middle;"> ${escapeHtml(conv.title || 'Group')}</span>`;
+        } else {
+          const otherUserName = conv.otherUser?.name || conv.otherUser?.username || 'Unknown';
+          nameHtml = `<span class="dm-name">${escapeHtml(otherUserName)}</span>`;
+        }
+        
+        item.innerHTML = `
+          <div style="flex:1;min-width:0;">
+            ${nameHtml}
+            <span class="dm-preview">${escapeHtml(previewText)}</span>
+            ${statusHtml}
+          </div>
+          ${unread > 0 ? `<span class="dm-unread">${unread > 99 ? '99+' : unread}</span>` : ''}
+        `;
+        
+        item.addEventListener('click', () => {
+          selectConversation(conv.id);
+          if (conv.isGroup) {
+            showGroupInfoButton(conv.id, conv.title);
+          } else {
+            hideGroupInfoButton();
+          }
+          if (isMobile()) setTimeout(() => showChat(), 10);
+        });
+        list.appendChild(item);
+      }
+      updateBadgeFromCache();
+      restoreLastConversation();
+      return; // успех – выходим из функции
+      
+    } catch (err) {
+      console.error(`Failed to load conversations (attempt ${attempt}/${retryCount}):`, err);
+      if (attempt === retryCount) {
+        list.innerHTML = '<p style="padding:1rem;color:var(--text-muted)">Could not load conversations</p>';
+      } else {
+        // ждём перед следующей попыткой (экспоненциальная задержка)
+        await new Promise(r => setTimeout(r, 1000 * attempt));
+      }
     }
-    updateBadgeFromCache();
-    restoreLastConversation();
-  } catch (err) {
-    console.error('Failed to load conversations:', err);
-    list.innerHTML = '<p style="padding:1rem;color:var(--text-muted)">Could not load conversations</p>';
   }
 }
 
