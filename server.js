@@ -487,7 +487,7 @@ app.get('/api/conversations', authMiddleware, async (req, res) => {
             'role', cp.role,
             'last_seen', u.last_seen
           )
-        ) FILTER (WHERE u.id != $1),
+        ),
         '[]'::json
       ) AS participants,
       MAX(m.created_at) AS last_at,
