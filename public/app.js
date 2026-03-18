@@ -425,49 +425,6 @@ function createMessageElement(message, isGroup, currentUserId) {
   metaDiv.textContent = new Date(message.created_at).toLocaleString();
   messageDiv.appendChild(metaDiv);
 
-  if (message.sender_id === currentUserId) {
-    const deleteBtn = document.createElement('button');
-    deleteBtn.textContent = '🗑️';
-    deleteBtn.className = 'delete-message-btn';
-    deleteBtn.setAttribute('aria-label', 'Удалить сообщение');
-    deleteBtn.style.marginLeft = '10px';
-    deleteBtn.style.background = 'none';
-    deleteBtn.style.border = 'none';
-    deleteBtn.style.color = 'var(--text-muted)';
-    deleteBtn.style.cursor = 'pointer';
-    deleteBtn.style.fontSize = '1rem';
-    deleteBtn.style.padding = '4px 8px';
-    deleteBtn.style.borderRadius = '4px';
-    deleteBtn.style.opacity = '0.6';
-    deleteBtn.style.transition = 'opacity 0.2s';
-
-    deleteBtn.onmouseover = () => { deleteBtn.style.opacity = '1'; };
-    deleteBtn.onmouseout = () => { deleteBtn.style.opacity = '0.6'; };
-
-    deleteBtn.onclick = async (e) => {
-      e.stopPropagation();
-      if (!confirm('Удалить это сообщение?')) return;
-
-      try {
-        await api(`/api/messages/${message.id}`, { method: 'DELETE' });
-        messageDiv.style.opacity = '0';
-        messageDiv.style.transform = 'translateX(-10px)';
-        messageDiv.style.transition = 'all 0.3s';
-
-        setTimeout(() => {
-          if (messageDiv.parentNode) {
-            messageDiv.remove();
-            updateSidebarPreviewAfterDeletion(currentConversationId);
-          }
-        }, 300);
-      } catch (err) {
-        alert('Ошибка удаления: ' + err.message);
-      }
-    };
-
-    messageDiv.appendChild(deleteBtn);
-  }
-
   return messageDiv;
 }
 
@@ -574,22 +531,43 @@ function initContextMenu() {
       hideContextMenu();
     }
   });
+
+  // Обработка кликов по пунктам меню
+  contextMenu.addEventListener('click', (e) => {
+    const actionItem = e.target.closest('.context-menu-item');
+    if (!actionItem || !currentContextMessage) return;
+
+    const action = actionItem.dataset.action;
+    if (action === 'copy') {
+      copyMessageContent(currentContextMessage);
+    } else if (action === 'delete') {
+      deleteMessage(currentContextMessage);
+    }
+    hideContextMenu();
+  });
 }
 
 function showContextMenu(messageElement, clickX, clickY) {
   if (!contextMenu) return;
 
-  // Сохраняем текущее сообщение (для будущих действий)
   currentContextMessage = messageElement;
 
-  // Позиционируем меню
+  // Показываем или скрываем пункт "Удалить" в зависимости от того, своё ли сообщение
+  const deleteItem = contextMenu.querySelector('[data-action="delete"]');
+  if (deleteItem) {
+    if (messageElement.classList.contains('mine')) {
+      deleteItem.style.display = 'block';
+    } else {
+      deleteItem.style.display = 'none';
+    }
+  }
+
   const menuWidth = contextMenu.offsetWidth || 180;
   const menuHeight = contextMenu.offsetHeight || 100;
   
   let left = clickX;
   let top = clickY;
 
-  // Корректировка, чтобы меню не выходило за границы экрана
   const viewportWidth = window.innerWidth;
   const viewportHeight = window.innerHeight;
 
@@ -603,7 +581,6 @@ function showContextMenu(messageElement, clickX, clickY) {
   contextMenu.style.left = left + 'px';
   contextMenu.style.top = top + 'px';
 
-  // Позиционируем стрелочку (примерно под курсором)
   const arrow = contextMenu.querySelector('.context-menu-arrow');
   if (arrow) {
     const arrowLeft = clickX - left;
@@ -620,26 +597,62 @@ function hideContextMenu() {
   }
 }
 
+function copyMessageContent(messageElement) {
+  // Пытаемся найти текст в .message-body, иначе имя файла
+  const bodyEl = messageElement.querySelector('.message-body');
+  if (bodyEl) {
+    navigator.clipboard.writeText(bodyEl.textContent).catch(() => {
+      showToast('Не удалось скопировать', 'error');
+    });
+    return;
+  }
+
+  // Если это файл, копируем имя файла
+  const fileNameEl = messageElement.querySelector('.file-name');
+  if (fileNameEl) {
+    navigator.clipboard.writeText(fileNameEl.textContent).catch(() => {
+      showToast('Не удалось скопировать', 'error');
+    });
+  }
+}
+
+async function deleteMessage(messageElement) {
+  if (!confirm('Удалить это сообщение?')) return;
+
+  const messageId = messageElement.dataset.messageId;
+  if (!messageId) return;
+
+  try {
+    await api(`/api/messages/${messageId}`, { method: 'DELETE' });
+    messageElement.style.opacity = '0';
+    messageElement.style.transform = 'translateX(-10px)';
+    messageElement.style.transition = 'all 0.3s';
+
+    setTimeout(() => {
+      if (messageElement.parentNode) {
+        messageElement.remove();
+        updateSidebarPreviewAfterDeletion(currentConversationId);
+      }
+    }, 300);
+  } catch (err) {
+    alert('Ошибка удаления: ' + err.message);
+  }
+}
+
 // Обработчик клика на сообщения (через делегирование)
 const messagesList = document.getElementById('messages-list');
 if (messagesList) {
   messagesList.addEventListener('click', (e) => {
-    // Ищем ближайшее сообщение
     const message = e.target.closest('.message');
     if (!message) return;
 
-    // Проверяем, не был ли клик на интерактивном элементе
     const interactive = e.target.closest('button, a, .audio-play-btn, .audio-download-btn, .delete-message-btn, input, label, video, audio');
-    if (interactive) return; // Не показываем меню на кнопках управления
+    if (interactive) return;
 
-    // Показываем меню по координатам клика
     showContextMenu(message, e.clientX, e.clientY);
-
-    // Предотвращаем всплытие, чтобы не закрылось сразу
     e.stopPropagation();
   });
 }
-
 // Инициализируем при загрузке страницы
 document.addEventListener('DOMContentLoaded', () => {
   initContextMenu();
@@ -2780,6 +2793,7 @@ document.addEventListener('DOMContentLoaded', () => {
     
     header.insertBefore(btn, header.firstChild);
   }
+  initContextMenu();
   
   tryAutoLogin();
 });
