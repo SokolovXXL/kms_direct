@@ -540,12 +540,18 @@ function handleTypingEvent(data) {
   const conversation = conversationListCache.find(c => c.id === conversationId);
   if (!conversation) return;
 
+  // Обновляем кэш
+  if (action === 'start') {
+    conversation.typingUserId = userId;
+  } else {
+    conversation.typingUserId = null;
+  }
+
   // Определяем отображаемое имя
   let displayName = 'Кто-то';
   if (!conversation.isGroup && conversation.otherUser?.id === userId) {
     displayName = conversation.otherUser.name || conversation.otherUser.username;
   } else if (conversation.isGroup) {
-    // Можно улучшить, загружая данные участников, но для простоты используем userId
     displayName = `Пользователь ${userId}`;
   }
 
@@ -609,12 +615,13 @@ function updateTypingStatusInSidebar(conversationId, displayName, isTyping) {
     if (conversation && !conversation.isGroup && conversation.otherUser) {
       if (conversation.otherUser.online) {
         row.innerHTML = '● онлайн';
-        row.classList.remove('typing');
+        row.className = 'dm-status online';
       } else if (conversation.otherUser.last_seen) {
-        row.innerHTML = `был(а) ${formatLastSeen(conversation.otherUser.last_seen)}`;
-        row.classList.remove('typing');
+        row.innerHTML = `был ${formatLastSeen(conversation.otherUser.last_seen)}`;
+        row.className = 'dm-status';
       }
     }
+    row.classList.remove('typing');
   }
 }
 
@@ -629,7 +636,7 @@ function updateChatHeaderStatus(conversation) {
       statusEl.textContent = 'онлайн';
       statusEl.style.color = 'var(--success)';
     } else if (conversation.otherUser.last_seen) {
-      statusEl.textContent = `был(а) ${formatLastSeen(conversation.otherUser.last_seen)}`;
+      statusEl.textContent = `был ${formatLastSeen(conversation.otherUser.last_seen)}`;
       statusEl.style.color = 'var(--text-muted)';
     } else {
       statusEl.textContent = '';
@@ -640,32 +647,24 @@ function updateChatHeaderStatus(conversation) {
 function handleUserStatusChange(data) {
   const { userId, online, last_seen } = data;
 
-  // Обновляем кэш conversations
-  let updated = false;
   for (const conv of conversationListCache) {
     if (!conv.isGroup && conv.otherUser?.id === userId) {
       conv.otherUser.online = online;
       if (!online && last_seen) {
         conv.otherUser.last_seen = last_seen;
       }
-      updated = true;
-      break;
-    }
-    // Для групп можно позже добавить обновление статуса участников
-  }
-
-  if (updated) {
-    // Находим нужный диалог
-    const conv = conversationListCache.find(c => !c.isGroup && c.otherUser?.id === userId);
-    if (conv) {
+      // Если пользователь вышел из сети, он не может печатать
+      if (!online && conv.typingUserId === userId) {
+        conv.typingUserId = null;
+      }
       // Обновляем строку в списке
       updateSidebarRowStatus(conv.id, online, last_seen);
       // Если это текущий открытый чат – обновляем шапку
       if (currentConversationId === conv.id) {
         updateChatHeaderStatus(conv);
       }
+      break;
     }
-    loadConversationList();
   }
 }
 
@@ -676,7 +675,7 @@ function updateSidebarRowStatus(convId, online, last_seen) {
     row.innerHTML = '● онлайн';
     row.className = 'dm-status online';
   } else {
-    row.innerHTML = `был(а) ${formatLastSeen(last_seen)}`;
+    row.innerHTML = `был ${formatLastSeen(last_seen)}`;
     row.className = 'dm-status';
   }
 }
@@ -918,7 +917,7 @@ async function loadConversationList() {
     ]);
     
     unreadByConvo = notifByConvoResp;
-    conversationListCache = conversations;
+    conversationListCache = conversations.map(c => ({ ...c, typingUserId: null }));
     
     if (conversations.length === 0) {
       list.innerHTML = '<p style="padding:1rem;color:var(--text-muted)">No conversations yet. Start a new message!</p>';
@@ -935,9 +934,11 @@ async function loadConversationList() {
       let nameHtml = '';
       let previewText = conv.lastMessage || 'No messages yet';
       let statusHtml = '';
-
+      
       if (!conv.isGroup && conv.otherUser) {
-        if (conv.otherUser.online) {
+        if (conv.typingUserId) {
+          statusHtml = '<span class="dm-status typing">печатает...</span>';
+        } else if (conv.otherUser.online) {
           statusHtml = '<span class="dm-status online">● онлайн</span>';
         } else if (conv.otherUser.last_seen) {
           statusHtml = `<span class="dm-status">был(а) ${formatLastSeen(conv.otherUser.last_seen)}</span>`;
@@ -2635,7 +2636,7 @@ function initSignalingChannel() {
   signalingChannel.addEventListener('call-rejected', (e) => {
     try {
       const data = JSON.parse(e.data);
-      showToast(`${getRemoteName(data.fromUserId)} отклонил(а) звонок`, 'info');
+      showToast(`${getRemoteName(data.fromUserId)} отклонил звонок`, 'info');
       endCall();
     } catch (err) {
       console.error('Error parsing call-rejected:', err);
