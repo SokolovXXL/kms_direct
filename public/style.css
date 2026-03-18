@@ -558,9 +558,9 @@ body {
   border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: 1.5rem;
-  max-width: 1000px;
+  max-width: 600px;
   width: 100%;
-  max-height: 90vh;
+  max-height: 150vh;
   overflow-y: auto;
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
 }
