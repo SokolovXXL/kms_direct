@@ -126,6 +126,50 @@ function broadcastToUser(userId, payload) {
   }
 }
 
+// Получить список пользователей, которым нужно сообщить об изменении статуса userId
+async function getUsersToNotifyAboutStatus(userId) {
+  const client = await pool.connect();
+  try {
+    // Друзья
+    const friendsRes = await client.query(
+      'SELECT friend_id FROM friends WHERE user_id = $1',
+      [userId]
+    );
+    const friendIds = friendsRes.rows.map(r => r.friend_id);
+
+    // Участники общих диалогов (кроме себя)
+    const participantsRes = await client.query(`
+      SELECT DISTINCT user_id
+      FROM conversation_participants
+      WHERE conversation_id IN (
+        SELECT conversation_id
+        FROM conversation_participants
+        WHERE user_id = $1
+      ) AND user_id != $1
+    `, [userId]);
+    const chatParticipantIds = participantsRes.rows.map(r => r.user_id);
+
+    // Объединяем и убираем дубли
+    return [...new Set([...friendIds, ...chatParticipantIds])];
+  } finally {
+    client.release();
+  }
+}
+
+// Разослать событие об изменении статуса
+async function broadcastStatusChange(userId, online) {
+  const targetUserIds = await getUsersToNotifyAboutStatus(userId);
+  const payload = {
+    type: 'user_status',
+    userId: userId,
+    online: online,
+    last_seen: online ? null : new Date().toISOString()
+  };
+  for (const targetId of targetUserIds) {
+    broadcastToUser(targetId, payload);
+  }
+}
+
 // Middleware для проверки авторизации (стандартный)
 function authMiddleware(req, res, next) {
   let token = req.cookies.token;
@@ -1139,34 +1183,44 @@ app.get('/api/notifications/stream', streamAuthMiddleware, sseConnectionLimiter,
 
   const userId = req.userId;
 
-  // Проверяем лимит одновременных соединений для пользователя
+  // Проверяем лимит
   if (sseClients.has(userId) && sseClients.get(userId).length >= MAX_SSE_PER_USER) {
     res.status(429).end('Too many SSE connections');
     return;
   }
 
+  const wasOnline = sseClients.has(userId) && sseClients.get(userId).length > 0;
+
   if (!sseClients.has(userId)) sseClients.set(userId, []);
   sseClients.get(userId).push(res);
+
+  // Если пользователь только что появился в сети
+  if (!wasOnline) {
+    broadcastStatusChange(userId, true).catch(console.error);
+  }
 
   res.on('close', async () => {
     const list = sseClients.get(userId);
     if (list) {
+      const wasOnlineBefore = list.length > 0;
       const i = list.indexOf(res);
       if (i !== -1) {
         list.splice(i, 1);
-        res.end();
       }
-      if (list.length === 0) {
+      const isOnlineNow = list.length > 0;
+      if (!isOnlineNow) {
         sseClients.delete(userId);
-        try {
-          await pool.query('UPDATE users SET last_seen = NOW() WHERE id = $1', [userId]);
-        } catch (err) {
-          console.error('Failed to update last_seen:', err);
+        // Обновляем last_seen в БД
+        await pool.query('UPDATE users SET last_seen = NOW() WHERE id = $1', [userId]);
+        // Если был онлайн, а теперь нет – стал офлайн
+        if (wasOnlineBefore) {
+          await broadcastStatusChange(userId, false);
         }
       }
     }
+    res.end();
   });
-  });
+});
 
 app.post('/api/notifications/read', authMiddleware, async (req, res) => {
   const { conversationId } = req.body || {};

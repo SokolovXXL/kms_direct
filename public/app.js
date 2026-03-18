@@ -306,6 +306,8 @@ function startNotificationStream() {
         }
       }else if (data.type === 'typing') {
         handleTypingEvent(data);
+      }else if (data.type === 'user_status') {
+        handleUserStatusChange(data);
       }else if (data.type === 'new_group') {
         loadConversationList();
       } else if (data.type === 'added_to_group') {
@@ -634,6 +636,49 @@ function updateChatHeaderStatus(conversation) {
     }
   }
 }
+
+function handleUserStatusChange(data) {
+  const { userId, online, last_seen } = data;
+
+  // Обновляем кэш conversations
+  let updated = false;
+  for (const conv of conversationListCache) {
+    if (!conv.isGroup && conv.otherUser?.id === userId) {
+      conv.otherUser.online = online;
+      if (!online && last_seen) {
+        conv.otherUser.last_seen = last_seen;
+      }
+      updated = true;
+      break;
+    }
+    // Для групп можно позже добавить обновление статуса участников
+  }
+
+  if (updated) {
+    // Находим нужный диалог
+    const conv = conversationListCache.find(c => !c.isGroup && c.otherUser?.id === userId);
+    if (conv) {
+      // Обновляем строку в списке
+      updateSidebarRowStatus(conv.id, online, last_seen);
+      // Если это текущий открытый чат – обновляем шапку
+      if (currentConversationId === conv.id) {
+        updateChatHeaderStatus(conv);
+      }
+    }
+  }
+}
+
+function updateSidebarRowStatus(convId, online, last_seen) {
+  const row = document.querySelector(`.dm-item[data-id="${convId}"] .dm-status`);
+  if (!row) return;
+  if (online) {
+    row.innerHTML = '● онлайн';
+    row.className = 'dm-status online';
+  } else {
+    row.innerHTML = `был(а) ${formatLastSeen(last_seen)}`;
+    row.className = 'dm-status';
+  }
+}
 let typingTimeout = null;
 let lastTypingSent = 0;
 const TYPING_INTERVAL = 3000; // мс
@@ -898,7 +943,7 @@ async function loadConversationList() {
         }
       }
 
-      
+
       if (previewText.startsWith('{')) {
         try {
           const fileData = JSON.parse(previewText);
