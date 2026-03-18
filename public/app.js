@@ -701,7 +701,7 @@ async function loadConversationList() {
       previewText = truncate(previewText);
       
       if (conv.isGroup) {
-        nameHtml = `<span class="dm-name">👥 ${escapeHtml(conv.title || 'Group')}</span>`;
+        nameHtml = `<span class="dm-name"><img src="/images/group.png" alt="Group" style="width:18px; height:18px; vertical-align:middle;"> ${escapeHtml(conv.title || 'Group')}</span>`;
       } else {
         const otherUserName = conv.otherUser?.name || conv.otherUser?.username || 'Unknown';
         nameHtml = `<span class="dm-name">${escapeHtml(otherUserName)}</span>`;
