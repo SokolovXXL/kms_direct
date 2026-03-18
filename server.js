@@ -476,7 +476,7 @@ app.get('/api/conversations', authMiddleware, async (req, res) => {
       c.created_at,
       c.is_group,
       c.title,
-      c.is_channel,  // <-- добавить эту строку
+      c.is_channel,
       COALESCE(
         json_agg(
           DISTINCT jsonb_build_object(
