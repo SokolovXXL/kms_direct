@@ -2345,6 +2345,7 @@ button,
   border-radius: 18px;
   word-break: break-word;
   line-height: 1.4;
+  width: fit-content
 }
 .message.mine > .message-content {
   background: var(--accent);
