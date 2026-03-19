@@ -2281,3 +2281,71 @@ button,
   margin-left: 10px;
   display: inline-block;
 }
+
+/* Reactions */
+.message-reactions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 6px;
+}
+.reaction {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px 6px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  font-size: 0.75rem;
+  cursor: default;
+}
+.reaction.me {
+  background: rgba(99, 102, 241, 0.2);
+  border-color: var(--accent);
+}
+.reaction-emoji {
+  width: 16px;
+  height: 16px;
+}
+.reaction-count {
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+/* Emoji picker */
+.emoji-picker {
+  position: fixed;
+  z-index: 2500;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 8px;
+  box-shadow: var(--shadow-lg);
+  backdrop-filter: blur(10px);
+  min-width: 200px;
+}
+.emoji-picker-content {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+.emoji-btn {
+  background: var(--surface-hover);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px;
+  cursor: pointer;
+  transition: all 0.1s ease;
+}
+.emoji-btn:hover {
+  background: var(--accent);
+  border-color: var(--accent);
+  transform: scale(1.1);
+}
+.emoji-img {
+  width: 24px;
+  height: 24px;
+  display: block;
+  margin: 0 auto;
+}

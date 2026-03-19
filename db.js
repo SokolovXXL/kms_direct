@@ -32,6 +32,16 @@ async function initDb(retries = 5) {
       await client.query(`
         ALTER TABLE users ADD COLUMN IF NOT EXISTS friend_code VARCHAR(16) UNIQUE;
       `);
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS reactions (
+          id SERIAL PRIMARY KEY,
+          message_id INTEGER REFERENCES messages(id) ON DELETE CASCADE,
+          user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+          emoji VARCHAR(50) NOT NULL,
+          created_at TIMESTAMPTZ DEFAULT NOW(),
+          UNIQUE(message_id, user_id, emoji)
+        )
+      `);
       await client.query(`
         CREATE TABLE IF NOT EXISTS friends (
           user_id INT REFERENCES users(id) ON DELETE CASCADE,

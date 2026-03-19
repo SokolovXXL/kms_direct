@@ -308,6 +308,8 @@ function startNotificationStream() {
         }
       }else if (data.type === 'typing') {
         handleTypingEvent(data);
+      }else if (data.type === 'reaction') {
+        handleReactionEvent(data);
       }else if (data.type === 'user_status') {
         handleUserStatusChange(data);
       }else if (data.type === 'new_group') {
@@ -454,7 +456,18 @@ function createMessageElement(message, isGroup, currentUserId) {
     bodyDiv.textContent = message.body;
     messageDiv.appendChild(bodyDiv);
   }
-
+  if (message.reactions && message.reactions.length > 0) {
+    const reactionsBar = document.createElement('div');
+    reactionsBar.className = 'message-reactions';
+    message.reactions.forEach(r => {
+      const span = document.createElement('span');
+      span.className = 'reaction' + (r.me ? ' me' : '');
+      span.dataset.emoji = r.emoji;
+      span.innerHTML = `<img src="/images/emojis/${r.emoji}.png" alt="${r.emoji}" class="reaction-emoji"> <span class="reaction-count">${r.count}</span>`;
+      reactionsBar.appendChild(span);
+    });
+    messageDiv.appendChild(reactionsBar);
+  }
   const metaDiv = document.createElement('div');
   metaDiv.className = 'message-meta';
   metaDiv.textContent = new Date(message.created_at).toLocaleString();
@@ -788,6 +801,13 @@ function initContextMenu() {
       copyMessageContent(currentContextMessage);
     } else if (action === 'delete') {
       deleteMessage(currentContextMessage);
+    }else if (action === 'react') {
+      e.preventDefault();
+      e.stopPropagation();
+      hideContextMenu();
+      // Show emoji picker near the message
+      const rect = currentContextMessage.getBoundingClientRect();
+      showEmojiPicker(currentContextMessage, rect.right, rect.top);
     }
     hideContextMenu();
   });
@@ -1115,6 +1135,126 @@ async function selectConversation(convId) {
     isAtBottom = true;
     scrollMessagesToBottom();
   }, 200);
+}
+// ---- emojis ----
+
+let currentReactionMessage = null;
+
+function showEmojiPicker(messageEl, x, y) {
+  const picker = document.getElementById('emoji-picker');
+  if (!picker) return;
+
+  currentReactionMessage = messageEl;
+
+  // Fill picker with emoji buttons
+  const content = picker.querySelector('.emoji-picker-content');
+  content.innerHTML = '';
+  EMOJIS.forEach(e => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'emoji-btn';
+    btn.dataset.emoji = e.code;
+    btn.innerHTML = `<img src="/images/emojis/${e.img}" alt="${e.code}" class="emoji-img">`;
+    btn.addEventListener('click', () => {
+      const messageId = messageEl.dataset.messageId;
+      toggleReaction(messageId, e.code);
+      hideEmojiPicker();
+    });
+    content.appendChild(btn);
+  });
+
+  // Position picker near the click
+  picker.style.left = x + 'px';
+  picker.style.top = y + 'px';
+  picker.classList.remove('hidden');
+
+  // Close on click outside
+  setTimeout(() => {
+    document.addEventListener('click', outsideClickHandler);
+  }, 0);
+}
+
+function hideEmojiPicker() {
+  const picker = document.getElementById('emoji-picker');
+  if (picker) picker.classList.add('hidden');
+  document.removeEventListener('click', outsideClickHandler);
+  currentReactionMessage = null;
+}
+
+function outsideClickHandler(e) {
+  const picker = document.getElementById('emoji-picker');
+  if (picker && !picker.contains(e.target)) {
+    hideEmojiPicker();
+  }
+}
+
+async function toggleReaction(messageId, emoji) {
+  try {
+    await api(`/api/messages/${messageId}/reactions`, {
+      method: 'POST',
+      body: JSON.stringify({ emoji })
+    });
+    // Optimistic update is handled by SSE, but we can also update locally
+  } catch (err) {
+    console.error('Failed to toggle reaction:', err);
+    showToast('Ошибка при добавлении реакции', 'error');
+  }
+}
+
+const EMOJIS = [
+  { code: 'like', img: 'like.png', display: '👍' },
+  { code: 'love', img: 'heart.png', display: '❤️' },
+  { code: 'laugh', img: 'laugh.png', display: '😂' },
+  { code: 'wow', img: 'wow.png', display: '😮' },
+  { code: 'sad', img: 'sad.png', display: '😢' },
+  { code: 'angry', img: 'angry.png', display: '😠' }
+];
+
+function handleReactionEvent(data) {
+  const { messageId, userId, emoji, action } = data;
+  const messageEl = document.querySelector(`.message[data-message-id="${messageId}"]`);
+  if (!messageEl) return;
+
+  let reactionsBar = messageEl.querySelector('.message-reactions');
+  if (!reactionsBar) {
+    reactionsBar = document.createElement('div');
+    reactionsBar.className = 'message-reactions';
+    messageEl.appendChild(reactionsBar);
+  }
+
+  // Find or create reaction item for this emoji
+  let reactionItem = Array.from(reactionsBar.children).find(
+    item => item.dataset.emoji === emoji
+  );
+
+  if (action === 'add') {
+    if (!reactionItem) {
+      reactionItem = document.createElement('span');
+      reactionItem.className = 'reaction';
+      reactionItem.dataset.emoji = emoji;
+      reactionItem.innerHTML = `<img src="/images/emojis/${emoji}.png" alt="${emoji}" class="reaction-emoji"> <span class="reaction-count">1</span>`;
+      if (userId === currentUser.id) reactionItem.classList.add('me');
+      reactionsBar.appendChild(reactionItem);
+    } else {
+      const countSpan = reactionItem.querySelector('.reaction-count');
+      const count = parseInt(countSpan.textContent, 10) + 1;
+      countSpan.textContent = count;
+      if (userId === currentUser.id) reactionItem.classList.add('me');
+    }
+  } else if (action === 'remove') {
+    if (reactionItem) {
+      const countSpan = reactionItem.querySelector('.reaction-count');
+      const count = parseInt(countSpan.textContent, 10) - 1;
+      if (count <= 0) {
+        reactionItem.remove();
+      } else {
+        countSpan.textContent = count;
+        if (userId === currentUser.id) reactionItem.classList.remove('me');
+      }
+    }
+  }
+
+  if (reactionsBar.children.length === 0) reactionsBar.remove();
 }
 
 async function loadMessages(convId) {

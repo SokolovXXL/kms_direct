@@ -931,12 +931,25 @@ app.get('/api/conversations/:id/messages', authMiddleware, async (req, res) => {
       m.body, 
       m.created_at, 
       m.sender_id,
-      u.username AS sender_username
+      u.username AS sender_username,
+      (
+        SELECT json_agg(json_build_object(
+          'emoji', r.emoji,
+          'count', r.cnt,
+          'me', bool_or(r.user_id = $2)
+        ))
+        FROM (
+          SELECT emoji, COUNT(*) as cnt, bool_or(user_id = $2) as me
+          FROM reactions
+          WHERE message_id = m.id
+          GROUP BY emoji
+        ) r
+      ) AS reactions
     FROM messages m
     JOIN users u ON u.id = m.sender_id
     WHERE m.conversation_id = $1
     ORDER BY m.created_at ASC
-  `, [convId]);
+  `, [convId, req.userId]);
 
   res.json(r.rows);
 });
