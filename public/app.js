@@ -1266,14 +1266,24 @@ function handleReactionEvent(data) {
   const messageEl = document.querySelector(`.message[data-message-id="${messageId}"]`);
   if (!messageEl) return;
 
-  let reactionsBar = messageEl.querySelector('.message-reactions');
+  // Находим контейнер содержимого сообщения
+  const contentDiv = messageEl.querySelector('.message-content');
+  if (!contentDiv) return;
+
+  let reactionsBar = contentDiv.querySelector('.message-reactions');
   if (!reactionsBar) {
     reactionsBar = document.createElement('div');
     reactionsBar.className = 'message-reactions';
-    messageEl.appendChild(reactionsBar);
+    // Вставляем перед мета-информацией, если она есть, иначе в конец
+    const meta = contentDiv.querySelector('.message-meta');
+    if (meta) {
+      contentDiv.insertBefore(reactionsBar, meta);
+    } else {
+      contentDiv.appendChild(reactionsBar);
+    }
   }
 
-  // Find or create reaction item for this emoji
+  // Поиск или создание элемента для данного эмодзи
   let reactionItem = Array.from(reactionsBar.children).find(
     item => item.dataset.emoji === emoji
   );
@@ -1305,6 +1315,7 @@ function handleReactionEvent(data) {
     }
   }
 
+  // Если после удаления реакций блок остался пустым – убираем его
   if (reactionsBar.children.length === 0) reactionsBar.remove();
 }
 
