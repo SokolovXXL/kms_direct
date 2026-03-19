@@ -936,10 +936,13 @@ app.get('/api/conversations/:id/messages', authMiddleware, async (req, res) => {
         SELECT json_agg(json_build_object(
           'emoji', r.emoji,
           'count', r.cnt,
-          'me', bool_or(r.user_id = $2)
+          'me', r.me
         ))
         FROM (
-          SELECT emoji, COUNT(*) as cnt, bool_or(user_id = $2) as me
+          SELECT 
+            emoji,
+            COUNT(*) as cnt,
+            bool_or(user_id = $2) as me
           FROM reactions
           WHERE message_id = m.id
           GROUP BY emoji
