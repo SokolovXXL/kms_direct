@@ -1459,65 +1459,6 @@ async function sendFileWithProgress(file, conversationId) {
   });
 }
 
-// ---- New DM modal ----
-const btnNewDm = $('btn-new-dm');
-if (btnNewDm) {
-  btnNewDm.addEventListener('click', async () => {
-    show($('modal-new-dm'));
-    const ul = $('user-list');
-    if (!ul) return;
-    
-    ul.innerHTML = '';
-    
-    try {
-      const friends = await api('/api/friends');
-      
-      for (const u of friends) {
-        const li = document.createElement('li');
-        const btn = document.createElement('button');
-        btn.type = 'button';
-        btn.textContent = u.name || u.username;
-        btn.addEventListener('click', async () => {
-          try {
-            const data = await api('/api/dms', { 
-              method: 'POST', 
-              body: JSON.stringify({ otherUserId: u.id }) 
-            });
-            hide($('modal-new-dm'));
-            selectConversation(data.conversationId);
-            hideGroupInfoButton();
-            if (isMobile()) {
-              setTimeout(() => showChat(), 10);
-            }
-          } catch (err) {
-            alert('Failed to create conversation: ' + err.message);
-          }
-        });
-        li.appendChild(btn);
-        ul.appendChild(li);
-      }
-      
-      if (friends.length === 0) {
-        ul.innerHTML = '<li style="color:var(--text-muted)">Add friends first (Friends → paste their code)</li>';
-      }
-    } catch (_) {
-      ul.innerHTML = '<li style="color:var(--text-muted)">Could not load friends</li>';
-    }
-  });
-}
-
-const btnCloseModal = $('btn-close-modal');
-if (btnCloseModal) {
-  btnCloseModal.addEventListener('click', () => hide($('modal-new-dm')));
-}
-
-const modalNewDm = $('modal-new-dm');
-if (modalNewDm) {
-  modalNewDm.addEventListener('click', (e) => {
-    if (e.target.id === 'modal-new-dm') hide($('modal-new-dm'));
-  });
-}
-
 // ---- Friends modal ----
 const btnFriends = $('btn-friends');
 if (btnFriends) {
@@ -1588,15 +1529,37 @@ if (btnAddFriend) {
     }
     
     try {
-      await api('/api/friends', { 
+      // Добавляем друга
+      const addedFriend = await api('/api/friends', { 
         method: 'POST', 
         body: JSON.stringify({ friendCode: code }) 
       });
       
+      // Очищаем поле и закрываем ошибку
       if ($('friend-code-input')) $('friend-code-input').value = '';
       errEl.textContent = '';
-      alert('Friend added');
       
+      // Создаём личный чат с добавленным другом (если его ещё нет)
+      const dmData = await api('/api/dms', {
+        method: 'POST',
+        body: JSON.stringify({ otherUserId: addedFriend.id })
+      });
+      
+      // Обновляем список чатов
+      await loadConversationList();
+      
+      // Переходим в созданный (или существующий) диалог
+      selectConversation(dmData.conversationId);
+      
+      // На мобильных устройствах показываем окно чата
+      if (isMobile()) {
+        setTimeout(() => showChat(), 10);
+      }
+      
+      // Показываем уведомление об успехе (опционально)
+      showToast('Friend added and chat created', 'success');
+      
+      // Обновляем список друзей в модалке (оставляем как было)
       const friends = await api('/api/friends');
       const ul = $('friends-list');
       if (ul) {
