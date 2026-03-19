@@ -306,6 +306,8 @@ function startNotificationStream() {
         } else {
           updateSidebarRow(convId, message ? message.body : null);
         }
+      }else if (data.type === 'messages_read') {
+        handleMessagesRead(data);
       }else if (data.type === 'typing') {
         handleTypingEvent(data);
       }else if (data.type === 'reaction') {
@@ -481,6 +483,12 @@ function createMessageElement(message, isGroup, currentUserId) {
   metaDiv.textContent = new Date(message.created_at).toLocaleString();
   contentDiv.appendChild(metaDiv);
 
+  if (message.sender_id === currentUserId && message.read === false) {
+    const indicator = document.createElement('span');
+    indicator.className = 'message-read-indicator';
+    indicator.setAttribute('aria-label', 'Не прочитано');
+    contentDiv.appendChild(indicator);
+  }
   messageDiv.appendChild(contentDiv);
   return messageDiv;
 }
@@ -1326,6 +1334,20 @@ function handleReactionEvent(data) {
   if (reactionsBar.children.length === 0) reactionsBar.remove();
 }
 
+function handleMessagesRead(data) {
+  const { conversationId, messageIds } = data;
+  // Если это текущий открытый чат
+  if (currentConversationId === conversationId) {
+    messageIds.forEach(msgId => {
+      const msgEl = document.querySelector(`.message[data-message-id="${msgId}"]`);
+      if (msgEl && msgEl.classList.contains('mine')) {
+        const indicator = msgEl.querySelector('.message-read-indicator');
+        if (indicator) indicator.remove();
+      }
+    });
+  }
+}
+
 async function loadMessages(convId) {
   const list = $('messages-list');
   if (!list) return;
@@ -1435,6 +1457,9 @@ async function sendFileWithProgress(file, conversationId) {
             body: JSON.stringify({ body: JSON.stringify(fileMessage) }),
           });
 
+          if (!currentConversationIsGroup) {
+            msg.read = false; // новое сообщение в личке не прочитано
+          }
           appendMessageToChat(msg);
           updateSidebarRow(conversationId, `📎 ${file.name}`);
           resolve();

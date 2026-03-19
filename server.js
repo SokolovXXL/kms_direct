@@ -954,6 +954,30 @@ app.get('/api/conversations/:id/messages', authMiddleware, async (req, res) => {
     ORDER BY m.created_at ASC
   `, [convId, req.userId]);
 
+  const convCheck = await pool.query(
+    'SELECT is_group FROM conversations WHERE id = $1',
+    [convId]
+  );
+  const isGroup = convCheck.rows[0]?.is_group || false;
+  if (!isGroup) {
+    const participants = await pool.query(
+      'SELECT user_id FROM conversation_participants WHERE conversation_id = $1 AND user_id != $2',
+      [convId, req.userId]
+    );
+    const otherUserId = participants.rows[0]?.user_id;
+    if (otherUserId) {
+      const notifRes = await pool.query(
+        'SELECT message_id FROM notifications WHERE user_id = $1 AND conversation_id = $2',
+        [otherUserId, convId]
+      );
+      const unreadMessageIds = new Set(notifRes.rows.map(row => row.message_id));
+      for (const msg of r.rows) {
+        if (msg.sender_id === req.userId) {
+          msg.read = !unreadMessageIds.has(msg.id);
+        }
+      }
+    }
+  }
   res.json(r.rows);
 });
 
@@ -976,12 +1000,16 @@ app.post('/api/conversations/:id/messages', authMiddleware, async (req, res) => 
   const isMember = part.rows.some(p => p.user_id === req.userId);
   if (!isMember) return res.status(403).json({ error: 'Not in this conversation' });
 
-  // Проверка, является ли диалог каналом
-  const convCheck = await pool.query(
-    'SELECT is_channel FROM conversations WHERE id = $1',
+  // Получаем информацию о диалоге (is_group и is_channel)
+  const convInfo = await pool.query(
+    'SELECT is_group, is_channel FROM conversations WHERE id = $1',
     [convId]
   );
-  if (convCheck.rows.length > 0 && convCheck.rows[0].is_channel) {
+  if (convInfo.rows.length === 0) return res.status(404).json({ error: 'Conversation not found' });
+  const { is_group: isGroup, is_channel: isChannel } = convInfo.rows[0];
+
+  // Проверка прав для канала
+  if (isChannel) {
     const roleCheck = await pool.query(
       'SELECT role FROM conversation_participants WHERE conversation_id = $1 AND user_id = $2',
       [convId, req.userId]
@@ -992,6 +1020,7 @@ app.post('/api/conversations/:id/messages', authMiddleware, async (req, res) => 
     }
   }
 
+  // Проверка мута
   const muteCheck = await pool.query(`
     SELECT muted_until FROM conversation_participants
     WHERE conversation_id = $1 AND user_id = $2
@@ -1002,15 +1031,21 @@ app.post('/api/conversations/:id/messages', authMiddleware, async (req, res) => 
     return res.status(403).json({ error: 'You are muted' });
   }
 
-  const otherUserIds = part.rows.filter(p => p.user_id !== req.userId).map(p => p.user_id);
-
+  // Вставка сообщения
   const ins = await pool.query(
     'INSERT INTO messages (conversation_id, sender_id, body) VALUES ($1, $2, $3) RETURNING id, body, created_at, sender_id',
     [convId, req.userId, messageBody]
   );
-
   const msg = ins.rows[0];
+
+  // Добавляем поле read для личного чата (новое сообщение не прочитано)
+  if (!isGroup) {
+    msg.read = false;
+  }
+
+  // Имя отправителя
   const sender = await pool.query('SELECT username FROM users WHERE id = $1', [req.userId]);
+  const senderUsername = sender.rows[0]?.username || '';
 
   const payload = {
     type: 'new_message',
@@ -1020,16 +1055,18 @@ app.post('/api/conversations/:id/messages', authMiddleware, async (req, res) => 
       body: msg.body,
       created_at: msg.created_at,
       sender_id: msg.sender_id,
-      sender_username: sender.rows[0]?.username || '',
+      sender_username: senderUsername,
     },
   };
+
+  // Отправка уведомлений другим участникам
+  const otherUserIds = part.rows.filter(p => p.user_id !== req.userId).map(p => p.user_id);
 
   for (const uid of otherUserIds) {
     await pool.query(
       'INSERT INTO notifications (user_id, conversation_id, message_id) VALUES ($1, $2, $3)',
       [uid, convId, msg.id]
     );
-
     broadcastToUser(uid, payload);
   }
 
@@ -1326,15 +1363,37 @@ app.post('/api/notifications/read', authMiddleware, async (req, res) => {
   const { conversationId } = req.body || {};
 
   if (conversationId != null) {
-    await pool.query(
-      'DELETE FROM notifications WHERE user_id = $1 AND conversation_id = $2',
+    const notifResult = await pool.query(
+      'SELECT message_id FROM notifications WHERE user_id = $1 AND conversation_id = $2',
       [req.userId, conversationId]
     );
-  } else {
-    await pool.query('DELETE FROM notifications WHERE user_id = $1', [req.userId]);
-  }
+    const messageIds = notifResult.rows.map(r => r.message_id);
+    if (messageIds.length > 0) {
+      await pool.query(
+        'DELETE FROM notifications WHERE user_id = $1 AND conversation_id = $2',
+        [req.userId, conversationId]
+      );
 
-  res.json({ ok: true });
+      // Находим отправителей этих сообщений
+      const senderRes = await pool.query(
+        'SELECT DISTINCT sender_id FROM messages WHERE id = ANY($1::int[])',
+        [messageIds]
+      );
+      const senderIds = senderRes.rows.map(r => r.sender_id);
+
+      // Для каждого отправителя (кроме себя) отправляем событие messages_read
+      for (const senderId of senderIds) {
+        if (senderId === req.userId) continue;
+        broadcastToUser(senderId, {
+          type: 'messages_read',
+          conversationId: Number(conversationId),
+          messageIds: messageIds,
+          readerId: req.userId
+        });
+      }
+    }
+  }
+ res.json({ ok: true });
 });
 
 // ---- CALL SIGNALING ----
