@@ -2349,3 +2349,72 @@ button,
   display: block;
   margin: 0 auto;
 }
+/* Сообщения на всю ширину */
+.message {
+  display: flex;
+  width: 100%;
+  padding: 0;
+  cursor: default;
+}
+.message.mine {
+  justify-content: flex-end;
+}
+.message.theirs {
+  justify-content: flex-start;
+}
+.message > .message-content {
+  max-width: 75%;
+  padding: 0.6rem 1rem;
+  border-radius: 18px;
+  word-break: break-word;
+  line-height: 1.4;
+}
+.message.mine > .message-content {
+  background: var(--accent);
+  color: white;
+  border-bottom-right-radius: 4px;
+}
+.message.theirs > .message-content {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-bottom-left-radius: 4px;
+}
+
+/* Контекстное меню с реакциями */
+.context-menu-content {
+  display: flex;
+  flex-direction: column;
+}
+.context-menu-actions {
+  display: flex;
+  flex-direction: column;
+}
+.context-menu-reactions {
+  display: flex;
+  gap: 4px;
+  padding: 8px 12px;
+  border-top: 1px solid var(--border);
+  overflow-x: auto;
+  white-space: nowrap;
+  scrollbar-width: thin;
+}
+.reaction-menu-btn {
+  background: var(--surface-hover);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 4px 8px;
+  cursor: pointer;
+  transition: all 0.1s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.8rem;
+}
+.reaction-menu-btn:hover {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.reaction-menu-btn .emoji-img {
+  width: 18px;
+  height: 18px;
+}

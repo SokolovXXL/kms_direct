@@ -430,13 +430,17 @@ function createMessageElement(message, isGroup, currentUserId) {
   messageDiv.className = 'message ' + (message.sender_id === currentUserId ? 'mine' : 'theirs');
   messageDiv.dataset.messageId = message.id;
 
+  const contentDiv = document.createElement('div');
+  contentDiv.className = 'message-content';
+
   if (isGroup && message.sender_id !== currentUserId) {
     const nameSpan = document.createElement('div');
     nameSpan.className = 'message-sender';
     nameSpan.textContent = message.sender_username || 'Unknown';
-    messageDiv.appendChild(nameSpan);
+    contentDiv.appendChild(nameSpan);
   }
 
+  // Проверка на файл
   let isFile = false;
   let fileData = null;
   if (typeof message.body === 'string' && message.body.startsWith('{')) {
@@ -449,13 +453,15 @@ function createMessageElement(message, isGroup, currentUserId) {
   }
 
   if (isFile && fileData) {
-    renderFileMessage(messageDiv, fileData);
+    renderFileMessage(contentDiv, fileData, messageDiv); // передаём оба контейнера
   } else {
     const bodyDiv = document.createElement('div');
     bodyDiv.className = 'message-body';
     bodyDiv.textContent = message.body;
-    messageDiv.appendChild(bodyDiv);
+    contentDiv.appendChild(bodyDiv);
   }
+
+  // Реакции (отображаемые под сообщением)
   if (message.reactions && message.reactions.length > 0) {
     const reactionsBar = document.createElement('div');
     reactionsBar.className = 'message-reactions';
@@ -466,13 +472,16 @@ function createMessageElement(message, isGroup, currentUserId) {
       span.innerHTML = `<img src="/images/emojis/${r.emoji}.png" alt="${r.emoji}" class="reaction-emoji"> <span class="reaction-count">${r.count}</span>`;
       reactionsBar.appendChild(span);
     });
-    messageDiv.appendChild(reactionsBar);
+    contentDiv.appendChild(reactionsBar);
   }
+
+  // Мета-информация (дата)
   const metaDiv = document.createElement('div');
   metaDiv.className = 'message-meta';
   metaDiv.textContent = new Date(message.created_at).toLocaleString();
-  messageDiv.appendChild(metaDiv);
+  contentDiv.appendChild(metaDiv);
 
+  messageDiv.appendChild(contentDiv);
   return messageDiv;
 }
 
@@ -855,6 +864,25 @@ function showContextMenu(messageElement, clickX, clickY) {
     arrow.style.left = Math.min(Math.max(arrowLeft - 6, 10), menuWidth - 20) + 'px';
   }
 
+  const reactionsContainer = contextMenu.querySelector('.context-menu-reactions');
+  if (reactionsContainer) {
+    reactionsContainer.innerHTML = '';
+    EMOJIS.forEach(emoji => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'reaction-menu-btn';
+      btn.dataset.emoji = emoji.code;
+      btn.innerHTML = `<img src="/images/emojis/${emoji.img}" alt="${emoji.code}" class="emoji-img">`;
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const messageId = currentContextMessage.dataset.messageId;
+        toggleReaction(messageId, emoji.code);
+        hideContextMenu();
+      });
+      reactionsContainer.appendChild(btn);
+    });
+  }
+
   contextMenu.classList.remove('hidden');
 }
 
@@ -866,19 +894,21 @@ function hideContextMenu() {
 }
 
 function copyMessageContent(messageElement) {
-  // Пытаемся найти текст в .message-body, иначе имя файла
   const bodyEl = messageElement.querySelector('.message-body');
   if (bodyEl) {
-    navigator.clipboard.writeText(bodyEl.textContent).catch(() => {
+    navigator.clipboard.writeText(bodyEl.textContent).then(() => {
+      showToast('Скопировано', 'info');
+    }).catch(() => {
       showToast('Не удалось скопировать', 'error');
     });
     return;
   }
 
-  // Если это файл, копируем имя файла
   const fileNameEl = messageElement.querySelector('.file-name');
   if (fileNameEl) {
-    navigator.clipboard.writeText(fileNameEl.textContent).catch(() => {
+    navigator.clipboard.writeText(fileNameEl.textContent).then(() => {
+      showToast('Скопировано', 'info');
+    }).catch(() => {
       showToast('Не удалось скопировать', 'error');
     });
   }
@@ -2469,7 +2499,7 @@ function renderFileMessage(messageDiv, fileData) {
     console.warn('File URL is missing');
     const errorDiv = document.createElement('div');
     errorDiv.textContent = '[File error: missing URL]';
-    messageDiv.appendChild(errorDiv);
+    container.appendChild(errorDiv);
     return;
   }
 
@@ -2651,7 +2681,7 @@ function renderFileMessage(messageDiv, fileData) {
         };
     }
 
-    messageDiv.appendChild(mediaContainer);
+    container.appendChild(mediaContainer);
     return; // Завершаем, чтобы не создавать стандартную обёртку
   }
 
@@ -2707,7 +2737,7 @@ function renderFileMessage(messageDiv, fileData) {
   actionsDiv.appendChild(downloadBtn);
 
   fileDiv.appendChild(actionsDiv);
-  messageDiv.appendChild(fileDiv);
+  container.appendChild(fileDiv);
 }
 
 function formatTime(seconds) {
