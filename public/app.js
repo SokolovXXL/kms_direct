@@ -947,6 +947,13 @@ if (messagesList) {
     const interactive = e.target.closest('button, a, .audio-play-btn, .audio-download-btn, .delete-message-btn, input, label, video, audio');
     if (interactive) return;
 
+    // Если меню уже открыто для этого же сообщения — закрываем его и выходим
+    if (contextMenu && !contextMenu.classList.contains('hidden') && currentContextMessage === message) {
+      hideContextMenu();
+      return;
+    }
+
+    // Иначе показываем меню для нового сообщения
     showContextMenu(message, e.clientX, e.clientY);
     e.stopPropagation();
   });
