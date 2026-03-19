@@ -1155,7 +1155,7 @@ function showEmojiPicker(messageEl, x, y) {
 
   currentReactionMessage = messageEl;
 
-  // Fill picker with emoji buttons
+  // Заполняем панель кнопками эмодзи
   const content = picker.querySelector('.emoji-picker-content');
   content.innerHTML = '';
   EMOJIS.forEach(e => {
@@ -1172,12 +1172,30 @@ function showEmojiPicker(messageEl, x, y) {
     content.appendChild(btn);
   });
 
-  // Position picker near the click
+  // Показываем панель, чтобы измерить её размеры
+  picker.style.visibility = 'hidden';
+  picker.classList.remove('hidden');
+  
+  const pickerWidth = picker.offsetWidth;
+  const pickerHeight = picker.offsetHeight;
+  const viewportWidth = window.innerWidth;
+  const viewportHeight = window.innerHeight;
+
+  // Корректируем позицию, чтобы панель не выходила за края
+  if (x + pickerWidth > viewportWidth - 10) {
+    x = viewportWidth - pickerWidth - 10;
+  }
+  if (y + pickerHeight > viewportHeight - 10) {
+    y = viewportHeight - pickerHeight - 10;
+  }
+  if (x < 10) x = 10;
+  if (y < 10) y = 10;
+
   picker.style.left = x + 'px';
   picker.style.top = y + 'px';
-  picker.classList.remove('hidden');
+  picker.style.visibility = 'visible';
 
-  // Close on click outside
+  // Закрытие по клику вне панели
   setTimeout(() => {
     document.addEventListener('click', outsideClickHandler);
   }, 0);
