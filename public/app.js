@@ -804,10 +804,12 @@ function initContextMenu() {
     }else if (action === 'react') {
       e.preventDefault();
       e.stopPropagation();
+      const message = currentContextMessage; // сохраняем ссылку
       hideContextMenu();
-      // Show emoji picker near the message
-      const rect = currentContextMessage.getBoundingClientRect();
-      showEmojiPicker(currentContextMessage, rect.right, rect.top);
+      if (message) {
+        const rect = message.getBoundingClientRect();
+        showEmojiPicker(message, rect.right, rect.top);
+      }
     }
     hideContextMenu();
   });
