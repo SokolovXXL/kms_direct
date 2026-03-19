@@ -2418,3 +2418,10 @@ button,
   width: 18px;
   height: 18px;
 }
+.message {
+  transition: background-color 0.1s ease;
+}
+
+.message:hover {
+  background-color: rgba(255, 255, 255, 0.02); /* едва заметное выделение */
+}
