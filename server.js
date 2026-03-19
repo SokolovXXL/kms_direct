@@ -1191,6 +1191,70 @@ app.delete('/api/messages/:id', authMiddleware, async (req, res) => {
   res.json({ success: true });
 });
 
+// ---- REACTIONS ----
+app.post('/api/messages/:id/reactions', authMiddleware, async (req, res) => {
+  const messageId = parseInt(req.params.id, 10);
+  const { emoji } = req.body;
+
+  if (isNaN(messageId) || messageId <= 0 || !emoji) {
+    return res.status(400).json({ error: 'Invalid message ID or emoji' });
+  }
+
+  // Проверяем, имеет ли пользователь доступ к сообщению
+  const msg = await pool.query(
+    'SELECT conversation_id FROM messages WHERE id = $1',
+    [messageId]
+  );
+  if (msg.rows.length === 0) {
+    return res.status(404).json({ error: 'Message not found' });
+  }
+  const convId = msg.rows[0].conversation_id;
+
+  const part = await pool.query(
+    'SELECT 1 FROM conversation_participants WHERE conversation_id = $1 AND user_id = $2',
+    [convId, req.userId]
+  );
+  if (part.rows.length === 0) {
+    return res.status(403).json({ error: 'Not in this conversation' });
+  }
+
+  // Переключаем реакцию
+  const existing = await pool.query(
+    'SELECT id FROM reactions WHERE message_id = $1 AND user_id = $2 AND emoji = $3',
+    [messageId, req.userId, emoji]
+  );
+
+  let action;
+  if (existing.rows.length > 0) {
+    await pool.query('DELETE FROM reactions WHERE id = $1', [existing.rows[0].id]);
+    action = 'remove';
+  } else {
+    await pool.query(
+      'INSERT INTO reactions (message_id, user_id, emoji) VALUES ($1, $2, $3)',
+      [messageId, req.userId, emoji]
+    );
+    action = 'add';
+  }
+
+  // Рассылаем событие всем участникам беседы
+  const participants = await pool.query(
+    'SELECT user_id FROM conversation_participants WHERE conversation_id = $1',
+    [convId]
+  );
+  const payload = {
+    type: 'reaction',
+    messageId,
+    userId: req.userId,
+    emoji,
+    action
+  };
+  for (const row of participants.rows) {
+    broadcastToUser(row.user_id, payload);
+  }
+
+  res.json({ success: true, action });
+});
+
 // ---- Notifications ----
 app.get('/api/notifications/count', authMiddleware, async (req, res) => {
   const r = await pool.query(
