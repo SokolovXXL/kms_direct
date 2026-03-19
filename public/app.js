@@ -2494,7 +2494,7 @@ function removeUploadProgress(progressId) {
   }
 }
 
-function renderFileMessage(messageDiv, fileData) {
+function renderFileMessage(container, fileData, messageDiv) {
   if (!fileData.url) {
     console.warn('File URL is missing');
     const errorDiv = document.createElement('div');
