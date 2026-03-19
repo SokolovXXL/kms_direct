@@ -1138,6 +1138,15 @@ async function selectConversation(convId) {
 }
 // ---- emojis ----
 
+const EMOJIS = [
+  { code: 'like', img: 'like.png', display: '👍' },
+  { code: 'love', img: 'heart.png', display: '❤️' },
+  { code: 'laugh', img: 'laugh.png', display: '😂' },
+  { code: 'wow', img: 'wow.png', display: '😮' },
+  { code: 'sad', img: 'sad.png', display: '😢' },
+  { code: 'angry', img: 'angry.png', display: '😠' }
+];
+
 let currentReactionMessage = null;
 
 function showEmojiPicker(messageEl, x, y) {
@@ -1201,14 +1210,6 @@ async function toggleReaction(messageId, emoji) {
   }
 }
 
-const EMOJIS = [
-  { code: 'like', img: 'like.png', display: '👍' },
-  { code: 'love', img: 'heart.png', display: '❤️' },
-  { code: 'laugh', img: 'laugh.png', display: '😂' },
-  { code: 'wow', img: 'wow.png', display: '😮' },
-  { code: 'sad', img: 'sad.png', display: '😢' },
-  { code: 'angry', img: 'angry.png', display: '😠' }
-];
 
 function handleReactionEvent(data) {
   const { messageId, userId, emoji, action } = data;
