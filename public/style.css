@@ -440,7 +440,7 @@ body {
 /* Контейнер сообщений */
 .chat-messages-wrapper {
   position: relative;
-  background: var(--bg);
+  background: var(--bg) url('/images/fon.png') repeat;
   flex: 1;
   overflow-y: auto;
   overflow-x: hidden;
@@ -450,18 +450,6 @@ body {
   scroll-behavior: smooth;
 }
 
-.chat-messages-wrapper::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: url('/images/fon.png') repeat;
-  opacity: 0.2; /* можно настроить прозрачность для читаемости текста */
-  pointer-events: none;
-  z-index: 0;
-}
 
 .chat-messages-wrapper > * {
   position: relative;
