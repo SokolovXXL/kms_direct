@@ -457,7 +457,7 @@ body {
   left: 0;
   right: 0;
   bottom: 0;
-  background: url('/public/images/fon.png') repeat;
+  background: url('/images/fon.png') repeat;
   opacity: 0.2; /* можно настроить прозрачность для читаемости текста */
   pointer-events: none;
   z-index: 0;
