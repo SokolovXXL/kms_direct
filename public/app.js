@@ -1397,6 +1397,10 @@ if (sendForm) {
           method: 'POST',
           body: JSON.stringify({ body }),
         });
+        
+        if (!currentConversationIsGroup) {
+          msg.read = false;
+        }
 
         appendMessageToChat(msg);
         input.value = '';
