@@ -440,7 +440,8 @@ body {
 /* Контейнер сообщений */
 .chat-messages-wrapper {
   position: relative;
-  background: var(--bg) url('/images/fon.png') repeat;
+  background: url('/images/fon.png') repeat;
+  background-color: var(--bg); /* резервный цвет, если картинка не загрузится */
   flex: 1;
   overflow-y: auto;
   overflow-x: hidden;
