@@ -1056,6 +1056,7 @@ app.post('/api/conversations/:id/messages', authMiddleware, async (req, res) => 
       created_at: msg.created_at,
       sender_id: msg.sender_id,
       sender_username: senderUsername,
+      read: msg.read,
     },
   };
 
