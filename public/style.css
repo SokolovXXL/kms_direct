@@ -2548,6 +2548,16 @@ button,
     width: 18px;
     height: 18px;
   }
+  /* Уменьшаем отступы контейнера сообщений */
+  .chat-messages-wrapper {
+    padding-left: 0.5rem;
+    padding-right: 0.5rem;
+  }
+
+  /* Делаем сообщения шире */
+  .message > .message-content {
+    max-width: 95%;
+  }
 }
 /* Уменьшаем базовый padding-bottom у своих сообщений, чтобы не было лишнего отступа даже на десктопе */
 .message.mine .message-content {
