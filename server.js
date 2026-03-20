@@ -252,6 +252,10 @@ app.post('/api/push/subscribe', authMiddleware, async (req, res) => {
 
 async function sendPushNotifications(users, payload) {
   for (const userId of users) {
+    // Не отправляем push, если пользователь сейчас онлайн (у него открыто SSE соединение)
+    if (isUserOnline(userId)) {
+      continue;
+    }
     const subs = await pool.query(
       'SELECT endpoint, keys_auth, keys_p256dh FROM push_subscriptions WHERE user_id = $1',
       [userId]
@@ -268,7 +272,6 @@ async function sendPushNotifications(users, payload) {
         await webpush.sendNotification(subscription, JSON.stringify(payload));
       } catch (err) {
         if (err.statusCode === 410) {
-          // Subscription expired – remove it
           await pool.query('DELETE FROM push_subscriptions WHERE endpoint = $1', [sub.endpoint]);
         } else {
           console.error('Push send error:', err);
