@@ -294,12 +294,16 @@ function startNotificationStream() {
       if (data.type === 'new_message') {
         const convId = data.conversationId;
         const message = data.message;
-        
+
+        if (message.sender_id === currentUser.id) {
+          message.read = false;
+        }
+
         if (convId !== currentConversationId) {
           unreadByConvo[convId] = (unreadByConvo[convId] || 0) + 1;
           playNotificationSound(convId);
         }
-        
+
         if (currentConversationId === convId && message) {
           appendMessageToChat(message);
           updateSidebarRow(convId, message.body);
