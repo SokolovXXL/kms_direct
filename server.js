@@ -12,6 +12,14 @@ const multer = require('multer');
 const fs = require('fs');
 const { v4: uuidv4 } = require('uuid');
 const rateLimit = require('express-rate-limit');
+const webpush = require('web-push');
+
+// Setup VAPID
+webpush.setVapidDetails(
+  process.env.VAPID_SUBJECT || 'mailto:admin@example.com',
+  process.env.VAPID_PUBLIC_KEY,
+  process.env.VAPID_PRIVATE_KEY
+);
 
 // Атомарное создание папки uploads
 try {
@@ -214,6 +222,59 @@ function streamAuthMiddleware(req, res, next) {
     next();
   } catch {
     return res.status(401).end();
+  }
+}
+//---- уведомления ----
+app.post('/api/push/subscribe', authMiddleware, async (req, res) => {
+  const { subscription } = req.body;
+  if (!subscription || !subscription.endpoint) {
+    return res.status(400).json({ error: 'Invalid subscription' });
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query(
+      `INSERT INTO push_subscriptions (user_id, endpoint, keys_auth, keys_p256dh)
+       VALUES ($1, $2, $3, $4)
+       ON CONFLICT (user_id, endpoint) DO UPDATE
+       SET keys_auth = EXCLUDED.keys_auth,
+           keys_p256dh = EXCLUDED.keys_p256dh`,
+      [req.userId, subscription.endpoint, subscription.keys.auth, subscription.keys.p256dh]
+    );
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('Failed to save push subscription:', err);
+    res.status(500).json({ error: 'Could not save subscription' });
+  } finally {
+    client.release();
+  }
+});
+
+async function sendPushNotifications(users, payload) {
+  for (const userId of users) {
+    const subs = await pool.query(
+      'SELECT endpoint, keys_auth, keys_p256dh FROM push_subscriptions WHERE user_id = $1',
+      [userId]
+    );
+    for (const sub of subs.rows) {
+      const subscription = {
+        endpoint: sub.endpoint,
+        keys: {
+          auth: sub.keys_auth,
+          p256dh: sub.keys_p256dh,
+        },
+      };
+      try {
+        await webpush.sendNotification(subscription, JSON.stringify(payload));
+      } catch (err) {
+        if (err.statusCode === 410) {
+          // Subscription expired – remove it
+          await pool.query('DELETE FROM push_subscriptions WHERE endpoint = $1', [sub.endpoint]);
+        } else {
+          console.error('Push send error:', err);
+        }
+      }
+    }
   }
 }
 
@@ -1070,7 +1131,16 @@ app.post('/api/conversations/:id/messages', authMiddleware, async (req, res) => 
     );
     broadcastToUser(uid, payload);
   }
-
+  const pushPayload = {
+    title: `New message from ${senderUsername}`,
+    body: messageBody.length > 100 ? messageBody.slice(0, 97) + '...' : messageBody,
+    icon: '/images/logo.png',  // make sure this file exists
+    data: {
+      conversationId: convId,
+      messageId: msg.id,
+    },
+  };
+  sendPushNotifications(otherUserIds, pushPayload).catch(console.error);
   res.status(201).json(payload.message);
 });
 

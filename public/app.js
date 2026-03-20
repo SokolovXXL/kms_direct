@@ -20,6 +20,8 @@ let currentConversationIsChannel = false;
 let creatingChannel = false; // флаг для модалки создания канала
 
 const $ = (id) => document.getElementById(id);
+const publicVapidKey = document.querySelector('meta[name="vapid-public-key"]').content;
+
 
 function formatLastSeen(timestamp) {
   if (!timestamp) return '';
@@ -98,6 +100,20 @@ async function tryAutoLogin() {
 function renderScreen() {
   console.log('renderScreen called', { currentUser });
   
+  if ('serviceWorker' in navigator && 'PushManager' in window) {
+    navigator.serviceWorker.register('/sw.js')
+      .then(registration => {
+        console.log('Service Worker registered');
+        return Notification.requestPermission();
+      })
+      .then(permission => {
+        if (permission === 'granted') {
+          subscribeUserToPush();
+        }
+      })
+      .catch(err => console.error('Service Worker error:', err));
+  }
+
   if (currentUser) {
     hide($('auth-screen'));
     show($('main-screen'));
@@ -896,6 +912,31 @@ function showContextMenu(messageElement, clickX, clickY) {
   }
 
   contextMenu.classList.remove('hidden');
+}
+
+async function subscribeUserToPush() {
+  const registration = await navigator.serviceWorker.ready;
+  const subscription = await registration.pushManager.subscribe({
+    userVisibleOnly: true,
+    applicationServerKey: urlBase64ToUint8Array(publicVapidKey)
+  });
+
+  await api('/api/push/subscribe', {
+    method: 'POST',
+    body: JSON.stringify({ subscription })
+  });
+}
+
+// Helper to convert VAPID key
+function urlBase64ToUint8Array(base64String) {
+  const padding = '='.repeat((4 - base64String.length % 4) % 4);
+  const base64 = (base64String + padding).replace(/\-/g, '+').replace(/_/g, '/');
+  const rawData = window.atob(base64);
+  const outputArray = new Uint8Array(rawData.length);
+  for (let i = 0; i < rawData.length; ++i) {
+    outputArray[i] = rawData.charCodeAt(i);
+  }
+  return outputArray;
 }
 
 function hideContextMenu() {

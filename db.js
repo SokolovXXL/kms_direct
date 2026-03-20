@@ -97,6 +97,17 @@ async function initDb(retries = 5) {
       await client.query(`
         ALTER TABLE users ADD COLUMN IF NOT EXISTS display_name VARCHAR(64);
       `);
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS push_subscriptions (
+          id SERIAL PRIMARY KEY,
+          user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+          endpoint TEXT NOT NULL,
+          keys_auth TEXT NOT NULL,
+          keys_p256dh TEXT NOT NULL,
+          created_at TIMESTAMPTZ DEFAULT NOW(),
+          UNIQUE(user_id, endpoint)
+        )
+      `);
       await client.query(`CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(user_id);`);
       await client.query(`CREATE INDEX IF NOT EXISTS idx_messages_conversation ON messages(conversation_id);`);
       await client.query(`CREATE INDEX IF NOT EXISTS idx_friends_user ON friends(user_id);`);
