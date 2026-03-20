@@ -2422,3 +2422,9 @@ button,
   bottom: 4px;
   right: 8px;
 }
+.message-read-indicator {
+  display: inline-block !important;
+  width: 12px !important;
+  height: 12px !important;
+  background: red !important;
+}
