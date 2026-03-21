@@ -1813,6 +1813,9 @@ body {
     align-items: center;
     justify-content: center;
   }
+  .btn-menu img {
+    background: transparent;
+  }
 
   .btn-menu:hover {
     background: var(--surface-hover);
