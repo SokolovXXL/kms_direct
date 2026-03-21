@@ -2581,24 +2581,33 @@ button,
 }
 /* Принудительное прижатие сообщений к краям на мобильных */
 @media (max-width: 768px) {
-  /* Убираем принудительное выравнивание по краям */
-  .message {
-    justify-content: center !important;
+  .chat-messages-wrapper {
+    padding-left: 12px;
+    padding-right: 12px;
   }
-  .message .message-content {
-    margin-left: auto !important;
-    margin-right: auto !important;
-    max-width: 90%; /* можно подобрать по вкусу */
-  }
-  /* Оставляем цветовые отличия для своих/чужих */
-  .message.mine .message-content {
-    background: var(--accent);
-    border-bottom-right-radius: 4px;
-  }
+
+  /* Убираем принудительное обнуление margin */
+  .message.mine .message-content,
   .message.theirs .message-content {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-bottom-left-radius: 4px;
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+  }
+
+  /* Свои сообщения — прижимаем к правому краю, но с учётом паддинга родителя */
+  .message.mine .message-content {
+    margin-left: auto;
+    margin-right: 0;
+  }
+
+  /* Чужие сообщения — прижимаем к левому краю */
+  .message.theirs .message-content {
+    margin-left: 0;
+    margin-right: auto;
+  }
+
+  /* Ограничиваем ширину сообщений (как в Telegram) */
+  .message .message-content {
+    max-width: 85%;
   }
 }
 #messages-list {
