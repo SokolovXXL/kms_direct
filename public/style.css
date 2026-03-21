@@ -1936,15 +1936,15 @@ body {
 /* Desktop (≥1200px) */
 @media (min-width: 1200px) {
   .logo {
-    height: 50px;
-    max-width: 200px;
+    height: 40px;
+    max-width: 1000px;
   }
 }
 
 /* Large screens (≥1600px) */
 @media (min-width: 1600px) {
   .logo {
-    height: 60px;
-    max-width: 240px;
+    height: 40px;
+    max-width: 1200px;
   }
 }
