@@ -2563,3 +2563,11 @@ button,
   bottom: 2px;
   right: 6px;
 }
+/* Гарантированное прижатие сообщений к нужным краям */
+.message.mine .message-content {
+  margin-left: auto;
+}
+
+.message.theirs .message-content {
+  margin-right: auto;
+}
