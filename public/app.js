@@ -1035,7 +1035,7 @@ function clearLongPress() {
   longPressTarget = null;
 }
 
-// Показ контекстного меню по координатам
+// Показ контекстного меню по координатам (без лишнего preventDefault)
 function showContextMenuAt(message, clientX, clientY) {
   // Если меню уже открыто для этого же сообщения — закрываем
   if (contextMenu && !contextMenu.classList.contains('hidden') && currentContextMessage === message) {
@@ -1043,8 +1043,7 @@ function showContextMenuAt(message, clientX, clientY) {
     return;
   }
   showContextMenu(message, clientX, clientY);
-  // Предотвращаем выделение текста и стандартное меню браузера
-  e.preventDefault();
+  // preventDefault уже вызван в обработчиках, здесь не нужен
 }
 
 // Обработчик правого клика (ПК)
@@ -1054,11 +1053,9 @@ if (messagesList) {
     const message = e.target.closest('.message');
     if (!message) return;
 
-    // Проверяем, что клик не по интерактивному элементу
     const interactive = e.target.closest('button, a, .audio-play-btn, .audio-download-btn, .delete-message-btn, input, label, video, audio');
     if (interactive) return;
 
-    // Показываем меню
     showContextMenuAt(message, e.clientX, e.clientY);
     e.preventDefault();
     e.stopPropagation();
@@ -1072,31 +1069,28 @@ if (messagesList) {
     const interactive = e.target.closest('button, a, .audio-play-btn, .audio-download-btn, .delete-message-btn, input, label, video, audio');
     if (interactive) return;
 
-    // Сохраняем цель и координаты касания
+    // Предотвращаем выделение текста и системное меню
+    e.preventDefault();
+
     longPressTarget = message;
     const touch = e.touches[0];
     longPressTimer = setTimeout(() => {
-      // Показываем меню по координатам касания
       if (longPressTarget) {
         showContextMenuAt(longPressTarget, touch.clientX, touch.clientY);
         clearLongPress();
       }
-    }, 500); // 500 мс – стандартное время для долгого нажатия
+    }, 300); // уменьшено до 300 мс
   });
 
-  messagesList.addEventListener('touchend', (e) => {
-    // Если меню показано – не сбрасываем, просто очищаем таймер
-    if (contextMenu && !contextMenu.classList.contains('hidden') && longPressTarget) {
-      // Меню уже открыто, ничего не делаем
-    }
+  messagesList.addEventListener('touchend', () => {
     clearLongPress();
   });
 
-  messagesList.addEventListener('touchmove', (e) => {
-    // При движении пальца отменяем долгое нажатие
+  messagesList.addEventListener('touchmove', () => {
     clearLongPress();
   });
 }
+
 // Инициализируем при загрузке страницы
 document.addEventListener('DOMContentLoaded', () => {
   initContextMenu();
