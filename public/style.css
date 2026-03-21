@@ -1850,6 +1850,18 @@ body {
   display: none;
 }
 
+/* Mobile: shown */
+@media (max-width: 768px) {
+  #mobile-back-btn {
+    display: inline-block;
+    min-width: 44px;
+    min-height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+}
+
 /* Profile display name */
 #profile-display-name {
   width: 100%;
