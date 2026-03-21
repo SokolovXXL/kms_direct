@@ -1057,16 +1057,13 @@ if (messagesList) {
     e.stopPropagation();
   });
 
-  // Мобильные: долгое нажатие
+  // Мобильные: долгое нажатие (резерв)
   messagesList.addEventListener('touchstart', (e) => {
     const message = e.target.closest('.message');
     if (!message) return;
 
     const interactive = e.target.closest('button, a, .audio-play-btn, .audio-download-btn, .delete-message-btn, input, label, video, audio');
     if (interactive) return;
-
-    // Предотвращаем выделение текста и системное меню браузера
-    e.preventDefault();
 
     const touch = e.touches[0];
     longPressStartX = touch.clientX;
@@ -1077,7 +1074,7 @@ if (messagesList) {
         showContextMenuAt(longPressTarget, longPressStartX, longPressStartY);
         clearLongPress();
       }
-    }, 500); // 500 мс – комфортное время для долгого нажатия
+    }, 500);
   });
 
   messagesList.addEventListener('touchend', () => {
@@ -1085,7 +1082,6 @@ if (messagesList) {
   });
 
   messagesList.addEventListener('touchmove', (e) => {
-    // Если палец сместился более чем на 10 пикселей, отменяем долгое нажатие (пользователь скроллит)
     if (longPressTarget) {
       const touch = e.touches[0];
       const dx = Math.abs(touch.clientX - longPressStartX);
@@ -1096,6 +1092,7 @@ if (messagesList) {
     }
   });
 }
+
 // ---- Conversations List ----
 async function loadConversationList(retryCount = 3) {
   const list = $('dm-list');
