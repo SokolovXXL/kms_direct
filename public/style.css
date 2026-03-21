@@ -482,6 +482,7 @@ body {
   flex-direction: column;
   gap: 0.5rem;
   width: 100%;
+  align-items: flex-start;
 }
 
 /* ========== MESSAGE STYLES (FIXED) ========== */
