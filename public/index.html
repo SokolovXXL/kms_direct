@@ -14,18 +14,20 @@
 <body>
   <div id="app">
     <div id="auth-screen">
-      <div class="auth-card">
-        <h1>Messenger</h1>
-        <p class="auth-sub">Sign in or create an account</p>
-        <form id="login-form">
-          <input type="text" id="login-username" placeholder="Username" autocomplete="username" required />
-          <input type="password" id="login-password" placeholder="Password" autocomplete="current-password" required />
-          <button type="submit">Sign in</button>
+      <div class="auth-card glass">
+        <div class="auth-tabs">
+          <button class="auth-tab active" data-tab="login">Вход</button>
+          <button class="auth-tab" data-tab="register">Регистрация</button>
+        </div>
+        <form id="login-form" class="auth-form active">
+          <input type="text" id="login-username" placeholder="Имя пользователя" autocomplete="username" required />
+          <input type="password" id="login-password" placeholder="Пароль" autocomplete="current-password" required />
+          <button type="submit">Войти</button>
         </form>
-        <form id="register-form">
-          <input type="text" id="register-username" placeholder="Username" autocomplete="username" required minlength="2" />
-          <input type="password" id="register-password" placeholder="Password" autocomplete="new-password" required />
-          <button type="submit">Create account</button>
+        <form id="register-form" class="auth-form">
+          <input type="text" id="register-username" placeholder="Имя пользователя" autocomplete="username" required minlength="2" />
+          <input type="password" id="register-password" placeholder="Пароль" autocomplete="new-password" required />
+          <button type="submit">Создать аккаунт</button>
         </form>
         <p id="auth-error" class="auth-error"></p>
       </div>

@@ -3498,3 +3498,27 @@ document.addEventListener('DOMContentLoaded', () => {
   
   tryAutoLogin();
 });
+// Auth tabs switching
+const tabs = document.querySelectorAll('.auth-tab');
+const authError = document.getElementById('auth-error');
+
+if (tabs.length) {
+  tabs.forEach(tab => {
+    tab.addEventListener('click', () => {
+      const target = tab.dataset.tab;
+      tabs.forEach(t => t.classList.remove('active'));
+      tab.classList.add('active');
+
+      if (target === 'login') {
+        loginForm.classList.add('active');
+        registerForm.classList.remove('active');
+      } else {
+        registerForm.classList.add('active');
+        loginForm.classList.remove('active');
+      }
+
+      // Clear error when switching
+      if (authError) authError.textContent = '';
+    });
+  });
+}
