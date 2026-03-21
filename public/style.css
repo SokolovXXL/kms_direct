@@ -11,12 +11,18 @@
   --success: #10b981;
   --radius: 10px;
   --font: 'DM Sans', system-ui, sans-serif;
+  --shadow-sm: 0 4px 12px rgba(0, 0, 0, 0.1);
+  --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.15);
+  --shadow-lg: 0 16px 32px rgba(0, 0, 0, 0.2);
+  --transition-default: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-smooth: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 * {
   box-sizing: border-box;
   margin: 0;
   padding: 0;
+  transition: background-color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
 body {
@@ -28,7 +34,9 @@ body {
   overflow: hidden;
 }
 
-.hidden { display: none !important; }
+.hidden {
+  display: none !important;
+}
 
 #app {
   height: 100vh;
@@ -57,6 +65,7 @@ body {
   border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: 2rem;
+  box-shadow: var(--shadow-lg);
 }
 
 .auth-card h1 {
@@ -127,18 +136,18 @@ body {
   align-items: center;
   gap: 1rem;
   padding: 0.75rem 1.25rem;
-  background: var(--surface);
+  background: rgba(24, 24, 28, 0.8);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
 }
 
-@media (max-width: 768px) {
-  .logo {
-    height: 30px;
-    max-width: 120px;
-    width: auto;
-    object-fit: contain;
-  }
+.logo {
+  height: 30px;
+  max-width: 120px;
+  width: auto;
+  object-fit: contain;
 }
 
 .user-name {
@@ -147,16 +156,7 @@ body {
   font-size: 0.9rem;
 }
 
-.btn-logout {
-  padding: 0.5rem 0.75rem;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: transparent;
-  color: var(--text-muted);
-  font: inherit;
-  cursor: pointer;
-}
-
+.btn-logout,
 .btn-header {
   padding: 0.5rem 0.75rem;
   border: 1px solid var(--border);
@@ -165,16 +165,32 @@ body {
   color: var(--text-muted);
   font: inherit;
   cursor: pointer;
+  position: relative;
+  overflow: hidden;
 }
 
+.btn-logout:hover,
 .btn-header:hover {
   background: var(--surface-hover);
   color: var(--text);
 }
 
-.btn-logout:hover {
-  background: var(--surface-hover);
-  color: var(--text);
+.btn-primary {
+  width: 100%;
+  padding: 0.65rem 1rem;
+  border: none;
+  border-radius: 8px;
+  background: var(--accent);
+  color: white;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  position: relative;
+  overflow: hidden;
+}
+
+.btn-primary:hover {
+  background: var(--accent-hover);
 }
 
 .btn-copy {
@@ -253,7 +269,6 @@ body {
   filter: brightness(1.1);
 }
 
-/* Кнопка "Прокрутить вниз" */
 .btn-scroll-down {
   position: absolute;
   bottom: 80px;
@@ -269,8 +284,8 @@ body {
   align-items: center;
   justify-content: center;
   font-size: 1.2rem;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-  transition: all 0.2s ease;
+  box-shadow: var(--shadow-md);
+  transition: var(--transition-default);
   z-index: 30;
 }
 
@@ -279,11 +294,7 @@ body {
   transform: scale(1.1);
 }
 
-.btn-scroll-down.hidden {
-  display: none;
-}
-
-/* Основной лэйаут */
+/* Layout */
 .layout {
   flex: 1;
   display: flex;
@@ -294,7 +305,7 @@ body {
   position: relative;
 }
 
-/* Левая панель - чаты */
+/* Sidebar */
 .sidebar {
   width: 320px;
   min-width: 320px;
@@ -304,7 +315,7 @@ body {
   flex-direction: column;
   overflow: hidden;
   height: 100%;
-  transition: transform 0.25s ease;
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   z-index: 5;
 }
 
@@ -314,23 +325,6 @@ body {
   flex-shrink: 0;
 }
 
-.btn-primary {
-  width: 100%;
-  padding: 0.65rem 1rem;
-  border: none;
-  border-radius: 8px;
-  background: var(--accent);
-  color: white;
-  font: inherit;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.btn-primary:hover {
-  background: var(--accent-hover);
-}
-
-/* Список чатов */
 .dm-list {
   flex: 1;
   overflow-y: auto;
@@ -352,18 +346,21 @@ body {
   cursor: pointer;
   position: relative;
   border-radius: 0;
-  transition: background 0.1s ease;
+  transition: var(--transition-default);
 }
 
 .dm-item:hover {
   background: var(--surface-hover);
+  transform: translateX(4px);
+  box-shadow: inset 0 0 0 1px var(--accent);
 }
 
 .dm-item.active {
-  background: rgba(99, 102, 241, 0.15);
+  background: rgba(99, 102, 241, 0.25);
+  border-left: 3px solid var(--accent);
 }
 
-.dm-item .dm-unread {
+.dm-unread {
   min-width: 20px;
   height: 20px;
   padding: 0 6px;
@@ -376,15 +373,16 @@ body {
   align-items: center;
   justify-content: center;
   margin-left: auto;
+  animation: unreadPulse 2s infinite;
 }
 
-.dm-item .dm-name {
+.dm-name {
   font-weight: 500;
   display: block;
   margin-bottom: 0.2rem;
 }
 
-.dm-item .dm-preview {
+.dm-preview {
   font-size: 0.8rem;
   color: var(--text-muted);
   display: block;
@@ -394,7 +392,26 @@ body {
   max-width: 180px;
 }
 
-/* Правая панель - чат */
+.dm-status {
+  display: block;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  margin-top: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dm-status.online {
+  color: #2ecc71;
+}
+
+.dm-status.typing {
+  color: var(--accent);
+  font-style: italic;
+}
+
+/* Chat area */
 .chat-area {
   flex: 1;
   min-width: 0;
@@ -404,7 +421,7 @@ body {
   height: 100%;
   overflow: hidden;
   position: relative;
-  transition: transform 0.25s ease;
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   z-index: 10;
 }
 
@@ -435,14 +452,22 @@ body {
   font-size: 1.1rem;
   display: flex;
   align-items: center;
+  gap: 8px;
 }
 
-/* Контейнер сообщений */
+.chat-status {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  margin-left: 10px;
+  display: inline-block;
+}
+
+/* Messages wrapper */
 .chat-messages-wrapper {
   position: relative;
   background: url('/images/fon.jpg') repeat;
   background-color: var(--bg);
-  background-size: 50% auto;  /* добавили */
+  background-size: 50% auto;
   flex: 1;
   overflow-y: auto;
   overflow-x: hidden;
@@ -456,17 +481,94 @@ body {
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
-  min-height: min-content;
+  width: 100%;
 }
 
-.message .message-meta {
+/* ========== MESSAGE STYLES (FIXED) ========== */
+.message {
+  display: flex;
+  width: 100%;
+  cursor: default;
+  transition: background-color 0.1s ease;
+}
+
+.message:hover {
+  background-color: rgba(255, 255, 255, 0.02);
+}
+
+.message-content {
+  width: fit-content;
+  max-width: min(520px, 92%);
+  padding: 0.6rem 1rem;
+  border-radius: 18px;
+  word-break: break-word;
+  line-height: 1.4;
+  position: relative;
+}
+
+/* Mine */
+.message.mine {
+  justify-content: flex-end;
+}
+
+.message.mine .message-content {
+  background: var(--accent);
+  color: white;
+  border-bottom-right-radius: 4px;
+  padding-bottom: 1.2rem; /* space for read indicator */
+}
+
+/* Theirs */
+.message.theirs {
+  justify-content: flex-start;
+}
+
+.message.theirs .message-content {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-bottom-left-radius: 4px;
+}
+
+.message-sender {
+  font-size: 0.8rem;
+  font-weight: bold;
+  margin-bottom: 4px;
+  color: #666;
+}
+
+.message.theirs .message-sender {
+  color: #4a6fa5;
+}
+
+.message.mine .message-sender {
+  color: #45a049;
+}
+
+.message-meta {
   font-size: 0.65rem;
   opacity: 0.7;
   margin-top: 0.25rem;
   text-align: right;
 }
 
-/* Форма отправки */
+.message-read-indicator {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  background: #3b82f6;
+  border-radius: 50%;
+  margin-left: 6px;
+  vertical-align: middle;
+  box-shadow: 0 0 4px rgba(59, 130, 246, 0.5);
+}
+
+.message.mine .message-read-indicator {
+  position: absolute;
+  bottom: 4px;
+  right: 8px;
+}
+
+/* Send form */
 .send-form {
   display: flex;
   gap: 0.5rem;
@@ -490,6 +592,7 @@ body {
 
 .send-form input:focus {
   border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2);
 }
 
 .send-form input::placeholder {
@@ -516,17 +619,434 @@ body {
   transform: scale(0.98);
 }
 
+.send-form label {
+  cursor: pointer;
+  background: var(--surface-hover);
+  border: 1px solid var(--border);
+  padding: 0.5rem 1rem;
+  border-radius: 6px;
+  color: var(--text);
+  text-align: center;
+  font-weight: 500;
+  transition: all 0.2s ease;
+  display: inline-block;
+  user-select: none;
+  white-space: nowrap;
+}
+
+.send-form label:hover {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: white;
+}
+
+.send-form label:active {
+  transform: scale(0.98);
+}
+
+#file-input {
+  display: none !important;
+}
+
+/* File upload progress */
+.file-upload-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  background: var(--surface);
+  border-radius: 8px;
+  margin-top: 8px;
+  animation: fadeIn 0.3s;
+}
+
+.file-upload-progress .file-name {
+  font-size: 0.9rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.progress-bar-container {
+  width: 100%;
+  height: 8px;
+  background: var(--surface-hover);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.progress-bar {
+  height: 100%;
+  background: var(--accent);
+  transition: width 0.1s linear;
+  border-radius: 4px;
+}
+
+.progress-stats {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  text-align: right;
+}
+
+/* File message */
+.message-file-content {
+  background: var(--surface-hover);
+  border-radius: 12px;
+  padding: 16px;
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  border: 1px solid var(--border);
+  transition: var(--transition-default);
+  box-shadow: var(--shadow-sm);
+}
+
+.message-file-content:hover {
+  border-color: var(--accent);
+  box-shadow: var(--shadow-md);
+  transform: translateY(-2px);
+}
+
+.file-info-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+.file-icon {
+  font-size: 2rem;
+}
+
+.file-details {
+  flex: 1;
+  min-width: 0;
+}
+
+.file-name {
+  font-weight: 600;
+  font-size: 0.95rem;
+  word-break: break-all;
+  margin-bottom: 4px;
+}
+
+.file-size {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+.file-preview {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background: var(--surface);
+  border-radius: 8px;
+  overflow: hidden;
+  max-height: 300px;
+}
+
+.file-preview img,
+.file-preview video {
+  max-width: 100%;
+  max-height: 300px;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: transform 0.2s ease;
+}
+
+.file-preview img:hover,
+.file-preview video:hover {
+  transform: scale(1.02);
+}
+
+.file-preview.audio-preview {
+  width: 100%;
+  padding: 12px;
+  background: var(--surface);
+  border-radius: 8px;
+}
+
+.file-preview.audio-preview audio {
+  width: 100%;
+}
+
+.file-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+
+.file-download-btn,
+.file-preview-btn {
+  padding: 8px 16px;
+  border-radius: 20px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: var(--transition-default);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.file-download-btn {
+  background: var(--accent);
+  color: white;
+  border: none;
+}
+
+.file-download-btn:hover {
+  background: var(--accent-hover);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 12px rgba(99, 102, 241, 0.3);
+}
+
+.file-preview-btn {
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+}
+
+.file-preview-btn:hover {
+  background: var(--surface-hover);
+  border-color: var(--accent);
+}
+
+.message.mine .message-file-content {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.message.mine .file-info-header {
+  border-bottom-color: rgba(255, 255, 255, 0.2);
+}
+
+.message.mine .file-actions {
+  border-top-color: rgba(255, 255, 255, 0.2);
+}
+
+.message.mine .file-download-btn {
+  background: white;
+  color: var(--accent);
+}
+
+.message.mine .file-download-btn:hover {
+  background: rgba(255, 255, 255, 0.9);
+}
+
+.message.mine .file-preview-btn {
+  background: rgba(255, 255, 255, 0.1);
+  color: white;
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+/* Fullscreen modal for files */
+.file-fullscreen-modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.95);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+  padding: 2rem;
+}
+
+.file-fullscreen-content {
+  position: relative;
+  max-width: 90vw;
+  max-height: 90vh;
+}
+
+.file-fullscreen-content img,
+.file-fullscreen-content video {
+  max-width: 100%;
+  max-height: 90vh;
+  object-fit: contain;
+  border-radius: 8px;
+}
+
+.close-fullscreen {
+  position: absolute;
+  top: -40px;
+  right: 0;
+  background: none;
+  border: none;
+  color: white;
+  font-size: 2rem;
+  cursor: pointer;
+  padding: 8px;
+}
+
+.close-fullscreen:hover {
+  opacity: 0.8;
+}
+
+/* Custom audio player */
+.custom-audio-player {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: var(--surface);
+  border-radius: 8px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.audio-play-btn {
+  background: #2a2a32;
+  border: none;
+  border-radius: 4px;
+  width: 32px;
+  height: 32px;
+  font-size: 16px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #e8e8ec;
+  transition: background 0.2s;
+  flex-shrink: 0;
+  padding: 0;
+}
+
+.audio-play-btn:hover {
+  background: #3a3a44;
+}
+
+.audio-time-current,
+.audio-time-total {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  min-width: 40px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.audio-progress-container {
+  flex: 1;
+  height: 4px;
+  background: var(--border);
+  border-radius: 2px;
+  cursor: pointer;
+  position: relative;
+  min-width: 60px;
+}
+
+.audio-progress-bar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  background: var(--accent);
+  width: 0%;
+  border-radius: 2px;
+  pointer-events: none;
+}
+
+.audio-progress-thumb {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  width: 14px;
+  height: 14px;
+  background: white;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
+  cursor: grab;
+  z-index: 2;
+  opacity: 1;
+}
+
+.audio-progress-thumb:active {
+  cursor: grabbing;
+}
+
+.audio-download-btn {
+  background: #2a2a32;
+  border: none;
+  border-radius: 4px;
+  width: 32px;
+  height: 32px;
+  font-size: 1.2rem;
+  cursor: pointer;
+  color: #e8e8ec;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s;
+  flex-shrink: 0;
+  padding: 0;
+  line-height: 1;
+}
+
+.audio-download-btn:hover {
+  background: #3a3a44;
+}
+
+.message-audio audio {
+  display: none;
+}
+
+.message.mine .custom-audio-player {
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.message.mine .audio-play-btn,
+.message.mine .audio-download-btn {
+  background: rgba(255, 255, 255, 0.2);
+  color: white;
+}
+
+.message.mine .audio-play-btn:hover,
+.message.mine .audio-download-btn:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+.message.mine .audio-time-current,
+.message.mine .audio-time-total {
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.message.mine .audio-progress-container {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+.message.mine .audio-progress-bar {
+  background: white;
+}
+
+.message.mine .audio-progress-thumb {
+  background: white;
+}
+
 /* Modal */
 .modal {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.7);
+  background: rgba(0, 0, 0, 0.8);
   display: flex;
   align-items: center;
   justify-content: center;
   z-index: 1000;
   padding: 1rem;
-  backdrop-filter: blur(4px);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.25s ease, visibility 0.25s;
+}
+
+.modal:not(.hidden) {
+  opacity: 1;
+  visibility: visible;
 }
 
 .modal-content {
@@ -538,7 +1058,13 @@ body {
   width: 100%;
   max-height: 150vh;
   overflow-y: auto;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+  box-shadow: var(--shadow-lg);
+  transform: scale(0.95);
+  transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.modal:not(.hidden) .modal-content {
+  transform: scale(1);
 }
 
 .modal-content h2 {
@@ -552,7 +1078,6 @@ body {
   font-size: 0.9rem;
 }
 
-/* Список друзей */
 .user-list {
   list-style: none;
   margin: 0 0 1rem;
@@ -626,21 +1151,22 @@ body {
   color: var(--text);
 }
 
-/* Toast & badge */
+/* Toast */
 .toast {
   position: fixed;
   bottom: 2rem;
   left: 50%;
   transform: translateX(-50%);
   padding: 0.75rem 1.5rem;
-  background: var(--surface);
-  border: 1px solid var(--border);
+  background: rgba(24, 24, 28, 0.8);
+  border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 30px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+  box-shadow: var(--shadow-lg);
   z-index: 2000;
   animation: toastIn 0.2s ease;
   font-weight: 500;
-  backdrop-filter: blur(8px);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
 }
 
 .toast.hidden {
@@ -658,244 +1184,13 @@ body {
   }
 }
 
-/* Убираем старый бейдж справа сверху */
-.badge {
-  display: none !important;
-}
-
-/* ========== МОБИЛЬНАЯ ВЕРСИЯ ========== */
-@media (max-width: 768px) {
-  body, #app, #main-screen, .layout {
-    height: 100dvh;
+@keyframes fadeIn {
+  from {
+    opacity: 0;
   }
-  
-  .layout {
-    position: relative;
-    overflow: hidden;
+  to {
+    opacity: 1;
   }
-  
-  .sidebar {
-    position: absolute;
-    width: 100%;
-    min-width: 100%;
-    height: 100%;
-    z-index: 5;
-    transform: translateX(0);
-    border-right: none;
-    background: var(--surface);
-    transition: transform 0.25s ease;
-    will-change: transform;
-  }
-  
-  .chat-area {
-    position: absolute;
-    width: 100%;
-    height: 100%;
-    z-index: 10;
-    background: var(--bg);
-    transform: translateX(100%);
-    transition: transform 0.25s ease;
-    display: flex;
-    flex-direction: column;
-    will-change: transform;
-  }
-  
-  /* Когда чат открыт */
-  .layout.chat-open .sidebar {
-    transform: translateX(-100%);
-    pointer-events: none;
-  }
-  
-  .layout.chat-open .chat-area {
-    transform: translateX(0);
-  }
-  
-  /* Фикс для клавиатуры */
-  .send-form {
-    padding: 0.75rem 1rem;
-    padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
-    position: sticky;
-    bottom: 0;
-    background: var(--surface);
-    z-index: 20;
-  }
-  
-  .send-form input {
-    font-size: 16px; /* Предотвращает зум на iOS */
-  }
-  
-  .chat-messages-wrapper {
-    padding-bottom: 0;
-  }
-  
-  .message {
-    max-width: 85%;
-  }
-  
-  .btn-scroll-down {
-    bottom: 70px;
-    right: 15px;
-    width: 36px;
-    height: 36px;
-    font-size: 1rem;
-    z-index: 30;
-  }
-  
-  /* Шапка на мобильных */
-  .header {
-    padding: 0.5rem 1rem;
-  }
-  
-  .logo {
-    font-size: 1rem;
-  }
-  
-  .btn-header, .btn-logout {
-    padding: 0.4rem 0.6rem;
-    font-size: 0.9rem;
-  }
-  
-  /* Кнопка назад в чате */
-  #chat-header {
-    padding-left: 0.5rem;
-  }
-  
-  #btn-back-mobile {
-    display: inline-block;
-    font-size: 24px;
-    background: none;
-    border: none;
-    color: var(--text);
-    margin-right: 8px;
-    cursor: pointer;
-    padding: 4px 8px;
-    line-height: 1;
-  }
-  
-  #btn-back-mobile:active {
-    opacity: 0.7;
-  }
-}
-
-/* Для десктопа скрываем мобильную кнопку */
-#btn-back-mobile {
-  display: none;
-}
-
-/* Анимации */
-.dm-item, .message, button {
-  transition: all 0.1s ease;
-}
-
-/* Кастомный скроллбар */
-::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
-}
-
-::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-::-webkit-scrollbar-thumb {
-  background: var(--border);
-  border-radius: 3px;
-}
-
-::-webkit-scrollbar-thumb:hover {
-  background: var(--text-muted);
-}
-/* Фикс для заголовка чата */
-#chat-header {
-  display: flex;
-  align-items: center;
-  position: relative;
-  z-index: 15;
-}
-
-/* Стили для мобильной кнопки назад */
-#mobile-back-btn {
-  display: none;
-}
-
-@media (max-width: 768px) {
-  #mobile-back-btn {
-    display: inline-block;
-  }
-  
-  /* Увеличиваем область нажатия */
-  #mobile-back-btn {
-    min-width: 44px;
-    min-height: 44px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-  }
-}
-/* Group styles */
-.dm-item .dm-name:has(👥) {
-  color: var(--accent);
-}
-
-#group-info-btn {
-  transition: opacity 0.2s ease;
-}
-
-#group-info-btn:hover {
-  opacity: 0.8;
-}
-
-/* Checkbox styles */
-#group-friends-list input[type="checkbox"] {
-  accent-color: var(--accent);
-  cursor: pointer;
-}
-
-#group-friends-list li:hover {
-  background: var(--surface-hover);
-}
-.message-sender {
-  font-size: 0.8rem;
-  font-weight: bold;
-  margin-bottom: 4px;
-  color: #666;
-}
-
-.theirs .message-sender {
-  color: #4a6fa5;
-}
-  
-  
-.mine .message-sender {
-    color: #45a049;
-}
-
-/* Call UI Styles */
-#btn-call {
-  transition: all 0.2s ease;
-}
-
-#btn-call:hover:not(:disabled) {
-  opacity: 0.8;
-  transform: scale(1.1);
-}
-
-#btn-call:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-#call-status-bar {
-  background: var(--surface-hover);
-  padding: 0.75rem 1rem;
-  text-align: center;
-  border-top: 1px solid var(--border);
-  font-size: 0.9rem;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 1rem;
-  animation: slideDown 0.3s ease;
 }
 
 @keyframes slideDown {
@@ -909,470 +1204,6 @@ body {
   }
 }
 
-#btn-end-call {
-  padding: 0.4rem 0.8rem;
-  background: var(--danger);
-  color: white;
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 0.85rem;
-  font-weight: 500;
-  transition: all 0.2s ease;
-}
-
-#btn-end-call:hover {
-  opacity: 0.9;
-  transform: scale(1.05);
-}
-
-/* ===== УЛУЧШЕННЫЕ СТИЛИ ДЛЯ ФАЙЛОВ ===== */
-
-/* Индикатор загрузки файлов */
-.file-upload-progress {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 12px;
-  background: var(--surface);
-  border-radius: 8px;
-  margin-top: 8px;
-}
-
-.file-upload-progress .file-name {
-  font-size: 0.9rem;
-  color: var(--text-muted);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.progress-bar-container {
-  width: 100%;
-  height: 8px;
-  background: var(--surface-hover);
-  border-radius: 4px;
-  overflow: hidden;
-}
-
-.progress-bar {
-  height: 100%;
-  background: var(--accent);
-  transition: width 0.1s linear;
-  border-radius: 4px;
-}
-
-.progress-stats {
-  font-size: 0.8rem;
-  color: var(--text-muted);
-  text-align: right;
-}
-
-/* Стили для сообщений с файлами */
-.message-file-content {
-  background: var(--surface-hover);
-  border-radius: 12px;
-  padding: 16px;
-  margin-top: 8px;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  border: 1px solid var(--border);
-  transition: all 0.2s ease;
-}
-
-.message-file-content:hover {
-  border-color: var(--accent);
-  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.1);
-}
-
-.file-info-header {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding-bottom: 8px;
-  border-bottom: 1px solid var(--border);
-}
-
-.file-icon {
-  font-size: 2rem;
-}
-
-.file-details {
-  flex: 1;
-  min-width: 0;
-}
-
-.file-name {
-  font-weight: 600;
-  font-size: 0.95rem;
-  word-break: break-all;
-  margin-bottom: 4px;
-}
-
-.file-size {
-  font-size: 0.8rem;
-  color: var(--text-muted);
-}
-
-.file-preview {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  background: var(--surface);
-  border-radius: 8px;
-  overflow: hidden;
-  max-height: 300px;
-}
-
-/* Увеличенные медиа */
-.file-preview img,
-.file-preview video {
-  max-width: 100%;
-  max-height: 300px;
-  width: auto;
-  height: auto;
-  object-fit: contain;
-  border-radius: 8px;
-  cursor: pointer;
-  transition: transform 0.2s ease;
-}
-
-.file-preview img:hover,
-.file-preview video:hover {
-  transform: scale(1.02);
-}
-
-.file-preview.audio-preview {
-  width: 100%;
-  padding: 12px;
-  background: var(--surface);
-  border-radius: 8px;
-}
-
-.file-preview.audio-preview audio {
-  width: 100%;
-}
-
-.file-actions {
-  display: flex;
-  gap: 8px;
-  justify-content: flex-end;
-  padding-top: 8px;
-  border-top: 1px solid var(--border);
-}
-
-.file-download-btn {
-  padding: 8px 16px;
-  background: var(--accent);
-  color: white;
-  border: none;
-  cursor: pointer;
-  font-weight: 500;
-  transition: all 0.2s ease;
-}
-
-.file-download-btn:hover {
-  background: var(--accent-hover);
-  transform: translateY(-1px);
-}
-
-.file-preview-btn {
-  padding: 8px 16px;
-  background: var(--surface);
-  color: var(--text);
-  border: 1px solid var(--border);
-  border-radius: 20px;
-  cursor: pointer;
-  font-weight: 500;
-  transition: all 0.2s ease;
-}
-
-.file-preview-btn:hover {
-  background: var(--surface-hover);
-  border-color: var(--accent);
-}
-
-/* Для своих сообщений меняем цвета */
-.message.mine .message-file-content {
-  background: rgba(255, 255, 255, 0.1);
-  border-color: rgba(255, 255, 255, 0.2);
-}
-
-.message.mine .file-info-header {
-  border-bottom-color: rgba(255, 255, 255, 0.2);
-}
-
-.message.mine .file-actions {
-  border-top-color: rgba(255, 255, 255, 0.2);
-}
-
-.message.mine .file-download-btn {
-  background: white;
-  color: var(--accent);
-}
-
-.message.mine .file-download-btn:hover {
-  background: rgba(255, 255, 255, 0.9);
-}
-
-.message.mine .file-preview-btn {
-  background: rgba(255, 255, 255, 0.1);
-  color: white;
-  border-color: rgba(255, 255, 255, 0.2);
-}
-
-/* Модальное окно для увеличенного просмотра */
-.file-fullscreen-modal {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.95);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 2000;
-  padding: 2rem;
-}
-
-.file-fullscreen-content {
-  position: relative;
-  max-width: 90vw;
-  max-height: 90vh;
-}
-
-.file-fullscreen-content img,
-.file-fullscreen-content video {
-  max-width: 100%;
-  max-height: 90vh;
-  object-fit: contain;
-  border-radius: 8px;
-}
-
-.close-fullscreen {
-  position: absolute;
-  top: -40px;
-  right: 0;
-  background: none;
-  border: none;
-  color: white;
-  font-size: 2rem;
-  cursor: pointer;
-  padding: 8px;
-}
-
-.close-fullscreen:hover {
-  opacity: 0.8;
-}
-
-/* File input styling */
-#file-input {
-  display: none !important;
-}
-
-/* Send form file button styling */
-.send-form label {
-  cursor: pointer;
-  background: var(--surface-hover);
-  border: 1px solid var(--border);
-  padding: 0.5rem 1rem;
-  border-radius: 6px;
-  color: var(--text);
-  text-align: center;
-  font-weight: 500;
-  transition: all 0.2s ease;
-  display: inline-block;
-  user-select: none;
-  white-space: nowrap;
-}
-
-.send-form label:hover {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: white;
-}
-
-.send-form label:active {
-  transform: scale(0.98);
-}
-
-/* Remote audio element */
-#remote-audio-stream {
-  display: none;
-}
-
-/* Call button primary styling */
-.send-form button:hover:not(:disabled),
-.send-form label:hover {
-  background: var(--accent-hover);
-  border-color: var(--accent);
-  transform: translateY(-1px);
-}
-.delete-message-btn {
-  opacity: 0.6;
-  transition: opacity 0.2s;
-  background: none;
-  border: none;
-  cursor: pointer;
-  padding: 4px 8px;
-  border-radius: 4px;
-  margin-left: 8px;
-}
-
-.delete-message-btn:hover {
-  opacity: 1;
-  background-color: rgba(255, 255, 255, 0.1);
-}
-
-.message.mine .delete-message-btn {
-  order: 3; /* чтобы кнопка была после метаданных */
-}
-
-.message {
-  transition: opacity 0.3s, transform 0.3s;
-}
-
-.role-badge {
-  font-size: 1.2rem;
-  margin-left: 8px;
-}
-
-.admin-action-btn {
-  padding: 4px 8px;
-  font-size: 0.8rem;
-  border-radius: 4px;
-  border: 1px solid var(--border);
-  background: var(--surface);
-  color: var(--text);
-  cursor: pointer;
-}
-
-.admin-action-btn:hover {
-  background: var(--surface-hover);
-}
-.admin-action-btn {
-  background: var(--surface-hover);
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  padding: 4px 8px;
-  cursor: pointer;
-  font-size: 1rem;
-  transition: background 0.2s;
-}
-.admin-action-btn:hover {
-  background: var(--accent);
-  color: white;
-  border-color: var(--accent);
-}
-
-.admin-action-btn select {
-  background: var(--surface-hover);
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  padding: 4px 8px;
-  color: var(--text);
-  font-size: 0.8rem;
-  cursor: pointer;
-  outline: none;
-}
-
-.admin-action-btn select:hover {
-  background: var(--accent);
-  color: white;
-  border-color: var(--accent);
-}
-
-.message-file-content:has(.file-preview:only-child) {
-  padding: 0;
-  background: transparent;
-}
-
-.btn-menu {
-  background: none;
-  border: none;
-  color: var(--text);
-  font-size: 1.5rem;
-  cursor: pointer;
-  padding: 0 0.5rem;
-  margin-right: 0.5rem;
-  min-width: 44px;
-  min-height: 44px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-}
-.btn-menu:hover {
-  background: var(--surface-hover);
-  border-radius: 8px;
-}
-#profile-display-name {
-  width: 100%;
-  margin-bottom: 1rem;
-  padding: 0.75rem;
-  background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  color: var(--text);
-}
-/* ========== УЛУЧШЕНИЯ ВИЗУАЛА И ПЛАВНОСТИ ========== */
-
-:root {
-  --shadow-sm: 0 4px 12px rgba(0, 0, 0, 0.1);
-  --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.15);
-  --shadow-lg: 0 16px 32px rgba(0, 0, 0, 0.2);
-  --transition-default: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-  --transition-smooth: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-* {
-  transition: background-color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
-}
-
-button,
-.btn-primary,
-.btn-header,
-.btn-logout,
-.btn-copy,
-.btn-close-modal {
-  transition: var(--transition-default);
-}
-
-/* Плавное появление модалок */
-.modal {
-  opacity: 0;
-  visibility: hidden;
-  transition: opacity 0.25s ease, visibility 0.25s;
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-}
-
-.modal:not(.hidden) {
-  opacity: 1;
-  visibility: visible;
-}
-
-.modal-content {
-  transform: scale(0.95);
-  transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
-}
-
-.modal:not(.hidden) .modal-content {
-  transform: scale(1);
-}
-
-/* Тосты со стеклом */
-.toast {
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  background: rgba(24, 24, 28, 0.8);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  box-shadow: var(--shadow-lg);
-}
-
-/* Анимация сообщений */
-.message {
-  animation: messageIn 0.2s ease-out;
-}
-
 @keyframes messageIn {
   from {
     opacity: 0;
@@ -1382,92 +1213,6 @@ button,
     opacity: 1;
     transform: translateY(0);
   }
-}
-
-/* Карточки файлов */
-.message-file-content {
-  box-shadow: var(--shadow-sm);
-  transition: var(--transition-default);
-}
-
-.message-file-content:hover {
-  box-shadow: var(--shadow-md);
-  transform: translateY(-2px);
-}
-
-.file-download-btn,
-.file-preview-btn {
-  transition: var(--transition-default);
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-}
-
-.file-download-btn:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 6px 12px rgba(99, 102, 241, 0.3);
-}
-
-/* Кнопка вызова */
-#btn-call:not(:disabled) {
-  animation: pulse 2s infinite;
-}
-
-@keyframes pulse {
-  0% {
-    transform: scale(1);
-  }
-  50% {
-    transform: scale(1.1);
-  }
-  100% {
-    transform: scale(1);
-  }
-}
-
-#call-status-bar {
-  animation: slideDown 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-/* Улучшенный скроллбар */
-::-webkit-scrollbar {
-  width: 4px;
-  height: 4px;
-}
-
-::-webkit-scrollbar-thumb {
-  background: var(--border);
-  border-radius: 4px;
-  transition: background 0.2s;
-}
-
-::-webkit-scrollbar-thumb:hover {
-  background: var(--accent);
-}
-
-.chat-messages-wrapper:hover::-webkit-scrollbar-thumb,
-.dm-list:hover::-webkit-scrollbar-thumb {
-  background: var(--text-muted);
-}
-
-/* Плавное переключение сайдбара и чата на мобильных */
-.sidebar,
-.chat-area {
-  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-/* Элементы списка чатов */
-.dm-item {
-  transition: var(--transition-default);
-}
-
-.dm-item:hover {
-  background: var(--surface-hover);
-  transform: translateX(4px);
-  box-shadow: inset 0 0 0 1px var(--accent);
-}
-
-/* Индикатор непрочитанных */
-.dm-item .dm-unread {
-  animation: unreadPulse 2s infinite;
 }
 
 @keyframes unreadPulse {
@@ -1482,23 +1227,6 @@ button,
   }
 }
 
-/* Поле ввода при фокусе */
-.send-form input:focus {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2);
-  outline: none;
-}
-
-/* Кнопка "Прокрутить вниз" */
-.btn-scroll-down {
-  transition: var(--transition-default);
-  animation: fadeInUp 0.3s;
-}
-
-.btn-scroll-down:active {
-  transform: scale(0.9);
-}
-
 @keyframes fadeInUp {
   from {
     opacity: 0;
@@ -1510,670 +1238,7 @@ button,
   }
 }
 
-/* Дополнительные штрихи */
-.auth-card {
-  box-shadow: var(--shadow-lg);
-}
-
-.header {
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
-  background: rgba(24, 24, 28, 0.8);
-}
-
-.dm-item.active {
-  background: rgba(99, 102, 241, 0.25);
-  border-left: 3px solid var(--accent);
-}
-
-/* Микро-взаимодействия для кнопок */
-.btn-primary,
-.btn-header,
-.btn-logout {
-  position: relative;
-  overflow: hidden;
-}
-
-.btn-primary::after,
-.btn-header::after,
-.btn-logout::after {
-  content: '';
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 0;
-  height: 0;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.2);
-  transform: translate(-50%, -50%);
-  transition: width 0.3s, height 0.3s;
-}
-
-.btn-primary:active::after,
-.btn-header:active::after,
-.btn-logout:active::after {
-  width: 200px;
-  height: 200px;
-}
-
-/* Плавное появление загруженных файлов */
-.file-upload-progress {
-  animation: fadeIn 0.3s;
-}
-
-@keyframes fadeIn {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
-}
-
-/* Улучшенный вид ссылок и кликабельных элементов */
-a,
-button,
-[role='button'] {
-  cursor: pointer;
-  -webkit-tap-highlight-color: transparent;
-}
-
-/* Затемнение фона при открытой модалке */
-.modal {
-  background: rgba(0, 0, 0, 0.8);
-}
-/* Улучшенное отображение аудиофайлов */
-.file-preview.audio-preview {
-  background: linear-gradient(145deg, var(--surface), var(--surface-hover));
-  border-radius: 28px;
-  padding: 16px;
-  margin-top: 8px;
-  border: 1px solid var(--border);
-  box-shadow: var(--shadow-sm);
-  transition: var(--transition-default);
-}
-
-.file-preview.audio-preview:hover {
-  border-color: var(--accent);
-  box-shadow: var(--shadow-md);
-  transform: translateY(-2px);
-}
-
-.file-preview.audio-preview audio {
-  width: 100%;
-  height: 48px;
-  border-radius: 24px;
-  background: var(--bg);
-  outline: none;
-}
-
-/* Стилизация элементов управления audio для WebKit (Chrome, Edge, Safari) */
-.file-preview.audio-preview audio::-webkit-media-controls-panel {
-  background: var(--surface);
-  border-radius: 24px;
-}
-
-.file-preview.audio-preview audio::-webkit-media-controls-play-button,
-.file-preview.audio-preview audio::-webkit-media-controls-mute-button {
-  background-color: var(--accent);
-  border-radius: 50%;
-  color: white;
-}
-
-.file-preview.audio-preview audio::-webkit-media-controls-current-time-display,
-.file-preview.audio-preview audio::-webkit-media-controls-time-remaining-display {
-  color: var(--text);
-  font-weight: 500;
-  text-shadow: none;
-}
-
-.file-preview.audio-preview audio::-webkit-media-controls-timeline {
-  background: var(--border);
-  border-radius: 10px;
-  height: 6px;
-}
-
-.file-preview.audio-preview audio::-webkit-media-controls-timeline::-webkit-media-slider-thumb {
-  background: var(--accent);
-  width: 14px;
-  height: 14px;
-  border-radius: 50%;
-}
-
-/* Для Firefox (общая тень, так как стилизация контролов ограничена) */
-.file-preview.audio-preview audio {
-  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.2));
-}
-
-/* Стили для сообщений с медиа (без рамки) */
-.media-message {
-  margin: 4px 0;
-  max-width: 100%;
-}
-
-.media-message audio {
-  margin: 0;
-  display: block;
-}
-
-.media-message img,
-.media-message video {
-  border-radius: 12px;
-  max-width: 100%;
-  max-height: 300px;
-  object-fit: contain;
-  background: transparent;
-  cursor: pointer;
-  transition: transform 0.2s ease;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-}
-
-.media-message img:hover,
-.media-message video:hover {
-  transform: scale(1.02);
-}
-
-/* Для своих сообщений (mine) можно добавить небольшую тень */
-.message.mine .media-message img,
-.message.mine .media-message video {
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
-}
-
-
-
-
-/* Для изображений и видео оставляем стандартную ширину */
-.media-message img,
-.media-message video {
-    max-width: 100%;
-    max-height: 300px;
-    border-radius: 12px;
-    cursor: pointer;
-}
-
-
-.message-audio {
-    max-width: 95%;
-    width: fit-content;
-}
-
-.message-audio .media-message {
-    width: 100%;
-    display: block;
-}
-
-.message-audio .media-message audio {
-    display: block;
-    width: 100% !important;
-    min-width: 100% !important;
-    min-height: 40px;  /* критично для Chrome/Edge */
-    height: auto;
-    box-sizing: border-box;
-    border-radius: 8px;
-}
-
-/* Кастомный аудиоплеер */
-.custom-audio-player {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 8px 12px;
-    background: var(--surface-hover);
-    border-radius: 24px;
-    width: 100%;
-    box-sizing: border-box;
-}
-
-.audio-play-btn {
-    background: var(--accent);
-    border: none;
-    border-radius: 50%;
-    width: 32px;
-    height: 32px;
-    font-size: 16px;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: white;
-    transition: background 0.2s;
-    flex-shrink: 0;
-    padding: 0;
-}
-
-.audio-play-btn:hover {
-    background: var(--accent-hover);
-}
-
-.audio-time-current,
-.audio-time-total {
-    font-size: 0.8rem;
-    color: var(--text-muted);
-    min-width: 40px;
-    text-align: center;
-    font-variant-numeric: tabular-nums;
-}
-
-.audio-progress-container {
-    flex: 1;
-    height: 6px;
-    background: var(--border);
-    border-radius: 3px;
-    overflow: hidden;
-    cursor: pointer;
-    position: relative;
-    min-width: 60px;
-}
-
-.audio-progress-bar {
-    height: 100%;
-    background: var(--accent);
-    width: 0%;
-    border-radius: 3px;
-    transition: width 0.1s linear;
-}
-
-.audio-download-btn {
-    background: none;
-    border: none;
-    font-size: 1.2rem;
-    cursor: pointer;
-    color: var(--text-muted);
-    padding: 4px;
-    border-radius: 4px;
-    transition: background 0.2s;
-    flex-shrink: 0;
-    line-height: 1;
-}
-
-.audio-download-btn:hover {
-    background: var(--surface);
-    color: var(--text);
-}
-
-/* Скрываем нативный аудиоэлемент */
-.message-audio audio {
-    display: none;
-}
-
-/* Стили для своих сообщений */
-.message.mine .custom-audio-player {
-    background: rgba(255, 255, 255, 0.15);
-}
-
-.message.mine .audio-time-current,
-.message.mine .audio-time-total {
-    color: rgba(255, 255, 255, 0.8);
-}
-
-.message.mine .audio-progress-container {
-    background: rgba(255, 255, 255, 0.3);
-}
-
-.message.mine .audio-progress-bar {
-    background: white;
-}
-
-.message.mine .audio-download-btn {
-    color: rgba(255, 255, 255, 0.8);
-}
-
-.message.mine .audio-download-btn:hover {
-    background: rgba(255, 255, 255, 0.2);
-}
-
-/* Адаптация под мобильные */
-@media (max-width: 768px) {
-    .custom-audio-player {
-        padding: 6px 8px;
-        gap: 4px;
-    }
-
-    .audio-play-btn {
-        width: 28px;
-        height: 28px;
-        font-size: 14px;
-    }
-
-    .audio-time-current,
-    .audio-time-total {
-        font-size: 0.7rem;
-        min-width: 35px;
-    }
-}
-
-/* Кастомный аудиоплеер — тёмный, квадратный стиль */
-.custom-audio-player {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 8px 12px;
-    background: var(--surface);  /* темнее, чем surface-hover */
-    border-radius: 8px;           /* более квадратный, но скруглённый */
-    width: 100%;
-    box-sizing: border-box;
-}
-
-.audio-play-btn {
-    background: var(--accent);
-    border: none;
-    border-radius: 4px;           /* квадратная кнопка с малым скруглением */
-    width: 32px;
-    height: 32px;
-    font-size: 16px;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: white;
-    transition: background 0.2s;
-    flex-shrink: 0;
-    padding: 0;
-}
-
-.audio-play-btn:hover {
-    background: var(--accent-hover);
-}
-
-.audio-time-current,
-.audio-time-total {
-    font-size: 0.8rem;
-    color: var(--text-muted);
-    min-width: 40px;
-    text-align: center;
-    font-variant-numeric: tabular-nums;
-}
-
-/* Контейнер прогресс-бара с ползунком */
-.audio-progress-container {
-    flex: 1;
-    height: 4px;                   /* чуть тоньше */
-    background: var(--border);
-    border-radius: 2px;
-    cursor: pointer;
-    position: relative;
-    min-width: 60px;
-}
-
-/* Заполненная часть */
-.audio-progress-bar {
-    position: absolute;
-    top: 0;
-    left: 0;
-    height: 100%;
-    background: var(--accent);
-    width: 0%;
-    border-radius: 2px;
-    pointer-events: none;           /* чтобы клики проходили к контейнеру */
-}
-
-/* Ползунок (видим при наведении) */
-.audio-progress-thumb {
-    position: absolute;
-    top: 50%;
-    left: 0;
-    width: 12px;
-    height: 12px;
-    background: white;
-    border-radius: 50%;
-    transform: translate(-50%, -50%);
-    pointer-events: none;
-    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
-    opacity: 0;
-    transition: opacity 0.2s;
-}
-
-.audio-progress-container:hover .audio-progress-thumb {
-    opacity: 1;
-}
-
-.audio-download-btn {
-    background: none;
-    border: none;
-    font-size: 1.2rem;
-    cursor: pointer;
-    color: var(--text-muted);
-    padding: 4px;
-    border-radius: 4px;
-    transition: background 0.2s;
-    flex-shrink: 0;
-    line-height: 1;
-}
-
-.audio-download-btn:hover {
-    background: var(--surface-hover);
-    color: var(--text);
-}
-
-/* Скрываем нативный аудиоэлемент */
-.message-audio audio {
-    display: none;
-}
-
-/* Стили для своих сообщений */
-.message.mine .custom-audio-player {
-    background: rgba(255, 255, 255, 0.15);
-}
-
-.message.mine .audio-time-current,
-.message.mine .audio-time-total {
-    color: rgba(255, 255, 255, 0.8);
-}
-
-.message.mine .audio-progress-container {
-    background: rgba(255, 255, 255, 0.3);
-}
-
-.message.mine .audio-progress-bar {
-    background: white;
-}
-
-.message.mine .audio-progress-thumb {
-    background: white;
-}
-
-.message.mine .audio-download-btn {
-    color: rgba(255, 255, 255, 0.8);
-}
-
-.message.mine .audio-download-btn:hover {
-    background: rgba(255, 255, 255, 0.2);
-}
-
-/* Адаптация под мобильные */
-@media (max-width: 768px) {
-    .custom-audio-player {
-        padding: 6px 8px;
-        gap: 4px;
-    }
-
-    .audio-play-btn {
-        width: 28px;
-        height: 28px;
-        font-size: 14px;
-    }
-
-    .audio-time-current,
-    .audio-time-total {
-        font-size: 0.7rem;
-        min-width: 35px;
-    }
-
-    .audio-progress-thumb {
-        width: 10px;
-        height: 10px;
-    }
-}
-
-/* Кастомный аудиоплеер — тёмный, квадратный стиль */
-.custom-audio-player {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 8px 12px;
-    background: var(--surface);
-    border-radius: 8px;
-    width: 100%;
-    box-sizing: border-box;
-}
-
-.audio-play-btn {
-    background: #2a2a32;
-    border: none;
-    border-radius: 4px;
-    width: 32px;
-    height: 32px;
-    font-size: 16px;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: #e8e8ec;
-    transition: background 0.2s;
-    flex-shrink: 0;
-    padding: 0;
-}
-
-.audio-play-btn:hover {
-    background: #3a3a44;
-}
-
-.audio-time-current,
-.audio-time-total {
-    font-size: 0.8rem;
-    color: var(--text-muted);
-    min-width: 40px;
-    text-align: center;
-    font-variant-numeric: tabular-nums;
-}
-
-.audio-progress-container {
-    flex: 1;
-    height: 4px;
-    background: var(--border);
-    border-radius: 2px;
-    cursor: pointer;
-    position: relative;
-    min-width: 60px;
-}
-
-.audio-progress-bar {
-    position: absolute;
-    top: 0;
-    left: 0;
-    height: 100%;
-    background: var(--accent);
-    width: 0%;
-    border-radius: 2px;
-    pointer-events: none;
-}
-
-.audio-progress-thumb {
-    position: absolute;
-    top: 50%;
-    left: 0;
-    width: 14px;
-    height: 14px;
-    background: white;
-    border-radius: 50%;
-    transform: translate(-50%, -50%);
-    box-shadow: 0 1px 4px rgba(0,0,0,0.5);
-    cursor: grab;
-    z-index: 2;
-    opacity: 1;
-}
-
-.audio-progress-thumb:active {
-    cursor: grabbing;
-}
-
-.audio-download-btn {
-    background: #2a2a32;
-    border: none;
-    border-radius: 4px;
-    width: 32px;
-    height: 32px;
-    font-size: 1.2rem;
-    cursor: pointer;
-    color: #e8e8ec;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    transition: background 0.2s;
-    flex-shrink: 0;
-    padding: 0;
-    line-height: 1;
-}
-
-.audio-download-btn:hover {
-    background: #3a3a44;
-}
-
-/* Скрываем нативный аудиоэлемент */
-.message-audio audio {
-    display: none;
-}
-
-/* Стили для своих сообщений */
-.message.mine .custom-audio-player {
-    background: rgba(255, 255, 255, 0.15);
-}
-
-.message.mine .audio-play-btn,
-.message.mine .audio-download-btn {
-    background: rgba(255, 255, 255, 0.2);
-    color: white;
-}
-
-.message.mine .audio-play-btn:hover,
-.message.mine .audio-download-btn:hover {
-    background: rgba(255, 255, 255, 0.3);
-}
-
-.message.mine .audio-time-current,
-.message.mine .audio-time-total {
-    color: rgba(255, 255, 255, 0.8);
-}
-
-.message.mine .audio-progress-container {
-    background: rgba(255, 255, 255, 0.3);
-}
-
-.message.mine .audio-progress-bar {
-    background: white;
-}
-
-.message.mine .audio-progress-thumb {
-    background: white;
-}
-
-/* Адаптация под мобильные */
-@media (max-width: 768px) {
-    .custom-audio-player {
-        padding: 6px 8px;
-        gap: 4px;
-    }
-
-    .audio-play-btn,
-    .audio-download-btn {
-        width: 28px;
-        height: 28px;
-        font-size: 14px;
-    }
-
-    .audio-time-current,
-    .audio-time-total {
-        font-size: 0.7rem;
-        min-width: 35px;
-    }
-
-    .audio-progress-thumb {
-        width: 12px;
-        height: 12px;
-    }
-}
-
-/* Контекстное меню сообщения */
+/* Context menu */
 .context-menu {
   position: fixed;
   z-index: 2000;
@@ -2200,7 +1265,7 @@ button,
   border-top: 1px solid var(--border);
   transform: rotate(45deg);
   top: -6px;
-  left: 20px; /* будет переопределяться скриптом */
+  left: 20px;
   z-index: -1;
 }
 
@@ -2233,35 +1298,6 @@ button,
   }
 }
 
-.icon {
-  width: 20px;
-  height: 20px;
-  vertical-align: middle;
-  margin-right: 4px;
-}
-.dm-status {
-  display: block;
-  font-size: 0.75rem;
-  color: var(--text-muted);
-  margin-top: 2px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.dm-status.online {
-  color: #2ecc71;
-}
-.dm-status.typing {
-  color: var(--accent);
-  font-style: italic;
-}
-.chat-status {
-  font-size: 0.8rem;
-  color: var(--text-muted);
-  margin-left: 10px;
-  display: inline-block;
-}
-
 /* Reactions */
 .message-reactions {
   display: flex;
@@ -2269,6 +1305,7 @@ button,
   gap: 4px;
   margin-top: 6px;
 }
+
 .reaction {
   display: inline-flex;
   align-items: center;
@@ -2280,14 +1317,17 @@ button,
   font-size: 0.75rem;
   cursor: default;
 }
+
 .reaction.me {
   background: rgba(99, 102, 241, 0.2);
   border-color: var(--accent);
 }
+
 .reaction-emoji {
   width: 16px;
   height: 16px;
 }
+
 .reaction-count {
   color: var(--text-muted);
   font-weight: 500;
@@ -2305,11 +1345,13 @@ button,
   backdrop-filter: blur(10px);
   min-width: 200px;
 }
+
 .emoji-picker-content {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 8px;
 }
+
 .emoji-btn {
   background: var(--surface-hover);
   border: 1px solid var(--border);
@@ -2318,52 +1360,21 @@ button,
   cursor: pointer;
   transition: all 0.1s ease;
 }
+
 .emoji-btn:hover {
   background: var(--accent);
   border-color: var(--accent);
   transform: scale(1.1);
 }
+
 .emoji-img {
   width: 24px;
   height: 24px;
   display: block;
   margin: 0 auto;
 }
-/* Сообщения на всю ширину */
-.message {
-  display: flex;
-  width: 100%;
-  padding: 0;
-  cursor: default;
-}
-.message > .message-content {
-  max-width: 75%;
-  padding: 0.6rem 1rem;
-  border-radius: 18px;
-  word-break: break-word;
-  line-height: 1.4;
-  width: fit-content
-}
-.message.mine > .message-content {
-  background: var(--accent);
-  color: white;
-  border-bottom-right-radius: 4px;
-}
-.message.theirs > .message-content {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-bottom-left-radius: 4px;
-}
 
-/* Контекстное меню с реакциями */
-.context-menu-content {
-  display: flex;
-  flex-direction: column;
-}
-.context-menu-actions {
-  display: flex;
-  flex-direction: column;
-}
+/* Context menu reactions */
 .context-menu-reactions {
   display: flex;
   gap: 4px;
@@ -2373,6 +1384,7 @@ button,
   white-space: nowrap;
   scrollbar-width: thin;
 }
+
 .reaction-menu-btn {
   background: var(--surface-hover);
   border: 1px solid var(--border);
@@ -2385,67 +1397,212 @@ button,
   gap: 4px;
   font-size: 0.8rem;
 }
+
 .reaction-menu-btn:hover {
   background: var(--accent);
   border-color: var(--accent);
 }
+
 .reaction-menu-btn .emoji-img {
   width: 18px;
   height: 18px;
 }
-.message {
-  transition: background-color 0.1s ease;
+
+/* Call UI */
+#btn-call {
+  transition: all 0.2s ease;
 }
 
-.message:hover {
-  background-color: rgba(255, 255, 255, 0.02); /* едва заметное выделение */
+#btn-call:hover:not(:disabled) {
+  opacity: 0.8;
+  transform: scale(1.1);
 }
-.message-read-indicator {
-  display: inline-block;
-  width: 8px;
-  height: 8px;
-  background-color: #3b82f6;
-  border-radius: 50%;
-  margin-left: 6px;
-  vertical-align: middle;
-  box-shadow: 0 0 4px rgba(59,130,246,0.5);
+
+#btn-call:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
-.message.mine .message-content {
-  position: relative;
-  padding-bottom: 1.2rem;
+
+#call-status-bar {
+  background: var(--surface-hover);
+  padding: 0.75rem 1rem;
+  text-align: center;
+  border-top: 1px solid var(--border);
+  font-size: 0.9rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  animation: slideDown 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
-.message.mine .message-read-indicator {
-  position: absolute;
-  bottom: 4px;
-  right: 8px;
+
+#btn-end-call {
+  padding: 0.4rem 0.8rem;
+  background: var(--danger);
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  font-weight: 500;
+  transition: all 0.2s ease;
 }
-.message-read-indicator {
-  display: inline-block !important;
-  width: 12px !important;
-  height: 12px !important;
-  background: rgb(58, 38, 190) !important;
+
+#btn-end-call:hover {
+  opacity: 0.9;
+  transform: scale(1.05);
 }
+
+#remote-audio-stream {
+  display: none;
+}
+
+/* Admin & badges */
+.role-badge {
+  font-size: 1.2rem;
+  margin-left: 8px;
+}
+
+.admin-action-btn {
+  padding: 4px 8px;
+  font-size: 0.8rem;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.admin-action-btn:hover {
+  background: var(--accent);
+  color: white;
+  border-color: var(--accent);
+}
+
+.admin-action-btn select {
+  background: var(--surface-hover);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 4px 8px;
+  color: var(--text);
+  font-size: 0.8rem;
+  cursor: pointer;
+  outline: none;
+}
+
+.admin-action-btn select:hover {
+  background: var(--accent);
+  color: white;
+  border-color: var(--accent);
+}
+
+.delete-message-btn {
+  opacity: 0.6;
+  transition: opacity 0.2s;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 4px;
+  margin-left: 8px;
+}
+
+.delete-message-btn:hover {
+  opacity: 1;
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
+.message.mine .delete-message-btn {
+  order: 3;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 4px;
+  transition: background 0.2s;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--accent);
+}
+
+/* Mobile overrides */
 @media (max-width: 768px) {
-  /* ========== ШАПКА ========== */
+  body,
+  #app,
+  #main-screen,
+  .layout {
+    height: 100dvh;
+  }
+
+  .layout {
+    position: relative;
+    overflow: hidden;
+  }
+
+  .sidebar {
+    position: absolute;
+    width: 100%;
+    min-width: 100%;
+    height: 100%;
+    z-index: 5;
+    transform: translateX(0);
+    border-right: none;
+    background: var(--surface);
+    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .chat-area {
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    z-index: 10;
+    background: var(--bg);
+    transform: translateX(100%);
+    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    display: flex;
+    flex-direction: column;
+  }
+
+  .layout.chat-open .sidebar {
+    transform: translateX(-100%);
+    pointer-events: none;
+  }
+
+  .layout.chat-open .chat-area {
+    transform: translateX(0);
+  }
+
   .header {
-    flex-wrap: wrap;                /* кнопки переносятся */
+    flex-wrap: wrap;
     padding: 0.5rem 0.75rem;
     gap: 0.5rem;
   }
 
-  .btn-header, .btn-logout {
-    padding: 0.4rem 0.6rem;        /* уменьшаем кнопки */
+  .btn-header,
+  .btn-logout {
+    padding: 0.4rem 0.6rem;
     font-size: 0.85rem;
   }
 
   .logo {
-    height: 28px;                   /* чуть меньше логотип */
+    height: 28px;
     max-width: 100px;
   }
 
-  /* ========== БОКОВАЯ ПАНЕЛЬ (СПИСОК ЧАТОВ) ========== */
   .sidebar-actions {
-    padding: 0.75rem;               /* уменьшаем отступы */
+    padding: 0.75rem;
     display: flex;
     gap: 0.5rem;
   }
@@ -2456,7 +1613,7 @@ button,
   }
 
   .dm-item {
-    padding: 0.6rem 0.75rem;       /* меньше вертикальные отступы */
+    padding: 0.6rem 0.75rem;
   }
 
   .dm-name {
@@ -2466,12 +1623,11 @@ button,
 
   .dm-preview {
     font-size: 0.75rem;
-    max-width: 150px;              /* чтобы не вылезало */
+    max-width: 150px;
   }
 
-  /* ========== ОБЛАСТЬ ЧАТА ========== */
   .chat-header {
-    padding: 0.75rem 1rem;         /* уменьшаем шапку чата */
+    padding: 0.75rem 1rem;
     font-size: 1rem;
   }
 
@@ -2479,26 +1635,25 @@ button,
     font-size: 0.75rem;
   }
 
-  /* Исправление фона: уменьшаем масштаб паттерна */
   .chat-messages-wrapper {
-    background-size: 50% auto;     /* фон уменьшится вдвое */
-    /* Либо полностью убрать фон, если не нравится:
-       background-image: none;
-    */
+    background-size: 50% auto;
+    padding: 0.75rem;
   }
 
-  /* Сообщения */
-  .message > .message-content {
-    max-width: 85%;                /* чуть шире, чтобы текст не был слишком узким */
-    padding: 0.5rem 0.8rem;        /* уменьшаем внутренние отступы */
+  .message .message-content {
+    max-width: 94%;
+    padding: 0.5rem 0.8rem;
   }
 
-  /* Убираем лишний отступ у моих сообщений */
   .message.mine .message-content {
-    padding-bottom: 0.8rem;        /* было 1.2rem */
+    padding-bottom: 0.8rem;
   }
 
-  /* Форма отправки */
+  .message.mine .message-read-indicator {
+    bottom: 2px;
+    right: 6px;
+  }
+
   .send-form {
     padding: 0.5rem 0.75rem;
     gap: 0.4rem;
@@ -2506,7 +1661,7 @@ button,
 
   .send-form input {
     padding: 0.6rem 0.8rem;
-    font-size: 14px;               /* чтобы не зумилось на iOS */
+    font-size: 16px;
   }
 
   .send-form button {
@@ -2519,12 +1674,10 @@ button,
     white-space: nowrap;
   }
 
-  /* Модалки */
   .modal-content {
     padding: 1rem;
   }
 
-  /* Кнопка прокрутки вниз */
   .btn-scroll-down {
     bottom: 70px;
     right: 15px;
@@ -2532,107 +1685,122 @@ button,
     height: 36px;
   }
 
-  /* Кнопка вызова (звонок) */
   #btn-call img {
     width: 18px;
     height: 18px;
   }
-  /* Уменьшаем отступы контейнера сообщений */
-  .chat-messages-wrapper {
-    padding-left: 0.5rem;
-    padding-right: 0.5rem;
+
+  .custom-audio-player {
+    padding: 6px 8px;
+    gap: 4px;
   }
 
-  /* Делаем сообщения шире */
-  .message > .message-content {
-    max-width: 95%;
-  }
-}
-/* Уменьшаем базовый padding-bottom у своих сообщений, чтобы не было лишнего отступа даже на десктопе */
-.message.mine .message-content {
-  padding-bottom: 0.8rem;
-}
-/* Если индикатор прочтения на десктопе перестал помещаться, можно его поднять */
-.message.mine .message-read-indicator {
-  bottom: 2px;
-  right: 6px;
-}
-/* Гарантированное прижатие сообщений к нужным краям */
-.message.mine .message-content {
-  margin-left: auto;
-}
-
-.message.theirs .message-content {
-  margin-right: auto;
-}
-/* Прижатие сообщений к нужным краям */
-.message.mine {
-  justify-content: normal; /* отключаем flex-выравнивание */
-}
-.message.theirs {
-  justify-content: normal;
-}
-
-.message.mine .message-content {
-  margin-left: auto;
-}
-.message.theirs .message-content {
-  margin-right: auto;
-}
-/* Принудительное прижатие сообщений к краям на мобильных */
-@media (max-width: 768px) {
-  .chat-messages-wrapper {
-    padding-left: 12px;
-    padding-right: 12px;
+  .audio-play-btn,
+  .audio-download-btn {
+    width: 28px;
+    height: 28px;
+    font-size: 14px;
   }
 
-  /* Убираем принудительное обнуление margin — без !important */
-  .message.mine .message-content,
-  .message.theirs .message-content {
-    margin-left: 0;
-    margin-right: 0;
+  .audio-time-current,
+  .audio-time-total {
+    font-size: 0.7rem;
+    min-width: 35px;
   }
 
-  /* Свои сообщения — прижимаем к правому краю */
-  .message.mine .message-content {
-    margin-left: auto;
-    margin-right: 0;
+  .audio-progress-thumb {
+    width: 12px;
+    height: 12px;
   }
 
-  /* Чужие сообщения — прижимаем к левому краю */
-  .message.theirs .message-content {
-    margin-left: 0;
-    margin-right: auto;
+  /* Back button in chat header */
+  #mobile-back-btn {
+    display: inline-block;
+    min-width: 44px;
+    min-height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
   }
 
-  /* Ограничиваем ширину сообщений */
-  .message .message-content {
-    max-width: 85%;
+  .btn-menu {
+    background: none;
+    border: none;
+    color: var(--text);
+    font-size: 1.5rem;
+    cursor: pointer;
+    padding: 0 0.5rem;
+    margin-right: 0.5rem;
+    min-width: 44px;
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .btn-menu:hover {
+    background: var(--surface-hover);
+    border-radius: 8px;
   }
 }
-#messages-list {
+
+/* Desktop back button hidden */
+#mobile-back-btn {
+  display: none;
+}
+
+/* Profile display name */
+#profile-display-name {
   width: 100%;
+  margin-bottom: 1rem;
+  padding: 0.75rem;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
 }
 
-/* ===== MOBILE MESSAGE FIX ===== */
-
-.message.mine {
-  justify-content: flex-end;
+/* Group styles */
+.dm-item .dm-name:has(👥) {
+  color: var(--accent);
 }
 
-.message.theirs {
-  justify-content: flex-start;
+#group-info-btn {
+  transition: opacity 0.2s ease;
 }
 
-.message-content {
-  width: fit-content;
-  max-width: min(520px, 92%);
-  margin: 0 !important;
+#group-info-btn:hover {
+  opacity: 0.8;
 }
 
-@media (max-width: 768px) {
-  .chat-messages-wrapper {
-    padding-left: 8px;
-    padding-right: 8px;
-  }
+#group-friends-list input[type="checkbox"] {
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+#group-friends-list li:hover {
+  background: var(--surface-hover);
+}
+
+/* Animation for primary buttons ripple effect */
+.btn-primary::after,
+.btn-header::after,
+.btn-logout::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 0;
+  height: 0;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.2);
+  transform: translate(-50%, -50%);
+  transition: width 0.3s, height 0.3s;
+}
+
+.btn-primary:active::after,
+.btn-header:active::after,
+.btn-logout:active::after {
+  width: 200px;
+  height: 200px;
 }
