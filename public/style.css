@@ -566,6 +566,8 @@ body {
   width: 100%;
   cursor: default;
   transition: background-color 0.1s ease;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
 }
 
 .message:hover {

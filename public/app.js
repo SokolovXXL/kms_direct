@@ -1065,6 +1065,9 @@ if (messagesList) {
     const interactive = e.target.closest('button, a, .audio-play-btn, .audio-download-btn, .delete-message-btn, input, label, video, audio');
     if (interactive) return;
 
+    // Предотвращаем выделение текста и системное меню браузера
+    e.preventDefault();
+
     const touch = e.touches[0];
     longPressStartX = touch.clientX;
     longPressStartY = touch.clientY;
@@ -1093,7 +1096,6 @@ if (messagesList) {
     }
   });
 }
-
 // ---- Conversations List ----
 async function loadConversationList(retryCount = 3) {
   const list = $('dm-list');
