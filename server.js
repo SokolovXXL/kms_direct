@@ -1575,8 +1575,32 @@ app.post('/api/signaling', authMiddleware, async (req, res) => {
 // ---- GROUP MEMBERS ----
 app.get('/api/groups/:id/members', authMiddleware, async (req, res) => {
   const groupId = parseInt(req.params.id, 10);
-  if (isNaN(groupId) || groupId <= 0) return res.status(400).json({ error: 'Invalid group ID' });
+  if (isNaN(groupId) || groupId <= 0) {
+    return res.status(400).json({ error: 'Invalid group ID' });
+  }
 
+  // 1. Проверяем существование группы и что это действительно группа
+  const groupCheck = await pool.query(
+    'SELECT is_group FROM conversations WHERE id = $1',
+    [groupId]
+  );
+  if (groupCheck.rows.length === 0) {
+    return res.status(404).json({ error: 'Group not found' });
+  }
+  if (!groupCheck.rows[0].is_group) {
+    return res.status(400).json({ error: 'Not a group' });
+  }
+
+  // 2. Проверяем, является ли пользователь участником
+  const memberCheck = await pool.query(
+    'SELECT 1 FROM conversation_participants WHERE conversation_id = $1 AND user_id = $2',
+    [groupId, req.userId]
+  );
+  if (memberCheck.rows.length === 0) {
+    return res.status(403).json({ error: 'Not a member of this group' });
+  }
+
+  // 3. Возвращаем список участников
   const r = await pool.query(`
     SELECT u.id, u.username, u.display_name, cp.role
     FROM conversation_participants cp
@@ -1585,6 +1609,113 @@ app.get('/api/groups/:id/members', authMiddleware, async (req, res) => {
   `, [groupId]);
 
   res.json(r.rows);
+});
+
+app.post('/api/groups/:id/members', authMiddleware, async (req, res) => {
+  const groupId = parseInt(req.params.id, 10);
+  const { userId } = req.body;
+  const targetUserId = parseInt(userId, 10);
+
+  // Валидация параметров
+  if (isNaN(groupId) || groupId <= 0) {
+    return res.status(400).json({ error: 'Invalid group ID' });
+  }
+  if (isNaN(targetUserId) || targetUserId <= 0) {
+    return res.status(400).json({ error: 'Valid user ID required' });
+  }
+
+  // Получаем информацию о группе и проверяем, что это группа/канал
+  const convRes = await pool.query(
+    'SELECT id, title, is_group FROM conversations WHERE id = $1',
+    [groupId]
+  );
+  if (convRes.rows.length === 0) {
+    return res.status(404).json({ error: 'Conversation not found' });
+  }
+  const conversation = convRes.rows[0];
+  if (!conversation.is_group) {
+    return res.status(400).json({ error: 'Not a group or channel' });
+  }
+
+  // Проверяем права текущего пользователя
+  const roleRes = await pool.query(
+    'SELECT role FROM conversation_participants WHERE conversation_id = $1 AND user_id = $2',
+    [groupId, req.userId]
+  );
+  if (roleRes.rows.length === 0) {
+    return res.status(403).json({ error: 'You are not a member of this group' });
+  }
+  const userRole = roleRes.rows[0].role;
+  if (userRole !== 'owner' && userRole !== 'admin') {
+    return res.status(403).json({ error: 'Only owners and admins can add members' });
+  }
+
+  // Проверяем существование добавляемого пользователя
+  const userRes = await pool.query(
+    'SELECT id, username FROM users WHERE id = $1',
+    [targetUserId]
+  );
+  if (userRes.rows.length === 0) {
+    return res.status(404).json({ error: 'User not found' });
+  }
+  const targetUser = userRes.rows[0];
+
+  // Проверяем, не состоит ли уже пользователь в группе
+  const existing = await pool.query(
+    'SELECT 1 FROM conversation_participants WHERE conversation_id = $1 AND user_id = $2',
+    [groupId, targetUserId]
+  );
+  if (existing.rows.length > 0) {
+    return res.status(400).json({ error: 'User is already in the group' });
+  }
+
+  // (Опционально) Проверяем, что добавляемый пользователь является другом текущего
+  const friendCheck = await pool.query(
+    'SELECT 1 FROM friends WHERE (user_id = $1 AND friend_id = $2) OR (user_id = $2 AND friend_id = $1)',
+    [req.userId, targetUserId]
+  );
+  if (friendCheck.rows.length === 0) {
+    return res.status(403).json({ error: 'You can only add friends' });
+  }
+
+  // Добавляем участника
+  await pool.query(
+    'INSERT INTO conversation_participants (conversation_id, user_id, role) VALUES ($1, $2, $3)',
+    [groupId, targetUserId, 'member']
+  );
+
+  // Получаем список всех участников для уведомлений
+  const participantsRes = await pool.query(
+    'SELECT user_id FROM conversation_participants WHERE conversation_id = $1',
+    [groupId]
+  );
+  const participantIds = participantsRes.rows.map(row => row.user_id);
+
+  // Уведомляем нового участника
+  broadcastToUser(targetUserId, {
+    type: 'added_to_group',
+    conversationId: groupId,
+    groupTitle: conversation.title
+  });
+
+  // Уведомляем остальных участников о новом члене
+  const memberAddedPayload = {
+    type: 'member_added',
+    conversationId: groupId,
+    userId: targetUserId,
+    user: {
+      id: targetUser.id,
+      username: targetUser.username,
+      role: 'member'
+    }
+  };
+  for (const uid of participantIds) {
+    if (uid !== targetUserId) {
+      broadcastToUser(uid, memberAddedPayload);
+    }
+  }
+
+  res.json({ success: true });
 });
 
 // ---- FILE UPLOAD ----
@@ -1609,7 +1740,7 @@ app.post('/api/upload', authMiddleware, upload.single('file'), (req, res) => {
 }, (error, req, res, next) => {
   if (error instanceof multer.MulterError) {
     if (error.code === 'LIMIT_FILE_SIZE') {
-      return res.status(400).json({ error: 'File too large. Max 10MB.' });
+      return res.status(400).json({ error: 'File too large. Max 1GB.' });
     }
     // Другие возможные ошибки Multer
     console.error('Multer error:', error);
