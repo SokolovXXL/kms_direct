@@ -2579,3 +2579,17 @@ button,
 .message.theirs .message-content {
   margin-right: auto;
 }
+/* Принудительное прижатие сообщений к краям на мобильных */
+@media (max-width: 768px) {
+  .message.mine {
+    justify-content: flex-end !important;
+  }
+  .message.theirs {
+    justify-content: flex-start !important;
+  }
+  .message.mine .message-content,
+  .message.theirs .message-content {
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+  }
+}
