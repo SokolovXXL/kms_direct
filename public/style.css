@@ -440,8 +440,9 @@ body {
 /* Контейнер сообщений */
 .chat-messages-wrapper {
   position: relative;
-  background: url('/images/fon.png') repeat;
-  background-color: var(--bg); /* резервный цвет, если картинка не загрузится */
+  background: url('/images/fon.jpg') repeat;
+  background-color: var(--bg);
+  background-size: 50% auto;  /* добавили */
   flex: 1;
   overflow-y: auto;
   overflow-x: hidden;
@@ -449,12 +450,6 @@ body {
   display: flex;
   flex-direction: column;
   scroll-behavior: smooth;
-}
-
-
-.chat-messages-wrapper > * {
-  position: relative;
-  z-index: 1;
 }
 
 #messages-list {
