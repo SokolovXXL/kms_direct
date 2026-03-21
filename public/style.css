@@ -2336,12 +2336,6 @@ button,
   padding: 0;
   cursor: default;
 }
-.message.mine {
-  justify-content: flex-end;
-}
-.message.theirs {
-  justify-content: flex-start;
-}
 .message > .message-content {
   max-width: 75%;
   padding: 0.6rem 1rem;
@@ -2568,6 +2562,20 @@ button,
   margin-left: auto;
 }
 
+.message.theirs .message-content {
+  margin-right: auto;
+}
+/* Прижатие сообщений к нужным краям */
+.message.mine {
+  justify-content: normal; /* отключаем flex-выравнивание */
+}
+.message.theirs {
+  justify-content: normal;
+}
+
+.message.mine .message-content {
+  margin-left: auto;
+}
 .message.theirs .message-content {
   margin-right: auto;
 }
