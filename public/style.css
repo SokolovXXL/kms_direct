@@ -1593,6 +1593,27 @@ body {
   order: 3;
 }
 
+/* Menu button */
+.btn-menu {
+  background: none;
+  border: none;
+  color: var(--text);
+  font-size: 1.5rem;
+  cursor: pointer;
+  padding: 0 0.5rem;
+  margin-right: 0.5rem;
+  min-width: 44px;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.btn-menu img {
+  background: transparent;
+  filter: brightness(0) invert(1);
+}
+
 /* Scrollbar */
 ::-webkit-scrollbar {
   width: 4px;
