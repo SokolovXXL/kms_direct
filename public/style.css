@@ -2613,3 +2613,26 @@ button,
 #messages-list {
   width: 100%;
 }
+
+/* ===== MOBILE MESSAGE FIX ===== */
+
+.message.mine {
+  justify-content: flex-end;
+}
+
+.message.theirs {
+  justify-content: flex-start;
+}
+
+.message-content {
+  width: fit-content;
+  max-width: min(520px, 92%);
+  margin: 0 !important;
+}
+
+@media (max-width: 768px) {
+  .chat-messages-wrapper {
+    padding-left: 8px;
+    padding-right: 8px;
+  }
+}
