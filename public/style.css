@@ -1917,3 +1917,34 @@ body {
   width: 200px;
   height: 200px;
 }
+/* Base style for logo (mobile) */
+.logo {
+  height: 30px;
+  max-width: 120px;
+  width: auto;
+  object-fit: contain;
+}
+
+/* Tablet (≥768px) */
+@media (min-width: 768px) {
+  .logo {
+    height: 40px;
+    max-width: 160px;
+  }
+}
+
+/* Desktop (≥1200px) */
+@media (min-width: 1200px) {
+  .logo {
+    height: 50px;
+    max-width: 200px;
+  }
+}
+
+/* Large screens (≥1600px) */
+@media (min-width: 1600px) {
+  .logo {
+    height: 60px;
+    max-width: 240px;
+  }
+}
