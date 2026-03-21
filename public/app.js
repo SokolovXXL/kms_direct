@@ -206,16 +206,47 @@ async function fetchMe() {
     }
   } catch (_) {}
 }
-
 const notificationAudio = new Audio('/notification.mp3');
+let audioUnlocked = false;
+
+function unlockAudio() {
+  if (audioUnlocked) return;
+  if (notificationAudio) {
+    const originalVolume = notificationAudio.volume;
+    notificationAudio.volume = 0;
+    notificationAudio.play()
+      .then(() => {
+        notificationAudio.pause();
+        notificationAudio.volume = originalVolume;
+        audioUnlocked = true;
+        console.log('Audio unlocked');
+      })
+      .catch(e => console.log('Audio unlock failed:', e));
+  }
+}
+
+document.addEventListener('click', unlockAudio);
+document.addEventListener('touchstart', unlockAudio);
+
+notificationAudio.addEventListener('canplaythrough', () => console.log('Notification audio ready'));
+notificationAudio.addEventListener('error', (e) => console.error('Notification audio error:', e));
 
 function playNotificationSound(conversationId) {
   if (conversationId && conversationId === currentConversationId) return;
-  
+
+  if (!notificationAudio || notificationAudio.readyState < 2) {
+    console.warn('Audio not loaded yet');
+    return;
+  }
+
   try {
     notificationAudio.currentTime = 0;
-    notificationAudio.play().catch(() => {});
-  } catch (_) {}
+    notificationAudio.play().catch(err => {
+      console.warn('Playback blocked:', err);
+    });
+  } catch (e) {
+    console.error('Play error:', e);
+  }
 }
 
 // ---- Auth ----
