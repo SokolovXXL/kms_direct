@@ -1919,32 +1919,8 @@ body {
 }
 /* Base style for logo (mobile) */
 .logo {
-  height: 30px;
-  max-width: 120px;
+  height: clamp(30px, 5vw, 80px);
+  max-width: clamp(120px, 20vw, 1000px);
   width: auto;
   object-fit: contain;
-}
-
-/* Tablet (≥768px) */
-@media (min-width: 768px) {
-  .logo {
-    height: 40px;
-    max-width: 160px;
-  }
-}
-
-/* Desktop (≥1200px) */
-@media (min-width: 1200px) {
-  .logo {
-    height: 100px;
-    max-width: 1000px;
-  }
-}
-
-/* Large screens (≥1600px) */
-@media (min-width: 1600px) {
-  .logo {
-    height: 40px;
-    max-width: 1200px;
-  }
 }
