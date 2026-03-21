@@ -1614,7 +1614,7 @@ if (btnCopyCode) {
     const code = currentUser?.friend_code;
     if (code && navigator.clipboard) {
       navigator.clipboard.writeText(code);
-      alert('Copied!');
+      showToast('Скопировано', 'info');
     }
   });
 }
