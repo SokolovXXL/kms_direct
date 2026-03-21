@@ -1021,12 +1021,11 @@ async function deleteMessage(messageElement) {
   }
 }
 
-// Обработчик клика на сообщения (через делегирование)
-// Переменные для обработки долгого нажатия (мобильные)
+// Переменные для долгого нажатия (мобильные)
 let longPressTimer = null;
 let longPressTarget = null;
+let longPressStartX = 0, longPressStartY = 0;
 
-// Функция очистки таймера
 function clearLongPress() {
   if (longPressTimer) {
     clearTimeout(longPressTimer);
@@ -1035,20 +1034,17 @@ function clearLongPress() {
   longPressTarget = null;
 }
 
-// Показ контекстного меню по координатам (без лишнего preventDefault)
 function showContextMenuAt(message, clientX, clientY) {
-  // Если меню уже открыто для этого же сообщения — закрываем
   if (contextMenu && !contextMenu.classList.contains('hidden') && currentContextMessage === message) {
     hideContextMenu();
     return;
   }
   showContextMenu(message, clientX, clientY);
-  // preventDefault уже вызван в обработчиках, здесь не нужен
 }
 
-// Обработчик правого клика (ПК)
 const messagesList = document.getElementById('messages-list');
 if (messagesList) {
+  // ПК: правый клик
   messagesList.addEventListener('contextmenu', (e) => {
     const message = e.target.closest('.message');
     if (!message) return;
@@ -1061,7 +1057,7 @@ if (messagesList) {
     e.stopPropagation();
   });
 
-  // Обработка долгого нажатия на мобильных
+  // Мобильные: долгое нажатие
   messagesList.addEventListener('touchstart', (e) => {
     const message = e.target.closest('.message');
     if (!message) return;
@@ -1069,33 +1065,34 @@ if (messagesList) {
     const interactive = e.target.closest('button, a, .audio-play-btn, .audio-download-btn, .delete-message-btn, input, label, video, audio');
     if (interactive) return;
 
-    // Предотвращаем выделение текста и системное меню
-    e.preventDefault();
-
-    longPressTarget = message;
     const touch = e.touches[0];
+    longPressStartX = touch.clientX;
+    longPressStartY = touch.clientY;
+    longPressTarget = message;
     longPressTimer = setTimeout(() => {
       if (longPressTarget) {
-        showContextMenuAt(longPressTarget, touch.clientX, touch.clientY);
+        showContextMenuAt(longPressTarget, longPressStartX, longPressStartY);
         clearLongPress();
       }
-    }, 300); // уменьшено до 300 мс
+    }, 500); // 500 мс – комфортное время для долгого нажатия
   });
 
   messagesList.addEventListener('touchend', () => {
     clearLongPress();
   });
 
-  messagesList.addEventListener('touchmove', () => {
-    clearLongPress();
+  messagesList.addEventListener('touchmove', (e) => {
+    // Если палец сместился более чем на 10 пикселей, отменяем долгое нажатие (пользователь скроллит)
+    if (longPressTarget) {
+      const touch = e.touches[0];
+      const dx = Math.abs(touch.clientX - longPressStartX);
+      const dy = Math.abs(touch.clientY - longPressStartY);
+      if (dx > 10 || dy > 10) {
+        clearLongPress();
+      }
+    }
   });
 }
-
-// Инициализируем при загрузке страницы
-document.addEventListener('DOMContentLoaded', () => {
-  initContextMenu();
-  // ... остальной код инициализации
-});
 
 // ---- Conversations List ----
 async function loadConversationList(retryCount = 3) {
