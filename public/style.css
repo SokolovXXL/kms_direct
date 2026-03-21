@@ -2593,3 +2593,6 @@ button,
     margin-right: 0 !important;
   }
 }
+#messages-list {
+  width: 100%;
+}
