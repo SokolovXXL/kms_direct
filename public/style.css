@@ -2586,14 +2586,14 @@ button,
     padding-right: 12px;
   }
 
-  /* Убираем принудительное обнуление margin */
+  /* Убираем принудительное обнуление margin — без !important */
   .message.mine .message-content,
   .message.theirs .message-content {
-    margin-left: 0 !important;
-    margin-right: 0 !important;
+    margin-left: 0;
+    margin-right: 0;
   }
 
-  /* Свои сообщения — прижимаем к правому краю, но с учётом паддинга родителя */
+  /* Свои сообщения — прижимаем к правому краю */
   .message.mine .message-content {
     margin-left: auto;
     margin-right: 0;
@@ -2605,7 +2605,7 @@ button,
     margin-right: auto;
   }
 
-  /* Ограничиваем ширину сообщений (как в Telegram) */
+  /* Ограничиваем ширину сообщений */
   .message .message-content {
     max-width: 85%;
   }
