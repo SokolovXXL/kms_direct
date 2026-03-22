@@ -244,7 +244,7 @@ function showFileTypeMenu(buttonElement) {
   const menuWidth = fileTypeMenu.offsetWidth || 150;
   const menuHeight = fileTypeMenu.offsetHeight || 100;
 
-  let left = rect.right;
+  let left = rect.left;
   let top;
 
   // Определяем, достаточно ли места сверху
