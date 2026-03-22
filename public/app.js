@@ -2818,7 +2818,13 @@ function removeUploadProgress(progressId) {
 
 function renderFileMessage(container, fileData, messageDiv) {
   if (fileData.type === 'gallery') {
-    renderGallery(container, fileData.files);
+    renderGallery(container, fileData.files).catch(err => {
+      console.error('Gallery render error:', err);
+      const errorDiv = document.createElement('div');
+      errorDiv.textContent = '⚠️ Ошибка загрузки галереи';
+      errorDiv.style.color = 'var(--danger)';
+      container.appendChild(errorDiv);
+    });
     return;
   }
   if (!fileData.url) {
@@ -3066,45 +3072,282 @@ function renderFileMessage(container, fileData, messageDiv) {
   container.appendChild(fileDiv);
 }
 
-function renderGallery(container, files) {
-  const galleryDiv = document.createElement('div');
-  galleryDiv.className = 'gallery-message';
-  galleryDiv.style.display = 'grid';
-  galleryDiv.style.gridTemplateColumns = 'repeat(auto-fill, minmax(120px, 1fr))';
-  galleryDiv.style.gap = '8px';
-  galleryDiv.style.margin = '4px 0';
+// Вспомогательные функции для получения размеров
+function getImageDimensions(url) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      resolve({ width: img.width, height: img.height });
+    };
+    img.onerror = reject;
+    img.src = url;
+  });
+}
 
-  files.forEach(file => {
-    const mediaItem = document.createElement('div');
-    mediaItem.className = 'gallery-item';
-    mediaItem.style.cursor = 'pointer';
-    mediaItem.style.position = 'relative';
-    mediaItem.style.borderRadius = '8px';
-    mediaItem.style.overflow = 'hidden';
-    
-    const mime = file.mime || file.type;
-    if (mime.startsWith('image/')) {
-      const img = document.createElement('img');
-      img.src = file.url;
-      img.alt = file.name;
-      img.style.width = '100%';
-      img.style.height = '120px';
-      img.style.objectFit = 'cover';
-      img.onclick = () => openFullscreen(file.url, file.mime);
-      mediaItem.appendChild(img);
-    } else if (mime.startsWith('video/')) {
-      const video = document.createElement('video');
-      video.src = file.url;
-      video.style.width = '100%';
-      video.style.height = '120px';
-      video.style.objectFit = 'cover';
-      video.onclick = () => openFullscreen(file.url, file.mime);
-      mediaItem.appendChild(video);
-    }
-    galleryDiv.appendChild(mediaItem);
+function getVideoDimensions(url) {
+  return new Promise((resolve, reject) => {
+    const video = document.createElement('video');
+    video.preload = 'metadata';
+    video.onloadedmetadata = () => {
+      URL.revokeObjectURL(video.src);
+      resolve({ width: video.videoWidth, height: video.videoHeight });
+    };
+    video.onerror = reject;
+    video.src = url;
+  });
+}
+
+// Рендеринг одиночного медиа (как в обычном сообщении)
+function renderSingleMedia(container, file) {
+  const mediaContainer = document.createElement('div');
+  mediaContainer.className = 'media-message';
+
+  const mime = file.mime || file.type;
+  if (mime.startsWith('image/')) {
+    const img = document.createElement('img');
+    img.src = file.url;
+    img.alt = file.name || 'Image';
+    img.loading = 'lazy';
+    img.style.maxWidth = '100%';
+    img.style.maxHeight = '300px';
+    img.style.borderRadius = '8px';
+    img.style.cursor = 'pointer';
+    img.onerror = () => {
+      img.style.display = 'none';
+      const errorSpan = document.createElement('span');
+      errorSpan.textContent = '⚠️ Не удалось загрузить изображение';
+      errorSpan.style.color = 'var(--danger)';
+      errorSpan.style.fontSize = '0.9rem';
+      mediaContainer.appendChild(errorSpan);
+    };
+    img.addEventListener('click', () => openFullscreen(file.url, file.mime));
+    mediaContainer.appendChild(img);
+  } else if (mime.startsWith('video/')) {
+    const video = document.createElement('video');
+    video.src = file.url;
+    video.controls = true;
+    video.preload = 'metadata';
+    video.style.maxWidth = '100%';
+    video.style.maxHeight = '300px';
+    video.style.borderRadius = '8px';
+    video.onerror = () => {
+      video.style.display = 'none';
+      const errorSpan = document.createElement('span');
+      errorSpan.textContent = '⚠️ Не удалось загрузить видео';
+      errorSpan.style.color = 'var(--danger)';
+      errorSpan.style.fontSize = '0.9rem';
+      mediaContainer.appendChild(errorSpan);
+    };
+    video.addEventListener('click', () => openFullscreen(file.url, file.mime));
+    mediaContainer.appendChild(video);
+  }
+  container.appendChild(mediaContainer);
+}
+
+// Рендеринг двух элементов (1fr 1fr)
+function renderTwoItems(container, items) {
+  const grid = document.createElement('div');
+  grid.style.display = 'grid';
+  grid.style.gridTemplateColumns = '1fr 1fr';
+  grid.style.gap = '2px';
+  grid.style.borderRadius = '8px';
+  grid.style.overflow = 'hidden';
+
+  items.forEach(item => {
+    const media = createMediaElement(item);
+    grid.appendChild(media);
   });
 
+  container.appendChild(grid);
+}
+
+// Рендеринг трёх элементов (первый большой, два справа)
+function renderThreeItems(container, items) {
+  const grid = document.createElement('div');
+  grid.style.display = 'grid';
+  grid.style.gridTemplateColumns = '2fr 1fr';
+  grid.style.gap = '2px';
+  grid.style.borderRadius = '8px';
+  grid.style.overflow = 'hidden';
+
+  const left = createMediaElement(items[0]);
+  grid.appendChild(left);
+
+  const rightColumn = document.createElement('div');
+  rightColumn.style.display = 'grid';
+  rightColumn.style.gridTemplateRows = '1fr 1fr';
+  rightColumn.style.gap = '2px';
+  rightColumn.appendChild(createMediaElement(items[1]));
+  rightColumn.appendChild(createMediaElement(items[2]));
+
+  grid.appendChild(rightColumn);
+  container.appendChild(grid);
+}
+
+// Рендеринг четырёх элементов (2x2)
+function renderFourItems(container, items) {
+  const grid = document.createElement('div');
+  grid.style.display = 'grid';
+  grid.style.gridTemplateColumns = '1fr 1fr';
+  grid.style.gridTemplateRows = '1fr 1fr';
+  grid.style.gap = '2px';
+  grid.style.borderRadius = '8px';
+  grid.style.overflow = 'hidden';
+
+  items.forEach(item => {
+    grid.appendChild(createMediaElement(item));
+  });
+
+  container.appendChild(grid);
+}
+
+// Рендеринг 5+ элементов: первый большой, остальные в сетке 2x2 (показываем первые 4, остальные скрыты под кнопкой "ещё")
+function renderManyItems(container, items) {
+  const count = items.length;
+  const mainContainer = document.createElement('div');
+  mainContainer.style.display = 'flex';
+  mainContainer.style.flexDirection = 'column';
+  mainContainer.style.gap = '2px';
+
+  // Первый элемент — большой
+  const first = createMediaElement(items[0]);
+  first.style.aspectRatio = 'auto';
+  first.style.width = '100%';
+  mainContainer.appendChild(first);
+
+  // Сетка для остальных
+  const rest = items.slice(1, 5); // максимум 4
+  const restCount = rest.length;
+
+  if (restCount > 0) {
+    const grid = document.createElement('div');
+    grid.style.display = 'grid';
+    grid.style.gridTemplateColumns = '1fr 1fr';
+    grid.style.gap = '2px';
+
+    rest.forEach(item => {
+      grid.appendChild(createMediaElement(item));
+    });
+
+    // Если есть ещё файлы сверх 5, добавим кнопку "ещё"
+    if (count > 5) {
+      const moreContainer = document.createElement('div');
+      moreContainer.style.position = 'relative';
+      const moreOverlay = document.createElement('div');
+      moreOverlay.style.position = 'absolute';
+      moreOverlay.style.top = '0';
+      moreOverlay.style.left = '0';
+      moreOverlay.style.width = '100%';
+      moreOverlay.style.height = '100%';
+      moreOverlay.style.backgroundColor = 'rgba(0,0,0,0.6)';
+      moreOverlay.style.display = 'flex';
+      moreOverlay.style.alignItems = 'center';
+      moreOverlay.style.justifyContent = 'center';
+      moreOverlay.style.color = 'white';
+      moreOverlay.style.fontSize = '24px';
+      moreOverlay.style.fontWeight = 'bold';
+      moreOverlay.textContent = `+${count - 5}`;
+      moreOverlay.style.cursor = 'pointer';
+      moreOverlay.addEventListener('click', () => {
+        // Можно открыть модалку со всеми файлами
+        openFullscreenGallery(items);
+      });
+      const lastMedia = createMediaElement(items[4]); // 5-й элемент (индекс 4)
+      lastMedia.style.position = 'relative';
+      lastMedia.appendChild(moreOverlay);
+      grid.appendChild(lastMedia);
+    }
+
+    mainContainer.appendChild(grid);
+  }
+
+  container.appendChild(mainContainer);
+}
+
+// Создание элемента медиа (изображение/видео) с обёрткой для единообразного размера
+function createMediaElement(file) {
+  const wrapper = document.createElement('div');
+  wrapper.style.position = 'relative';
+  wrapper.style.width = '100%';
+  wrapper.style.paddingTop = `${(1 / (file.aspectRatio || 1)) * 100}%`; // сохраняем пропорции
+  wrapper.style.backgroundColor = '#f0f0f0';
+  wrapper.style.cursor = 'pointer';
+
+  const media = document.createElement(file.mime?.startsWith('video/') ? 'video' : 'img');
+  media.src = file.url;
+  if (file.mime?.startsWith('video/')) {
+    media.controls = false; // в галерее контролы скрыты, клик открывает fullscreen
+  }
+  media.style.position = 'absolute';
+  media.style.top = '0';
+  media.style.left = '0';
+  media.style.width = '100%';
+  media.style.height = '100%';
+  media.style.objectFit = 'cover';
+  media.style.borderRadius = '0';
+
+  media.addEventListener('click', (e) => {
+    e.stopPropagation();
+    openFullscreen(file.url, file.mime);
+  });
+
+  wrapper.appendChild(media);
+  return wrapper;
+}
+
+// Обновлённая функция renderGallery
+async function renderGallery(container, files) {
+  // Получаем пропорции всех файлов
+  const items = await Promise.all(files.map(async (file) => {
+    const mime = file.mime || file.type;
+    let width, height;
+    if (mime.startsWith('image/')) {
+      try {
+        const dims = await getImageDimensions(file.url);
+        width = dims.width;
+        height = dims.height;
+      } catch {
+        width = 1; height = 1;
+      }
+    } else if (mime.startsWith('video/')) {
+      try {
+        const dims = await getVideoDimensions(file.url);
+        width = dims.width;
+        height = dims.height;
+      } catch {
+        width = 16; height = 9; // fallback 16:9
+      }
+    } else {
+      width = 1; height = 1;
+    }
+    return { ...file, width, height, aspectRatio: width / height };
+  }));
+
+  const galleryDiv = document.createElement('div');
+  galleryDiv.className = 'gallery-message';
+  galleryDiv.style.borderRadius = '8px';
+  galleryDiv.style.overflow = 'hidden';
+
+  const count = items.length;
+  if (count === 1) {
+    renderSingleMedia(galleryDiv, items[0]);
+  } else if (count === 2) {
+    renderTwoItems(galleryDiv, items);
+  } else if (count === 3) {
+    renderThreeItems(galleryDiv, items);
+  } else if (count === 4) {
+    renderFourItems(galleryDiv, items);
+  } else {
+    renderManyItems(galleryDiv, items);
+  }
+
   container.appendChild(galleryDiv);
+}
+
+// Пример функции открытия полноэкранной галереи (можно реализовать по необходимости)
+function openFullscreenGallery(files) {
+  // Здесь можно реализовать модальное окно с просмотром всех файлов
+  console.log('Open fullscreen gallery with', files.length, 'files');
 }
 
 // Проверка, является ли файл медиа (изображение или видео)
