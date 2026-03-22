@@ -3201,69 +3201,6 @@ function renderFourItems(container, items) {
   container.appendChild(grid);
 }
 
-// Рендеринг 5+ элементов: первый большой, остальные в сетке 2x2 (показываем первые 4, остальные скрыты под кнопкой "ещё")
-function renderManyItems(container, items) {
-  const count = items.length;
-  const mainContainer = document.createElement('div');
-  mainContainer.style.display = 'flex';
-  mainContainer.style.flexDirection = 'column';
-  mainContainer.style.gap = '2px';
-
-  // Первый элемент — большой
-  const first = createMediaElement(items[0]);
-  first.style.aspectRatio = 'auto';
-  first.style.width = '100%';
-  mainContainer.appendChild(first);
-
-  // Сетка для остальных
-  const rest = items.slice(1, 5); // максимум 4
-  const restCount = rest.length;
-
-  if (restCount > 0) {
-    const grid = document.createElement('div');
-    grid.style.display = 'grid';
-    grid.style.gridTemplateColumns = '1fr 1fr';
-    grid.style.gap = '2px';
-
-    rest.forEach(item => {
-      grid.appendChild(createMediaElement(item));
-    });
-
-    // Если есть ещё файлы сверх 5, добавим кнопку "ещё"
-    if (count > 5) {
-      const moreContainer = document.createElement('div');
-      moreContainer.style.position = 'relative';
-      const moreOverlay = document.createElement('div');
-      moreOverlay.style.position = 'absolute';
-      moreOverlay.style.top = '0';
-      moreOverlay.style.left = '0';
-      moreOverlay.style.width = '100%';
-      moreOverlay.style.height = '100%';
-      moreOverlay.style.backgroundColor = 'rgba(0,0,0,0.6)';
-      moreOverlay.style.display = 'flex';
-      moreOverlay.style.alignItems = 'center';
-      moreOverlay.style.justifyContent = 'center';
-      moreOverlay.style.color = 'white';
-      moreOverlay.style.fontSize = '24px';
-      moreOverlay.style.fontWeight = 'bold';
-      moreOverlay.textContent = `+${count - 5}`;
-      moreOverlay.style.cursor = 'pointer';
-      moreOverlay.addEventListener('click', () => {
-        // Можно открыть модалку со всеми файлами
-        openFullscreenGallery(items);
-      });
-      const lastMedia = createMediaElement(items[4]); // 5-й элемент (индекс 4)
-      lastMedia.style.position = 'relative';
-      lastMedia.appendChild(moreOverlay);
-      grid.appendChild(lastMedia);
-    }
-
-    mainContainer.appendChild(grid);
-  }
-
-  container.appendChild(mainContainer);
-}
-
 // Создание элемента медиа (изображение/видео) с обёрткой для единообразного размера
 function createMediaElement(file) {
   const wrapper = document.createElement('div');
@@ -3295,7 +3232,23 @@ function createMediaElement(file) {
   return wrapper;
 }
 
-// Обновлённая функция renderGallery
+function renderGridGallery(container, items) {
+  const grid = document.createElement('div');
+  grid.style.display = 'grid';
+  grid.style.gridTemplateColumns = 'repeat(auto-fill, minmax(120px, 1fr))';
+  grid.style.gap = '2px';
+  grid.style.borderRadius = '8px';
+  grid.style.overflow = 'hidden';
+
+  items.forEach(item => {
+    const media = createMediaElement(item);
+    grid.appendChild(media);
+  });
+
+  container.appendChild(grid);
+}
+
+// Обновлённая renderGallery
 async function renderGallery(container, files) {
   // Получаем пропорции всех файлов
   const items = await Promise.all(files.map(async (file) => {
@@ -3338,7 +3291,7 @@ async function renderGallery(container, files) {
   } else if (count === 4) {
     renderFourItems(galleryDiv, items);
   } else {
-    renderManyItems(galleryDiv, items);
+    renderGridGallery(galleryDiv, items);
   }
 
   container.appendChild(galleryDiv);

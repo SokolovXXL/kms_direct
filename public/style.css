@@ -2100,3 +2100,16 @@ body {
 .modal-actions button:active {
   transform: scale(0.97);
 }
+
+/* Расширяем сообщение, если внутри галерея */
+.message-content:has(.gallery-message) {
+  max-width: min(800px, 95%);
+  width: auto;
+}
+
+/* Базовая обёртка галереи — блочная, чтобы внутренняя сетка работала */
+.gallery-message {
+  display: block;
+  width: 100%;
+  margin: 4px 0;
+}
