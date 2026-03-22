@@ -287,21 +287,20 @@ function showFileTypeMenu(buttonElement) {
   const margin = 10;
 
   let left, top;
+  const spaceBelow = window.innerHeight - rect.bottom;
+  const spaceAbove = rect.top;
 
-  // Если кнопка в нижней половине экрана, открываем меню вверх, иначе вниз
-  const isButtonLowerHalf = rect.bottom > window.innerHeight / 2;
-  const openUp = isButtonLowerHalf;
-
-  if (openUp) {
-    top = rect.top - menuHeight - 5;
-    if (top < margin) top = margin;
-  } else {
+  // По умолчанию открываем вниз, если места достаточно
+  if (spaceBelow >= menuHeight + margin) {
     top = rect.bottom + 5;
-    if (top + menuHeight > window.innerHeight - margin) {
-      top = window.innerHeight - menuHeight - margin;
-    }
+  } else {
+    // Иначе открываем вверх
+    top = rect.top - menuHeight - 5;
+    // Корректируем, чтобы не уходило за верхний край
+    if (top < margin) top = margin;
   }
 
+  // Горизонтальное центрирование относительно кнопки, с проверкой выхода за края
   left = rect.left + (rect.width / 2) - (menuWidth / 2);
   if (left < margin) left = margin;
   if (left + menuWidth > window.innerWidth - margin) {
