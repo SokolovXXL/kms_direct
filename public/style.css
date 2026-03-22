@@ -2066,13 +2066,6 @@ body {
   background: var(--danger);
 }
 
-.gallery-message {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
-  gap: 8px;
-  margin: 4px 0;
-}
-
 .gallery-item {
   position: relative;
   border-radius: 8px;
