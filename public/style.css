@@ -1577,9 +1577,9 @@ body {
 #group-members-list li {
   display: flex;
   align-items: center;
-  justify-content: flex-start;
+  justify-content: flex-start; 
   padding: 0.5rem 0;
-  gap: 0.75rem;          /* отступ между именем и кнопками */
+  gap: 0.5rem;          /* отступ между именем и кнопками */
 }
 
 /* Контейнер действий: фиксированная ширина, без переноса */
@@ -1588,7 +1588,6 @@ body {
   gap: 0.4rem;
   flex-shrink: 0;
   flex-wrap: nowrap;
-  margin-left: auto;     /* прижимает кнопки к правому краю */
 }
 
 .admin-action-btn select {
