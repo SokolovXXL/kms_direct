@@ -186,6 +186,7 @@ function renderFilePreviews() {
   filePreviewList.innerHTML = '';
   if (pendingFiles.length === 0) {
     filePreviewList.style.display = 'none';
+    updateSendFormPosition();
     return;
   }
   filePreviewList.style.display = 'flex';
@@ -236,6 +237,21 @@ function renderFilePreviews() {
 
     filePreviewList.appendChild(item);
   }
+  updateSendFormPosition();
+}
+
+function updateSendFormPosition() {
+    const sendForm = $('send-form');
+    const previewList = $('file-preview-list');
+    if (!sendForm || !previewList) return;
+
+    // Если превью отображается и содержит элементы
+    if (previewList.children.length > 0 && previewList.style.display !== 'none') {
+        const previewHeight = previewList.offsetHeight;
+        sendForm.style.bottom = previewHeight + 'px';
+    } else {
+        sendForm.style.bottom = '0';
+    }
 }
 
 function showFileTypeMenu(buttonElement) {
