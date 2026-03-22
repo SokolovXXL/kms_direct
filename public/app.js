@@ -1367,45 +1367,6 @@ function showContextMenuAt(message, clientX, clientY) {
   showContextMenu(message, clientX, clientY);
 }
 
-const messagesList = document.getElementById('messages-list');
-if (messagesList) {
-  // Двойной клик
-  messagesList.addEventListener('dblclick', (e) => {
-    const message = e.target.closest('.message');
-    if (!message) return;
-    const interactive = e.target.closest('button, a, .audio-play-btn, .audio-download-btn, .delete-message-btn, input, label, video, audio');
-    if (interactive) return;
-    setReplyTo(message);
-    e.preventDefault();
-  });
-
-  // Свайп вправо (мобильные)
-  let touchStartX = 0;
-  let touchStartY = 0;
-  messagesList.addEventListener('touchstart', (e) => {
-    const touch = e.touches[0];
-    touchStartX = touch.clientX;
-    touchStartY = touch.clientY;
-  });
-  messagesList.addEventListener('touchmove', (e) => {
-    if (!touchStartX) return;
-    const touch = e.touches[0];
-    const dx = touch.clientX - touchStartX;
-    const dy = touch.clientY - touchStartY;
-    if (Math.abs(dx) > 30 && Math.abs(dx) > Math.abs(dy) && dx > 0) {
-      const message = e.target.closest('.message');
-      if (message) {
-        setReplyTo(message);
-        e.preventDefault();
-        touchStartX = 0;
-      }
-    }
-  });
-  messagesList.addEventListener('touchend', () => {
-    touchStartX = 0;
-  });
-}
-
 // ---- Conversations List ----
 async function loadConversationList(retryCount = 3) {
   const list = $('dm-list');
@@ -4290,6 +4251,56 @@ document.addEventListener('DOMContentLoaded', () => {
     header.insertBefore(btn, header.firstChild);
   }
   initContextMenu();
+  // Привязка обработчиков к сообщениям
+  const messagesList = document.getElementById('messages-list');
+  if (messagesList) {
+    // Двойной клик
+    messagesList.addEventListener('dblclick', (e) => {
+      const message = e.target.closest('.message');
+      if (!message) return;
+      const interactive = e.target.closest('button, a, .audio-play-btn, .audio-download-btn, .delete-message-btn, input, label, video, audio');
+      if (interactive) return;
+      setReplyTo(message);
+      e.preventDefault();
+    });
+
+    // Правый клик (контекстное меню)
+    messagesList.addEventListener('contextmenu', (e) => {
+      const message = e.target.closest('.message');
+      if (!message) return;
+      const interactive = e.target.closest('button, a, .audio-play-btn, .audio-download-btn, .delete-message-btn, input, label, video, audio');
+      if (interactive) return;
+      showContextMenuAt(message, e.clientX, e.clientY);
+      e.preventDefault();
+      e.stopPropagation();
+    });
+
+    // Свайп вправо (мобильные)
+    let touchStartX = 0, touchStartY = 0;
+    messagesList.addEventListener('touchstart', (e) => {
+      const touch = e.touches[0];
+      touchStartX = touch.clientX;
+      touchStartY = touch.clientY;
+    });
+    messagesList.addEventListener('touchmove', (e) => {
+      if (!touchStartX) return;
+      const touch = e.touches[0];
+      const dx = touch.clientX - touchStartX;
+      const dy = touch.clientY - touchStartY;
+      if (Math.abs(dx) > 30 && Math.abs(dx) > Math.abs(dy) && dx > 0) {
+        const message = e.target.closest('.message');
+        if (message) {
+          setReplyTo(message);
+          e.preventDefault();
+          touchStartX = 0;
+        }
+      }
+    });
+    messagesList.addEventListener('touchend', () => {
+      touchStartX = 0;
+    });
+  }
+
   tryAutoLogin();
   updateChatMessagesPaddingBottom();
 });

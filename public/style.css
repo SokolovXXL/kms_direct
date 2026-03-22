@@ -662,6 +662,7 @@ body {
   gap: 0.5rem;
   padding: 1rem 1.5rem;
   flex-shrink: 0;
+  flex-wrap: wrap;
 }
 
 
@@ -1331,7 +1332,7 @@ body {
 /* Context menu */
 .context-menu {
   position: fixed;
-  z-index: 2000;
+  z-index: 9999;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 12px;
@@ -2172,6 +2173,9 @@ body {
   border-bottom: 1px solid var(--border);
   padding: 8px 16px;
   font-size: 0.85rem;
+  margin-bottom: 8px;
+  width: 100%;
+  order: -1;
   margin-bottom: 8px;
 }
 .reply-preview-content {
