@@ -2115,3 +2115,22 @@ body {
   overflow: hidden !important;
   width: 100% !important;
 }
+
+/* Расширенная ширина для сообщений-галерей */
+.message-content.gallery-message-container {
+  max-width: min(800px, 95%);
+  width: 100%;
+}
+
+/* Гарантия, что внутренние сетки занимают всю ширину */
+.gallery-message,
+.gallery-message > div {
+  width: 100% !important;
+}
+
+/* На мобильных устройствах ещё шире */
+@media (max-width: 768px) {
+  .message-content.gallery-message-container {
+    max-width: 98%;
+  }
+}

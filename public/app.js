@@ -708,6 +708,9 @@ function createMessageElement(message, isGroup, currentUserId) {
 
   if (isFile && fileData) {
     renderFileMessage(contentDiv, fileData, messageDiv); // передаём оба контейнера
+      if (fileData.type === 'gallery') {
+        contentDiv.classList.add('gallery-message-container');
+      }
   } else {
     const bodyDiv = document.createElement('div');
     bodyDiv.className = 'message-body';
@@ -3152,6 +3155,7 @@ function renderTwoItems(container, items) {
   grid.style.gap = '2px';
   grid.style.borderRadius = '8px';
   grid.style.overflow = 'hidden';
+  grid.style.width = '100%';
 
   items.forEach(item => {
     const media = createMediaElement(item);
@@ -3169,6 +3173,7 @@ function renderThreeItems(container, items) {
   grid.style.gap = '2px';
   grid.style.borderRadius = '8px';
   grid.style.overflow = 'hidden';
+  grid.style.width = '100%';
 
   const left = createMediaElement(items[0]);
   grid.appendChild(left);
@@ -3193,6 +3198,7 @@ function renderFourItems(container, items) {
   grid.style.gap = '2px';
   grid.style.borderRadius = '8px';
   grid.style.overflow = 'hidden';
+  grid.style.width = '100%';
 
   items.forEach(item => {
     grid.appendChild(createMediaElement(item));
@@ -3240,7 +3246,6 @@ function renderGridGallery(container, items) {
   grid.style.borderRadius = '8px';
   grid.style.overflow = 'hidden';
   grid.style.width = '100%';
-  grid.style.minWidth = '0';
 
   items.forEach(item => {
     const media = createMediaElement(item);
