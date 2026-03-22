@@ -287,17 +287,10 @@ function showFileTypeMenu(buttonElement) {
   const margin = 10;
 
   let left, top;
-  const spaceAbove = rect.top;
-  const spaceBelow = window.innerHeight - rect.bottom;
 
-  let openUp = false;
-  if (spaceAbove >= menuHeight + margin) {
-    openUp = true;
-  } else if (spaceBelow >= menuHeight + margin) {
-    openUp = false;
-  } else {
-    openUp = spaceAbove >= spaceBelow;
-  }
+  // Если кнопка в нижней половине экрана, открываем меню вверх, иначе вниз
+  const isButtonLowerHalf = rect.bottom > window.innerHeight / 2;
+  const openUp = isButtonLowerHalf;
 
   if (openUp) {
     top = rect.top - menuHeight - 5;
