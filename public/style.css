@@ -1109,35 +1109,36 @@ body {
 .modal {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.8);
+  background: rgba(0, 0, 0, 0.6);
   display: flex;
   align-items: center;
   justify-content: center;
   z-index: 1000;
   padding: 1rem;
-  backdrop-filter: blur(8px);
+  backdrop-filter: blur(4px);
   -webkit-backdrop-filter: blur(8px);
   opacity: 0;
   visibility: hidden;
-  transition: opacity 0.25s ease, visibility 0.25s;
+  transition: opacity 0.2s ease, visibility 0.2s;
 }
 
 .modal:not(.hidden) {
   opacity: 1;
   visibility: visible;
+  transform: translateY(0) scale(1);
 }
 
 .modal-content {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 1.5rem;
+  background: rgba(24, 24, 28, 0.95);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 20px;      
+  padding: 1.8rem;
   max-width: 600px;
   width: 100%;
   max-height: 150vh;
   overflow-y: auto;
-  box-shadow: var(--shadow-lg);
-  transform: scale(0.95);
+  box-shadow: 0 20px 35px -10px rgba(0, 0, 0, 0.4);
+  transform: translateY(0) scale(1);
   transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
@@ -1165,11 +1166,13 @@ body {
   border: 1px solid var(--border);
   border-radius: 8px;
   background: var(--bg);
+  transition: all 0.15s ease;
 }
 
 .user-list li {
   margin: 0;
   border-bottom: 1px solid var(--border);
+  transition: background 0.15s;
 }
 
 .user-list li:last-child {
@@ -1774,7 +1777,12 @@ body {
   }
 
   .modal-content {
-    padding: 1rem;
+    max-width: 92%;
+    padding: 1.2rem;
+    border-radius: 18px;
+  }
+  .modal:not(.hidden) .modal-content {
+    transform: translateY(0) scale(1);
   }
 
   .btn-scroll-down {
@@ -2043,4 +2051,11 @@ body {
   height: 120px;
   object-fit: cover;
   display: block;
+}
+
+.modal-actions button {
+  transition: transform 0.1s ease, background 0.2s;
+}
+.modal-actions button:active {
+  transform: scale(0.97);
 }
