@@ -613,7 +613,7 @@ function createMessageElement(message, isGroup, currentUserId) {
   if (typeof message.body === 'string' && message.body.startsWith('{')) {
     try {
       fileData = JSON.parse(message.body);
-      if (fileData.type === 'file') {
+      if (fileData.type === 'file' || fileData.type === 'gallery') {
         isFile = true;
       }
     } catch (e) {}
@@ -709,8 +709,12 @@ function updateSidebarRow(convId, lastMessageText) {
         const fileData = JSON.parse(displayText);
         if (fileData.type === 'file') {
           displayText = `📎 ${fileData.name || 'File'}`;
+        } else if (fileData.type === 'gallery') {
+          displayText = `📷 Галерея (${fileData.files.length} файлов)`;
         }
-      } catch {}
+      } catch (e) {
+        // ignore
+      }
     }
     preview.textContent = truncate(displayText) || 'No messages yet';
   }
@@ -1624,41 +1628,54 @@ if (sendForm) {
     const body = input.value.trim();
     const files = pendingFiles.splice(0);
     renderFilePreviews();
-    if (!body && files.length === 0) return;
 
-    try {
-      if (body) {
+    const mediaFiles = files.filter(isMediaFile);
+    const otherFiles = files.filter(f => !isMediaFile(f));
+
+    // Обработка файлов
+    if (mediaFiles.length >= 2 && mediaFiles.length <= 10 && otherFiles.length === 0) {
+      try {
+        await sendGallery(mediaFiles);
+      } catch (err) {
+        alert('Ошибка при отправке галереи: ' + err.message);
+        pendingFiles.unshift(...mediaFiles);
+        renderFilePreviews();
+      }
+    } else {
+      for (const file of files) {
+        try {
+          await sendFileWithProgress(file, currentConversationId);
+        } catch (err) {
+          alert('Ошибка при отправке файла: ' + err.message);
+          pendingFiles.unshift(file);
+          renderFilePreviews();
+        }
+      }
+    }
+
+    // Отправка текстового сообщения (если есть)
+    if (body) {
+      try {
         const msg = await api(`/api/conversations/${currentConversationId}/messages`, {
           method: 'POST',
           body: JSON.stringify({ body }),
         });
-        
         if (!currentConversationIsGroup) {
           msg.read = false;
         }
-
         appendMessageToChat(msg);
         input.value = '';
         input.focus();
         updateSidebarRow(currentConversationId, body);
-        
         const conversation = conversationListCache.find(c => c.id === currentConversationId);
         if (conversation) conversation.lastMessage = body;
+      } catch (err) {
+        input.value = body;
+        alert('Failed to send message: ' + err.message);
       }
-      
-      for (const file of files) {
-        await sendFileWithProgress(file, currentConversationId);
-        renderFilePreviews();
-      }
-
-      requestAnimationFrame(() => {
-        scrollMessagesToBottom();
-      });
-      
-    } catch (err) {
-      input.value = body;
-      alert('Failed to send message: ' + err.message);
     }
+
+    requestAnimationFrame(() => scrollMessagesToBottom());
   });
 }
 
@@ -2661,13 +2678,16 @@ if (fileLabel && fileInput) {
   if (mediaBtn) {
     mediaBtn.addEventListener('click', () => {
       fileInput.accept = 'image/*,video/*';
+      fileInput.multiple = true;
       fileInput.click();
       fileTypeMenu.classList.add('hidden');
     });
+
   }
   if (allBtn) {
     allBtn.addEventListener('click', () => {
       fileInput.accept = '*/*';
+      fileInput.multiple = false;
       fileInput.click();
       fileTypeMenu.classList.add('hidden');
     });
@@ -2677,16 +2697,24 @@ if (fileLabel && fileInput) {
     const files = Array.from(e.target.files);
     if (files.length === 0) return;
 
+    // Если выбрано больше 10 медиафайлов — предупреждение
+    const mediaFiles = files.filter(isMediaFile);
+    if (mediaFiles.length > 10) {
+      alert('Нельзя отправить более 10 фото/видео одновременно');
+      e.target.value = '';
+      return;
+    }
+
     for (const file of files) {
       if (file.size > MAX_FILE_SIZE) {
-        alert(`File "${file.name}" is too large (max ${MAX_FILE_SIZE / 1024 / 1024}MB)`);
+        alert(`Файл "${file.name}" слишком большой (макс ${MAX_FILE_SIZE / 1024 / 1024} MB)`);
         continue;
       }
       pendingFiles.push(file);
     }
 
     renderFilePreviews();
-    e.target.value = ''; // очистить input, чтобы можно было выбрать те же файлы повторно
+    e.target.value = '';
   });
 }
 
@@ -2749,6 +2777,10 @@ function removeUploadProgress(progressId) {
 }
 
 function renderFileMessage(container, fileData, messageDiv) {
+  if (fileData.type === 'gallery') {
+    renderGallery(container, fileData.files);
+    return;
+  }
   if (!fileData.url) {
     console.warn('File URL is missing');
     const errorDiv = document.createElement('div');
@@ -2992,6 +3024,165 @@ function renderFileMessage(container, fileData, messageDiv) {
 
   fileDiv.appendChild(actionsDiv);
   container.appendChild(fileDiv);
+}
+
+function renderGallery(container, files) {
+  const galleryDiv = document.createElement('div');
+  galleryDiv.className = 'gallery-message';
+  galleryDiv.style.display = 'grid';
+  galleryDiv.style.gridTemplateColumns = 'repeat(auto-fill, minmax(120px, 1fr))';
+  galleryDiv.style.gap = '8px';
+  galleryDiv.style.margin = '4px 0';
+
+  files.forEach(file => {
+    const mediaItem = document.createElement('div');
+    mediaItem.className = 'gallery-item';
+    mediaItem.style.cursor = 'pointer';
+    mediaItem.style.position = 'relative';
+    mediaItem.style.borderRadius = '8px';
+    mediaItem.style.overflow = 'hidden';
+    
+    const mime = file.mime || file.type;
+    if (mime.startsWith('image/')) {
+      const img = document.createElement('img');
+      img.src = file.url;
+      img.alt = file.name;
+      img.style.width = '100%';
+      img.style.height = '120px';
+      img.style.objectFit = 'cover';
+      img.onclick = () => openFullscreen(file.url, file.mime);
+      mediaItem.appendChild(img);
+    } else if (mime.startsWith('video/')) {
+      const video = document.createElement('video');
+      video.src = file.url;
+      video.style.width = '100%';
+      video.style.height = '120px';
+      video.style.objectFit = 'cover';
+      video.onclick = () => openFullscreen(file.url, file.mime);
+      mediaItem.appendChild(video);
+    }
+    galleryDiv.appendChild(mediaItem);
+  });
+
+  container.appendChild(galleryDiv);
+}
+
+// Проверка, является ли файл медиа (изображение или видео)
+function isMediaFile(file) {
+  return file.type.startsWith('image/') || file.type.startsWith('video/');
+}
+
+// Загрузка одного файла на сервер, возвращает Promise с fileData
+function uploadFile(file) {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', API + '/api/upload', true);
+    xhr.withCredentials = true;
+
+    xhr.upload.addEventListener('progress', (e) => {
+      if (e.lengthComputable) {
+        // Можно обновлять прогресс, но для групповой загрузки проще отслеживать общий прогресс отдельно
+        // Пока не используем
+      }
+    });
+
+    xhr.addEventListener('load', () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        try {
+          const fileData = JSON.parse(xhr.responseText);
+          fileData.mime = fileData.type; // добавляем поле mime для единообразия
+          resolve(fileData);
+        } catch (err) {
+          reject(err);
+        }
+      } else {
+        reject(new Error('Upload failed'));
+      }
+    });
+
+    xhr.addEventListener('error', () => reject(new Error('Network error')));
+
+    const formData = new FormData();
+    formData.append('file', file);
+    xhr.send(formData);
+  });
+}
+
+async function sendGallery(files) {
+  const total = files.length;
+  const progressId = `gallery-${Date.now()}-${Math.random()}`;
+  let completed = 0;
+  const uploadedFiles = [];
+
+  // Показываем общий прогресс
+  showGalleryProgress(progressId, completed, total);
+
+  for (const file of files) {
+    try {
+      const fileData = await uploadFile(file);
+      uploadedFiles.push(fileData);
+      completed++;
+      updateGalleryProgress(progressId, completed, total);
+    } catch (err) {
+      // Ошибка при загрузке файла — прерываем отправку
+      removeGalleryProgress(progressId);
+      throw new Error(`Failed to upload ${file.name}: ${err.message}`);
+    }
+  }
+
+  // Все файлы загружены, отправляем сообщение с галереей
+  const galleryMessage = {
+    type: 'gallery',
+    files: uploadedFiles
+  };
+
+  try {
+    const msg = await api(`/api/conversations/${currentConversationId}/messages`, {
+      method: 'POST',
+      body: JSON.stringify({ body: JSON.stringify(galleryMessage) }),
+    });
+
+    if (!currentConversationIsGroup) {
+      msg.read = false;
+    }
+    appendMessageToChat(msg);
+    updateSidebarRow(currentConversationId, `📷 Галерея (${total} файлов)`);
+  } finally {
+    removeGalleryProgress(progressId);
+  }
+}
+
+function showGalleryProgress(progressId, completed, total) {
+  const messagesList = $('messages-list');
+  if (!messagesList) return;
+
+  const progressDiv = document.createElement('div');
+  progressDiv.id = progressId;
+  progressDiv.className = 'message system';
+  progressDiv.innerHTML = `
+    <div class="file-upload-progress">
+      <div class="file-name">📸 Загрузка галереи (${completed}/${total})</div>
+      <div class="progress-bar-container">
+        <div class="progress-bar" style="width: ${(completed/total)*100}%"></div>
+      </div>
+    </div>
+  `;
+  messagesList.appendChild(progressDiv);
+  scrollMessagesToBottom();
+}
+
+function updateGalleryProgress(progressId, completed, total) {
+  const progressDiv = $(progressId);
+  if (!progressDiv) return;
+  const bar = progressDiv.querySelector('.progress-bar');
+  const nameSpan = progressDiv.querySelector('.file-name');
+  if (bar) bar.style.width = `${(completed/total)*100}%`;
+  if (nameSpan) nameSpan.textContent = `📸 Загрузка галереи (${completed}/${total})`;
+}
+
+function removeGalleryProgress(progressId) {
+  const progressDiv = $(progressId);
+  if (progressDiv) progressDiv.remove();
 }
 
 function formatTime(seconds) {
