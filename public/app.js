@@ -4253,6 +4253,10 @@ document.addEventListener('DOMContentLoaded', () => {
   initContextMenu();
   // Привязка обработчиков к сообщениям
   const messagesList = document.getElementById('messages-list');
+  // Добавляем обработчик для кнопки отмены ответа
+  if (replyCancel) {
+    replyCancel.addEventListener('click', clearReplyTo);
+  }
   if (messagesList) {
     // Двойной клик
     messagesList.addEventListener('dblclick', (e) => {
