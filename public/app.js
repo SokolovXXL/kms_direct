@@ -27,6 +27,23 @@ if (chatHeader) {
   observer.observe(chatHeader, { childList: true, subtree: true, attributes: true });
 }
 
+// Функция для динамического отступа снизу
+function updateChatMessagesPaddingBottom() {
+  const wrapper = document.getElementById('chat-messages-wrapper');
+  const sendForm = document.getElementById('send-form');
+  const previewList = document.getElementById('file-preview-list');
+  if (!wrapper) return;
+
+  let totalHeight = 0;
+  if (sendForm && sendForm.style.display !== 'none' && sendForm.offsetHeight > 0) {
+    totalHeight += sendForm.offsetHeight;
+  }
+  if (previewList && previewList.style.display !== 'none' && previewList.children.length > 0) {
+    totalHeight += previewList.offsetHeight;
+  }
+  wrapper.style.paddingBottom = totalHeight + 'px';
+}
+
 // Функция для динамического отступа под заголовок
 function adjustChatMessagesPadding() {
   const header = document.getElementById('chat-header');
@@ -207,6 +224,7 @@ function renderFilePreviews() {
   if (pendingFiles.length === 0) {
     filePreviewList.style.display = 'none';
     updateSendFormPosition();
+    updateChatMessagesPaddingBottom(); // вызовем здесь, если превью скрыто
     return;
   }
   filePreviewList.style.display = 'flex';
@@ -257,21 +275,30 @@ function renderFilePreviews() {
 
     filePreviewList.appendChild(item);
   }
+
+  // После добавления всех превью обновляем позицию формы и отступ снизу
   updateSendFormPosition();
+  updateChatMessagesPaddingBottom();
+
+  // Если пользователь внизу чата, прокручиваем вниз
+  const container = document.getElementById('chat-messages-wrapper');
+  if (container && isAtBottom) {
+    scrollMessagesToBottom();
+  }
 }
 
 function updateSendFormPosition() {
-    const sendForm = $('send-form');
-    const previewList = $('file-preview-list');
-    if (!sendForm || !previewList) return;
+  const sendForm = $('send-form');
+  const previewList = $('file-preview-list');
+  if (!sendForm || !previewList) return;
 
-    // Если превью отображается и содержит элементы
-    if (previewList.children.length > 0 && previewList.style.display !== 'none') {
-        const previewHeight = previewList.offsetHeight;
-        sendForm.style.bottom = previewHeight + 'px';
-    } else {
-        sendForm.style.bottom = '0';
-    }
+  let previewHeight = 0;
+  // Если превью отображается и содержит элементы
+  if (previewList.children.length > 0 && previewList.style.display !== 'none') {
+    previewHeight = previewList.offsetHeight;
+  }
+  sendForm.style.bottom = previewHeight + 'px';
+  updateChatMessagesPaddingBottom();
 }
 
 function showFileTypeMenu(buttonElement) {
@@ -1429,16 +1456,16 @@ async function selectConversation(convId) {
   const btnCall = $('btn-call');
   
   if (conversation && conversation.isChannel) {
-    // Канал: писать могут только админы, звонков нет
     if (userRole === 'owner' || userRole === 'admin') {
       show(sendForm);
     } else {
       hide(sendForm);
     }
+    updateChatMessagesPaddingBottom(); // добавляем
     hide(btnCall);
   } else {
-    // Группа или личный чат: поле ввода всегда видно
     show(sendForm);
+    updateChatMessagesPaddingBottom(); // добавляем
     if (btnCall) {
       if (callActive) {
         btnCall.style.display = 'none';
@@ -3834,6 +3861,7 @@ window.addEventListener('resize', () => {
     }
   }
   adjustChatMessagesPadding();
+  updateChatMessagesPaddingBottom();
 });
 
 // ---- Initialization ----
@@ -3871,8 +3899,8 @@ document.addEventListener('DOMContentLoaded', () => {
     header.insertBefore(btn, header.firstChild);
   }
   initContextMenu();
-  
   tryAutoLogin();
+  updateChatMessagesPaddingBottom();
 });
 // Auth tabs switching
 const tabs = document.querySelectorAll('.auth-tab');

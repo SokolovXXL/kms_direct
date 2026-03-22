@@ -548,7 +548,7 @@ body {
   position: relative;
   flex: 1;
   height: 100%;
-  padding: 0 1rem 80px 1rem;
+  padding: 0 1rem 0 1rem;
   overflow-y: auto;
   background: url('/images/fon.jpg') repeat;
   background-color: var(--bg);
