@@ -1560,6 +1560,12 @@ body {
   flex-shrink: 0;
 }
 
+.admin-action-btn img {
+  width: 20px;
+  height: 20px;
+  display: block;
+}
+
 .admin-action-btn:hover {
   background: var(--accent);
   border-color: var(--accent);

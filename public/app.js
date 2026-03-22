@@ -2248,8 +2248,9 @@ async function showGroupInfo(groupId, groupTitle) {
       const li = document.createElement('li');
       li.style.display = 'flex';
       li.style.alignItems = 'center';
-      li.style.justifyContent = 'space-between';
+      li.style.justifyContent = 'flex-start';
       li.style.padding = '0.5rem 0';
+      li.style.gap = '1rem';
       
       const leftDiv = document.createElement('div');
       leftDiv.style.display = 'flex';
@@ -2422,6 +2423,7 @@ async function showGroupInfo(groupId, groupTitle) {
         }
         
         if (actionsDiv.children.length > 0) {
+          actionsDiv.style.marginLeft = 'auto';
           li.appendChild(actionsDiv);
         }
       }
