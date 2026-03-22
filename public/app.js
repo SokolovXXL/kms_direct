@@ -279,38 +279,62 @@ function showFileTypeMenu(buttonElement) {
 
   // Временно показываем меню, чтобы измерить его реальные размеры
   fileTypeMenu.classList.remove('hidden');
-  const menuWidth = fileTypeMenu.offsetWidth;
-  const menuHeight = fileTypeMenu.offsetHeight;
+  const menuRect = fileTypeMenu.getBoundingClientRect();
+  const menuWidth = menuRect.width;
+  const menuHeight = menuRect.height;
   fileTypeMenu.classList.add('hidden');
 
-  const rect = buttonElement.getBoundingClientRect();
+  // Если меню не имеет размеров (например, из-за CSS), установим дефолтные значения
+  const safeMenuWidth = menuWidth || 180;
+  const safeMenuHeight = menuHeight || 100;
+
+  const buttonRect = buttonElement.getBoundingClientRect();
   const margin = 10;
 
-  let left, top;
-  const spaceBelow = window.innerHeight - rect.bottom;
-  const spaceAbove = rect.top;
+  // Горизонтальное центрирование относительно кнопки с учётом границ экрана
+  let left = buttonRect.left + (buttonRect.width / 2) - (safeMenuWidth / 2);
+  left = Math.max(margin, Math.min(window.innerWidth - safeMenuWidth - margin, left));
 
-  // По умолчанию открываем вниз, если места достаточно
-  if (spaceBelow >= menuHeight + margin) {
-    top = rect.bottom + 5;
+  // Определяем, открывать вниз или вверх
+  const spaceBelow = window.innerHeight - buttonRect.bottom;
+  const spaceAbove = buttonRect.top;
+  let top;
+
+  if (spaceBelow >= safeMenuHeight + margin) {
+    // Открываем вниз
+    top = buttonRect.bottom + 5;
   } else {
-    // Иначе открываем вверх
-    top = rect.top - menuHeight - 5;
-    // Корректируем, чтобы не уходило за верхний край
+    // Открываем вверх
+    top = buttonRect.top - safeMenuHeight - 5;
     if (top < margin) top = margin;
   }
 
-  // Горизонтальное центрирование относительно кнопки, с проверкой выхода за края
-  left = rect.left + (rect.width / 2) - (menuWidth / 2);
-  if (left < margin) left = margin;
-  if (left + menuWidth > window.innerWidth - margin) {
-    left = window.innerWidth - menuWidth - margin;
-  }
-
+  // Применяем позицию
   fileTypeMenu.style.left = left + 'px';
   fileTypeMenu.style.top = top + 'px';
+
+  // Показываем меню
   fileTypeMenu.classList.remove('hidden');
 
+  // Проверяем, не выходит ли меню за пределы видимости после отображения
+  const finalRect = fileTypeMenu.getBoundingClientRect();
+  let finalTop = finalRect.top;
+  let finalBottom = finalRect.bottom;
+  let needAdjust = false;
+
+  if (finalTop < 0) {
+    finalTop = margin;
+    needAdjust = true;
+  }
+  if (finalBottom > window.innerHeight) {
+    finalTop = window.innerHeight - finalRect.height - margin;
+    needAdjust = true;
+  }
+  if (needAdjust) {
+    fileTypeMenu.style.top = finalTop + 'px';
+  }
+
+  // Закрытие при клике вне меню
   const closeMenu = (e) => {
     if (!fileTypeMenu.contains(e.target) && e.target !== buttonElement) {
       fileTypeMenu.classList.add('hidden');
