@@ -2119,7 +2119,7 @@ body {
 /* Расширенная ширина для сообщений-галерей */
 .message-content.gallery-message-container {
   max-width: min(800px, 95%);
-  width: 100%;
+  width: 80%;
 }
 
 /* Гарантия, что внутренние сетки занимают всю ширину */
@@ -2131,6 +2131,6 @@ body {
 /* На мобильных устройствах ещё шире */
 @media (max-width: 768px) {
   .message-content.gallery-message-container {
-    max-width: 98%;
+    max-width: 95%;
   }
 }

@@ -3155,7 +3155,6 @@ function renderTwoItems(container, items) {
   grid.style.gap = '2px';
   grid.style.borderRadius = '8px';
   grid.style.overflow = 'hidden';
-  grid.style.width = '80%';
 
   items.forEach(item => {
     const media = createMediaElement(item);
@@ -3173,7 +3172,6 @@ function renderThreeItems(container, items) {
   grid.style.gap = '2px';
   grid.style.borderRadius = '8px';
   grid.style.overflow = 'hidden';
-  grid.style.width = '80%';
 
   const left = createMediaElement(items[0]);
   grid.appendChild(left);
@@ -3198,7 +3196,6 @@ function renderFourItems(container, items) {
   grid.style.gap = '2px';
   grid.style.borderRadius = '8px';
   grid.style.overflow = 'hidden';
-  grid.style.width = '80%';
 
   items.forEach(item => {
     grid.appendChild(createMediaElement(item));
@@ -3245,7 +3242,6 @@ function renderGridGallery(container, items) {
   grid.style.gap = '2px';
   grid.style.borderRadius = '8px';
   grid.style.overflow = 'hidden';
-  grid.style.width = '80%';
 
   items.forEach(item => {
     const media = createMediaElement(item);
