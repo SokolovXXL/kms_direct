@@ -1150,7 +1150,12 @@ function initContextMenu() {
   replyItem.className = 'context-menu-item';
   replyItem.dataset.action = 'reply';
   replyItem.textContent = 'Ответить';
-  actionsContainer.insertBefore(replyItem, deleteItem);
+
+  if (deleteItem) {
+    actionsContainer.insertBefore(replyItem, deleteItem);
+  } else {
+    actionsContainer.appendChild(replyItem);
+  }
 
   // Закрытие по клику вне меню
   document.addEventListener('click', (e) => {
