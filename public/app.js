@@ -21,7 +21,27 @@ let creatingChannel = false; // флаг для модалки создания 
 
 const $ = (id) => document.getElementById(id);
 const publicVapidKey = document.querySelector('meta[name="vapid-public-key"]').content;
+const chatHeader = document.getElementById('chat-header');
+if (chatHeader) {
+  const observer = new MutationObserver(() => adjustChatMessagesPadding());
+  observer.observe(chatHeader, { childList: true, subtree: true, attributes: true });
+}
 
+// Функция для динамического отступа под заголовок
+function adjustChatMessagesPadding() {
+  const header = document.getElementById('chat-header');
+  const wrapper = document.getElementById('chat-messages-wrapper');
+  if (header && wrapper) {
+    const headerHeight = header.offsetHeight;
+    // Сохраняем текущую прокрутку
+    const scrollTop = wrapper.scrollTop;
+    wrapper.style.paddingTop = headerHeight + 'px';
+    // Восстанавливаем прокрутку, если она изменилась
+    if (wrapper.scrollTop !== scrollTop) {
+      wrapper.scrollTop = scrollTop;
+    }
+  }
+}
 
 function formatLastSeen(timestamp) {
   if (!timestamp) return '';
@@ -1344,6 +1364,7 @@ async function restoreLastConversation() {
 }
 
 async function selectConversation(convId) {
+  adjustChatMessagesPadding();
   convId = parseInt(convId, 10);
   
   currentConversationId = convId;
@@ -2529,11 +2550,13 @@ function showGroupInfoButton(groupId, groupTitle) {
   btn.addEventListener('click', () => showGroupInfo(groupId, groupTitle));
   
   header.appendChild(btn);
+  adjustChatMessagesPadding();
 }
 
 function hideGroupInfoButton() {
   const btn = document.getElementById('group-info-btn');
   if (btn) btn.remove();
+  adjustChatMessagesPadding();
 }
 
 if (modalGroupInfo) {
@@ -3777,11 +3800,13 @@ window.addEventListener('resize', () => {
       showChat();
     }
   }
+  adjustChatMessagesPadding();
 });
 
 // ---- Initialization ----
 document.addEventListener('DOMContentLoaded', () => {
   console.log('DOM loaded, initializing app');
+  adjustChatMessagesPadding();
   filePreviewList = document.getElementById('file-preview-list');
   fileTypeMenu = document.getElementById('file-type-menu');
   
