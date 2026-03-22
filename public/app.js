@@ -1858,10 +1858,6 @@ if (btnAddFriend) {
   });
 }
 
-const btnCloseFriends = $('btn-close-friends');
-if (btnCloseFriends) {
-  btnCloseFriends.addEventListener('click', () => hide($('modal-friends')));
-}
 
 const modalFriends = $('modal-friends');
 if (modalFriends) {
@@ -1881,11 +1877,6 @@ if (btnDeleteAccount) {
     if (deletePassword) deletePassword.value = '';
     if (deleteError) deleteError.textContent = '';
   });
-}
-
-const btnCancelDelete = $('btn-cancel-delete');
-if (btnCancelDelete) {
-  btnCancelDelete.addEventListener('click', () => hide($('modal-delete-confirm')));
 }
 
 const modalDeleteConfirm = $('modal-delete-confirm');
@@ -1937,7 +1928,6 @@ if (btnConfirmDelete) {
 // ---- Profile menu ----
 const btnMenu = $('btn-menu');
 const modalProfile = $('modal-profile');
-const btnCloseProfile = $('btn-close-profile');
 const btnSaveDisplayName = $('btn-save-display-name');
 const profileDisplayNameInput = $('profile-display-name');
 const profileError = $('profile-error');
@@ -1950,10 +1940,6 @@ if (btnMenu) {
       show(modalProfile);
     }
   });
-}
-
-if (btnCloseProfile) {
-  btnCloseProfile.addEventListener('click', () => hide(modalProfile));
 }
 
 if (modalProfile) {
@@ -2056,16 +2042,6 @@ if (btnCreateGroupBtn) {
   });
 }
 
-const btnCloseGroup = $('btn-close-group');
-if (btnCloseGroup) {
-  btnCloseGroup.addEventListener('click', () => {
-    hide($('modal-create-group'));
-    creatingChannel = false;
-    document.querySelector('#modal-create-group h2').textContent = 'Create group';
-    $('btn-create-group').textContent = 'Create group';
-  });
-}
-
 // Также в обработчике клика по модалке (если есть)
 const modalCreateGroup = $('modal-create-group');
 if (modalCreateGroup) {
@@ -2083,11 +2059,6 @@ if (modalCreateGroup) {
   modalCreateGroup.addEventListener('click', (e) => {
     if (e.target.id === 'modal-create-group') hide(modalCreateGroup);
   });
-}
-
-const btnCloseGroupsList = $('btn-close-groups-list');
-if (btnCloseGroupsList) {
-  btnCloseGroupsList.addEventListener('click', () => hide($('modal-groups-list')));
 }
 
 const modalGroupsList = $('modal-groups-list');
@@ -2549,11 +2520,6 @@ function hideGroupInfoButton() {
   if (btn) btn.remove();
 }
 
-const btnCloseGroupInfo = $('btn-close-group-info');
-if (btnCloseGroupInfo) {
-  btnCloseGroupInfo.addEventListener('click', () => hide(modalGroupInfo));
-}
-
 if (modalGroupInfo) {
   modalGroupInfo.addEventListener('click', (e) => {
     if (e.target.id === 'modal-group-info') hide(modalGroupInfo);
@@ -2626,11 +2592,6 @@ async function loadFriendsToAdd(groupId, groupTitle) {
   } catch (err) {
     list.innerHTML = `<li style="color:var(--danger);">Failed to load friends</li>`;
   }
-}
-
-const btnCloseAddMember = $('btn-close-add-member');
-if (btnCloseAddMember) {
-  btnCloseAddMember.addEventListener('click', () => hide(modalAddMember));
 }
 
 if (modalAddMember) {
