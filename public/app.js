@@ -278,70 +278,63 @@ function showFileTypeMenu(buttonElement) {
   if (!fileTypeMenu) return;
 
   // Временно показываем меню, чтобы измерить его реальные размеры
+  fileTypeMenu.style.visibility = 'hidden';
   fileTypeMenu.classList.remove('hidden');
-  const menuRect = fileTypeMenu.getBoundingClientRect();
-  const menuWidth = menuRect.width;
-  const menuHeight = menuRect.height;
+  const menuWidth = fileTypeMenu.offsetWidth;
+  const menuHeight = fileTypeMenu.offsetHeight;
   fileTypeMenu.classList.add('hidden');
+  fileTypeMenu.style.visibility = '';
 
-  // Если меню не имеет размеров (например, из-за CSS), установим дефолтные значения
   const safeMenuWidth = menuWidth || 180;
   const safeMenuHeight = menuHeight || 100;
 
   const buttonRect = buttonElement.getBoundingClientRect();
   const margin = 10;
 
-  // Горизонтальное центрирование относительно кнопки с учётом границ экрана
+  // Горизонтальное центрирование с учётом границ экрана
   let left = buttonRect.left + (buttonRect.width / 2) - (safeMenuWidth / 2);
   left = Math.max(margin, Math.min(window.innerWidth - safeMenuWidth - margin, left));
 
-  // Определяем, открывать вниз или вверх
-  const spaceBelow = window.innerHeight - buttonRect.bottom;
-  const spaceAbove = buttonRect.top;
+  // Вертикальное позиционирование: сначала пытаемся открыть вниз, если не хватает места — вверх
   let top;
-
+  const spaceBelow = window.innerHeight - buttonRect.bottom;
   if (spaceBelow >= safeMenuHeight + margin) {
-    // Открываем вниз
     top = buttonRect.bottom + 5;
   } else {
-    // Открываем вверх
     top = buttonRect.top - safeMenuHeight - 5;
     if (top < margin) top = margin;
   }
 
-  // Применяем позицию
   fileTypeMenu.style.left = left + 'px';
   fileTypeMenu.style.top = top + 'px';
-
-  // Показываем меню
   fileTypeMenu.classList.remove('hidden');
 
-  // Проверяем, не выходит ли меню за пределы видимости после отображения
-  const finalRect = fileTypeMenu.getBoundingClientRect();
-  let finalTop = finalRect.top;
-  let finalBottom = finalRect.bottom;
-  let needAdjust = false;
+  // Корректировка позиции после фактического отображения (на случай изменения размеров)
+  requestAnimationFrame(() => {
+    const finalRect = fileTypeMenu.getBoundingClientRect();
+    let finalTop = finalRect.top;
+    if (finalTop < 0) {
+      finalTop = margin;
+      fileTypeMenu.style.top = finalTop + 'px';
+    } else if (finalRect.bottom > window.innerHeight) {
+      finalTop = window.innerHeight - finalRect.height - margin;
+      if (finalTop < 0) finalTop = margin;
+      fileTypeMenu.style.top = finalTop + 'px';
+    }
+  });
 
-  if (finalTop < 0) {
-    finalTop = margin;
-    needAdjust = true;
-  }
-  if (finalBottom > window.innerHeight) {
-    finalTop = window.innerHeight - finalRect.height - margin;
-    needAdjust = true;
-  }
-  if (needAdjust) {
-    fileTypeMenu.style.top = finalTop + 'px';
-  }
-
-  // Закрытие при клике вне меню
+  // Закрытие при клике вне меню (для мобильных добавляем touchstart)
   const closeMenu = (e) => {
     if (!fileTypeMenu.contains(e.target) && e.target !== buttonElement) {
       fileTypeMenu.classList.add('hidden');
       document.removeEventListener('click', closeMenu);
+      document.removeEventListener('touchstart', closeMenu);
     }
   };
-  setTimeout(() => document.addEventListener('click', closeMenu), 0);
+  setTimeout(() => {
+    document.addEventListener('click', closeMenu);
+    document.addEventListener('touchstart', closeMenu);
+  }, 0);
 }
 
 function setupScrollListener() {

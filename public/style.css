@@ -1982,7 +1982,6 @@ body {
   box-shadow: var(--shadow-lg);
   padding: 8px;
   backdrop-filter: blur(10px);
-  animation: contextMenuFadeIn 0.1s ease-out;
   max-width: calc(100vw - 20px);
   white-space: nowrap;
 }
