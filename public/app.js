@@ -2294,7 +2294,7 @@ async function showGroupInfo(groupId, groupTitle) {
         const actionsDiv = document.createElement('div');
         actionsDiv.style.display = 'flex';
         actionsDiv.style.gap = '0.5rem';
-        actionsDiv.style.flexWrap = 'wrap';
+        actionsDiv.style.flexWrap = 'nowrap';
         
         // Если это канал и текущий пользователь не админ — не показываем кнопки
         if (isChannel && !isAdmin) {
