@@ -2060,14 +2060,40 @@ body {
   transform: scale(0.97);
 }
 
-/* Group info modal buttons: always in a row */
-#modal-group-info .modal-actions {
-  flex-wrap: nowrap;
+/* Group info modal: compact inline member actions */
+#group-members-list li {
+  display: flex;
+  align-items: center;
   justify-content: space-between;
+  gap: 8px;
+  padding: 8px 12px;
+  flex-wrap: wrap;
 }
 
-#modal-group-info .modal-actions button {
-  flex: 1;
-  text-align: center;
+#group-members-list li button,
+#group-members-list li select {
+  padding: 4px 8px;
+  font-size: 0.75rem;
+  border-radius: 6px;
+  background: var(--surface-hover);
+  border: 1px solid var(--border);
+  color: var(--text);
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
   margin: 0;
+}
+
+#group-members-list li button:hover,
+#group-members-list li select:hover {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: white;
+}
+
+/* Group multiple buttons in a row */
+#group-members-list li > div {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
 }
