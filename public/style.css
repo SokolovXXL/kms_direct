@@ -521,7 +521,8 @@ body {
 .chat-header {
   flex-shrink: 0;
   padding: 1rem 1.5rem;
-  background: var(--surface);
+  background: rgba(24, 24, 28, 0.7);
+  backdrop-filter: blur(8px);
   border-bottom: 1px solid var(--border);
   font-weight: 600;
   font-size: 1.1rem;
@@ -651,8 +652,8 @@ body {
   display: flex;
   gap: 0.5rem;
   padding: 1rem 1.5rem;
-  background: var(--surface);
-  border-top: 1px solid var(--border);
+  background: transparent;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
   flex-shrink: 0;
 }
 
