@@ -2106,3 +2106,12 @@ body {
   width: 100%;
   margin: 4px 0;
 }
+
+.gallery-message > div {
+  display: grid !important;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)) !important;
+  gap: 2px !important;
+  border-radius: 8px !important;
+  overflow: hidden !important;
+  width: 100% !important;
+}
