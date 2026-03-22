@@ -277,6 +277,19 @@ function updateSendFormPosition() {
 function showFileTypeMenu(buttonElement) {
   if (!fileTypeMenu) return;
 
+  // Меню лежит внутри chat-area, у которого на мобильных есть transform.
+  // Переносим его в body, чтобы position: fixed считался относительно экрана, а не контейнера.
+  if (fileTypeMenu.parentElement !== document.body) {
+    document.body.appendChild(fileTypeMenu);
+  }
+
+  // Снимаем старые обработчики, если меню открывали раньше.
+  if (fileTypeMenu._closeMenuHandler) {
+    document.removeEventListener('click', fileTypeMenu._closeMenuHandler);
+    document.removeEventListener('touchstart', fileTypeMenu._closeMenuHandler);
+    fileTypeMenu._closeMenuHandler = null;
+  }
+
   // Временно показываем меню, чтобы измерить его реальные размеры
   fileTypeMenu.style.visibility = 'hidden';
   fileTypeMenu.classList.remove('hidden');
@@ -313,24 +326,26 @@ function showFileTypeMenu(buttonElement) {
   requestAnimationFrame(() => {
     const finalRect = fileTypeMenu.getBoundingClientRect();
     let finalTop = finalRect.top;
-    if (finalTop < 0) {
+    if (finalTop < margin) {
       finalTop = margin;
       fileTypeMenu.style.top = finalTop + 'px';
-    } else if (finalRect.bottom > window.innerHeight) {
+    } else if (finalRect.bottom > window.innerHeight - margin) {
       finalTop = window.innerHeight - finalRect.height - margin;
-      if (finalTop < 0) finalTop = margin;
+      if (finalTop < margin) finalTop = margin;
       fileTypeMenu.style.top = finalTop + 'px';
     }
   });
 
   // Закрытие при клике вне меню (для мобильных добавляем touchstart)
   const closeMenu = (e) => {
-    if (!fileTypeMenu.contains(e.target) && e.target !== buttonElement) {
+    if (!fileTypeMenu.contains(e.target) && !buttonElement.contains(e.target)) {
       fileTypeMenu.classList.add('hidden');
       document.removeEventListener('click', closeMenu);
       document.removeEventListener('touchstart', closeMenu);
+      fileTypeMenu._closeMenuHandler = null;
     }
   };
+  fileTypeMenu._closeMenuHandler = closeMenu;
   setTimeout(() => {
     document.addEventListener('click', closeMenu);
     document.addEventListener('touchstart', closeMenu);
@@ -2664,12 +2679,21 @@ if (fileLabel && fileInput) {
   // Обработчики для кнопок меню
   const mediaBtn = document.querySelector('#file-type-menu button[data-type="media"]');
   const allBtn = document.querySelector('#file-type-menu button[data-type="all"]');
+  const hideFileTypeMenu = () => {
+    fileTypeMenu.classList.add('hidden');
+    if (fileTypeMenu._closeMenuHandler) {
+      document.removeEventListener('click', fileTypeMenu._closeMenuHandler);
+      document.removeEventListener('touchstart', fileTypeMenu._closeMenuHandler);
+      fileTypeMenu._closeMenuHandler = null;
+    }
+  };
+
   if (mediaBtn) {
     mediaBtn.addEventListener('click', () => {
       fileInput.accept = 'image/*,video/*';
       fileInput.multiple = true;
+      hideFileTypeMenu();
       fileInput.click();
-      fileTypeMenu.classList.add('hidden');
     });
 
   }
@@ -2677,8 +2701,8 @@ if (fileLabel && fileInput) {
     allBtn.addEventListener('click', () => {
       fileInput.accept = '*/*';
       fileInput.multiple = false;
+      hideFileTypeMenu();
       fileInput.click();
-      fileTypeMenu.classList.add('hidden');
     });
   }
 

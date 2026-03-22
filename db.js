@@ -17,7 +17,7 @@ async function initDb(retries = 5) {
     let client;
     try {
       client = await pool.connect();
-      
+
       await client.query(`
         CREATE TABLE IF NOT EXISTS users (
           id SERIAL PRIMARY KEY,
@@ -31,16 +31,6 @@ async function initDb(retries = 5) {
       `);
       await client.query(`
         ALTER TABLE users ADD COLUMN IF NOT EXISTS friend_code VARCHAR(16) UNIQUE;
-      `);
-      await pool.query(`
-        CREATE TABLE IF NOT EXISTS reactions (
-          id SERIAL PRIMARY KEY,
-          message_id INTEGER REFERENCES messages(id) ON DELETE CASCADE,
-          user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
-          emoji VARCHAR(50) NOT NULL,
-          created_at TIMESTAMPTZ DEFAULT NOW(),
-          UNIQUE(message_id, user_id, emoji)
-        )
       `);
       await client.query(`
         CREATE TABLE IF NOT EXISTS friends (
@@ -71,6 +61,16 @@ async function initDb(retries = 5) {
           body TEXT NOT NULL,
           created_at TIMESTAMPTZ DEFAULT NOW()
         );
+      `);
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS reactions (
+          id SERIAL PRIMARY KEY,
+          message_id INTEGER REFERENCES messages(id) ON DELETE CASCADE,
+          user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+          emoji VARCHAR(50) NOT NULL,
+          created_at TIMESTAMPTZ DEFAULT NOW(),
+          UNIQUE(message_id, user_id, emoji)
+        )
       `);
       await client.query(`
         CREATE TABLE IF NOT EXISTS notifications (
@@ -118,13 +118,14 @@ async function initDb(retries = 5) {
     } catch (err) {
       lastError = err;
       console.error(`Database init attempt ${attempt}/${retries} failed:`, err.message);
-      if (client) {
-        try { client.release(); } catch (e) {}
-      }
       if (attempt < retries) {
         const delay = 2000 * Math.pow(2, attempt - 1); // 2s, 4s, 8s...
         console.log(`Retrying in ${delay}ms...`);
         await new Promise(r => setTimeout(r, delay));
+      }
+    } finally {
+      if (client) {
+        try { client.release(); } catch (e) {}
       }
     }
   }

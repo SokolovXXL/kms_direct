@@ -1983,6 +1983,9 @@ body {
   padding: 8px;
   backdrop-filter: blur(10px);
   max-width: calc(100vw - 20px);
+  max-height: calc(100dvh - 20px);
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
   white-space: nowrap;
 }
 .file-type-menu-content {
