@@ -3239,6 +3239,8 @@ function renderGridGallery(container, items) {
   grid.style.gap = '2px';
   grid.style.borderRadius = '8px';
   grid.style.overflow = 'hidden';
+  grid.style.width = '100%';
+  grid.style.minWidth = '0';
 
   items.forEach(item => {
     const media = createMediaElement(item);
