@@ -694,23 +694,37 @@ function createMessageElement(message, isGroup, currentUserId) {
     contentDiv.appendChild(nameSpan);
   }
 
-  // Проверка на файл
+    // Проверка на файл или составное сообщение
   let isFile = false;
   let fileData = null;
   if (typeof message.body === 'string' && message.body.startsWith('{')) {
     try {
       fileData = JSON.parse(message.body);
-      if (fileData.type === 'file' || fileData.type === 'gallery') {
+      if (fileData.type === 'file' || fileData.type === 'gallery' || fileData.type === 'composite') {
         isFile = true;
       }
     } catch (e) {}
   }
 
   if (isFile && fileData) {
-    renderFileMessage(contentDiv, fileData, messageDiv); // передаём оба контейнера
-      if (fileData.type === 'gallery') {
-        contentDiv.classList.add('gallery-message-container');
+    if (fileData.type === 'composite') {
+      // Текст
+      if (fileData.text) {
+        const textDiv = document.createElement('div');
+        textDiv.className = 'message-body';
+        textDiv.textContent = fileData.text;
+        contentDiv.appendChild(textDiv);
       }
+      // Файлы (галерея)
+      if (fileData.files && fileData.files.length) {
+        renderGallery(contentDiv, fileData.files);
+      }
+    } else if (fileData.type === 'gallery') {
+      renderGallery(contentDiv, fileData.files);
+      contentDiv.classList.add('gallery-message-container');
+    } else if (fileData.type === 'file') {
+      renderFileMessage(contentDiv, fileData, messageDiv);
+    }
   } else {
     const bodyDiv = document.createElement('div');
     bodyDiv.className = 'message-body';
@@ -801,6 +815,12 @@ function updateSidebarRow(convId, lastMessageText) {
           displayText = `📎 ${fileData.name || 'File'}`;
         } else if (fileData.type === 'gallery') {
           displayText = `📷 Галерея (${fileData.files.length} файлов)`;
+        } else if (fileData.type === 'composite') {
+          if (fileData.text) {
+            displayText = fileData.text;
+          } else {
+            displayText = `📎 ${fileData.files.length} файлов`;
+          }
         }
       } catch (e) {
         // ignore
@@ -1706,11 +1726,11 @@ async function loadMessages(convId) {
 }
 
 // Отправка сообщений
+// Отправка сообщений (обновлённая версия)
 const sendForm = $('send-form');
 if (sendForm) {
   sendForm.addEventListener('submit', async (e) => {
     e.preventDefault();
-
     if (!currentConversationId) return;
 
     const input = $('message-input');
@@ -1720,40 +1740,52 @@ if (sendForm) {
     const files = pendingFiles.splice(0);
     renderFilePreviews();
 
-    const mediaFiles = files.filter(isMediaFile);
-    const otherFiles = files.filter(f => !isMediaFile(f));
-
-    // Обработка файлов
-    if (mediaFiles.length >= 2 && mediaFiles.length <= 10 && otherFiles.length === 0) {
+    // Если есть и текст, и файлы → составное сообщение
+    if (body && files.length) {
       try {
-        await sendGallery(mediaFiles);
+        await sendCompositeMessage(body, files);
+        input.value = '';
+        input.focus();
       } catch (err) {
-        alert('Ошибка при отправке галереи: ' + err.message);
-        pendingFiles.unshift(...mediaFiles);
+        alert('Ошибка при отправке: ' + err.message);
+        pendingFiles.unshift(...files);
         renderFilePreviews();
+        input.value = body;
       }
-    } else {
-      for (const file of files) {
+    }
+    // Только файлы (галерея или одиночные файлы)
+    else if (files.length) {
+      const mediaFiles = files.filter(isMediaFile);
+      const otherFiles = files.filter(f => !isMediaFile(f));
+
+      if (mediaFiles.length >= 2 && mediaFiles.length <= 10 && otherFiles.length === 0) {
         try {
-          await sendFileWithProgress(file, currentConversationId);
+          await sendGallery(mediaFiles);
         } catch (err) {
-          alert('Ошибка при отправке файла: ' + err.message);
-          pendingFiles.unshift(file);
+          alert('Ошибка при отправке галереи: ' + err.message);
+          pendingFiles.unshift(...mediaFiles);
           renderFilePreviews();
+        }
+      } else {
+        for (const file of files) {
+          try {
+            await sendFileWithProgress(file, currentConversationId);
+          } catch (err) {
+            alert('Ошибка при отправке файла: ' + err.message);
+            pendingFiles.unshift(file);
+            renderFilePreviews();
+          }
         }
       }
     }
-
-    // Отправка текстового сообщения (если есть)
-    if (body) {
+    // Только текст
+    else if (body) {
       try {
         const msg = await api(`/api/conversations/${currentConversationId}/messages`, {
           method: 'POST',
           body: JSON.stringify({ body }),
         });
-        if (!currentConversationIsGroup) {
-          msg.read = false;
-        }
+        if (!currentConversationIsGroup) msg.read = false;
         appendMessageToChat(msg);
         input.value = '';
         input.focus();
@@ -2698,6 +2730,82 @@ const MAX_FILE_SIZE = 1024 * 1024 * 1024; // 1 GB
 
 const fileLabel = document.getElementById('file-label');
 const fileInput = document.getElementById('file-input');
+
+// Загрузка всех файлов с прогрессом
+async function uploadFiles(files, onProgress) {
+  const uploaded = [];
+  for (let i = 0; i < files.length; i++) {
+    const file = files[i];
+    const fileData = await uploadFile(file); // существующая функция
+    uploaded.push(fileData);
+    if (onProgress) onProgress(i + 1, files.length);
+  }
+  return uploaded;
+}
+
+// Прогресс для составного сообщения
+function showCompositeProgress(progressId, completed, total) {
+  const messagesList = $('messages-list');
+  if (!messagesList) return;
+  const progressDiv = document.createElement('div');
+  progressDiv.id = progressId;
+  progressDiv.className = 'message system';
+  progressDiv.innerHTML = `
+    <div class="file-upload-progress">
+      <div class="file-name">📤 Отправка (${completed}/${total})</div>
+      <div class="progress-bar-container">
+        <div class="progress-bar" style="width: ${(completed/total)*100}%"></div>
+      </div>
+    </div>
+  `;
+  messagesList.appendChild(progressDiv);
+  scrollMessagesToBottom();
+}
+function updateCompositeProgress(progressId, completed, total) {
+  const progressDiv = $(progressId);
+  if (!progressDiv) return;
+  const bar = progressDiv.querySelector('.progress-bar');
+  const nameSpan = progressDiv.querySelector('.file-name');
+  if (bar) bar.style.width = `${(completed/total)*100}%`;
+  if (nameSpan) nameSpan.textContent = `📤 Отправка (${completed}/${total})`;
+}
+function removeCompositeProgress(progressId) {
+  const progressDiv = $(progressId);
+  if (progressDiv) progressDiv.remove();
+}
+
+// Отправка составного сообщения (текст + файлы)
+async function sendCompositeMessage(text, files) {
+  const total = files.length;
+  const progressId = `composite-${Date.now()}-${Math.random()}`;
+  let completed = 0;
+
+  showCompositeProgress(progressId, completed, total);
+
+  const uploadedFiles = await uploadFiles(files, (done, total) => {
+    completed = done;
+    updateCompositeProgress(progressId, completed, total);
+  });
+
+  removeCompositeProgress(progressId);
+
+  const compositeBody = {
+    type: 'composite',
+    text: text,
+    files: uploadedFiles
+  };
+
+  const msg = await api(`/api/conversations/${currentConversationId}/messages`, {
+    method: 'POST',
+    body: JSON.stringify({ body: JSON.stringify(compositeBody) }),
+  });
+
+  if (!currentConversationIsGroup) msg.read = false;
+  appendMessageToChat(msg);
+  // Обновляем предпросмотр в списке диалогов
+  updateSidebarRow(currentConversationId, text ? text : `📎 ${files.length} файлов`);
+  return msg;
+}
 
 if (fileLabel && fileInput) {
   fileLabel.addEventListener('click', (e) => {
