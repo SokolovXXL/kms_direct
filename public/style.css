@@ -1575,19 +1575,18 @@ body {
 }
 
 #group-members-list li {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(150px, auto) 1fr; 
   align-items: center;
-  justify-content: flex-start; 
   padding: 0.5rem 0;
-  gap: 0.5rem;          /* отступ между именем и кнопками */
+  gap: 1rem; 
 }
 
 /* Контейнер действий: фиксированная ширина, без переноса */
 #group-members-list li > div:last-child {
   display: flex;
   gap: 0.4rem;
-  flex-shrink: 0;
-  flex-wrap: nowrap;
+  justify-content: flex-start;
 }
 
 .admin-action-btn select {
