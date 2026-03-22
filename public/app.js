@@ -242,15 +242,27 @@ function showFileTypeMenu(buttonElement) {
   if (!fileTypeMenu) return;
   const rect = buttonElement.getBoundingClientRect();
   const menuWidth = fileTypeMenu.offsetWidth || 150;
-  let left = rect.left;
-  let top = rect.bottom + 5;
+  const menuHeight = fileTypeMenu.offsetHeight || 100;
 
+  let left = rect.right;
+  let top;
+
+  // Определяем, достаточно ли места сверху
+  const spaceAbove = rect.top;
+  const spaceBelow = window.innerHeight - rect.bottom;
+
+  // Предпочитаем открывать вверх, если есть место, иначе вниз
+  if (spaceAbove >= menuHeight + 10) {
+    top = rect.top - menuHeight - 5;
+  } else {
+    top = rect.bottom + 5;
+  }
+
+  // Корректировка по горизонтали, чтобы меню не выходило за правый край
   if (left + menuWidth > window.innerWidth - 10) {
     left = window.innerWidth - menuWidth - 10;
   }
-  if (top + 100 > window.innerHeight - 10) {
-    top = rect.top - 100;
-  }
+  if (left < 10) left = 10;
 
   fileTypeMenu.style.left = left + 'px';
   fileTypeMenu.style.top = top + 'px';
