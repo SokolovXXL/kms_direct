@@ -18,10 +18,17 @@ let currentCallConversationId = null; // ID чата, в котором идёт
 let remoteAudioElements = new Map();   // userId -> HTMLAudioElement
 let currentConversationIsChannel = false;
 let creatingChannel = false; // флаг для модалки создания канала
+let currentReplyTo = null; // { id, text, senderName }
 
+// В DOMContentLoaded или при создании, добавим плашку ответа
+const replyPreview = document.getElementById('reply-preview');
+const replySenderName = document.getElementById('reply-sender-name');
+const replyTextSpan = document.getElementById('reply-text');
+const replyCancel = document.getElementById('reply-cancel');
 const $ = (id) => document.getElementById(id);
 const publicVapidKey = document.querySelector('meta[name="vapid-public-key"]').content;
 const chatHeader = document.getElementById('chat-header');
+
 if (chatHeader) {
   const observer = new MutationObserver(() => adjustChatMessagesPadding());
   observer.observe(chatHeader, { childList: true, subtree: true, attributes: true });
@@ -524,6 +531,47 @@ if (logoutBtn) {
   });
 }
 
+function setReplyTo(messageElement) {
+  const messageId = messageElement.dataset.messageId;
+  if (!messageId) return;
+
+  // Ищем имя отправителя
+  const senderNameEl = messageElement.querySelector('.message-sender');
+  const senderName = senderNameEl ? senderNameEl.textContent.trim() : 'Unknown';
+
+  // Текст или имя файла
+  let text = '';
+  const bodyEl = messageElement.querySelector('.message-body');
+  const fileEl = messageElement.querySelector('.message-file-content');
+  if (bodyEl) {
+    text = bodyEl.textContent.trim().substring(0, 100);
+  } else if (fileEl) {
+    const fileNameEl = fileEl.querySelector('.file-name');
+    text = fileNameEl ? `📎 ${fileNameEl.textContent.trim()}` : 'Файл';
+  } else {
+    text = 'Сообщение';
+  }
+
+  currentReplyTo = { id: messageId, text, senderName };
+  renderReplyPreview();
+}
+
+function renderReplyPreview() {
+  if (!replyPreview) return;
+  if (currentReplyTo) {
+    replySenderName.textContent = currentReplyTo.senderName;
+    replyTextSpan.textContent = currentReplyTo.text;
+    replyPreview.classList.remove('hidden');
+  } else {
+    replyPreview.classList.add('hidden');
+  }
+}
+
+function clearReplyTo() {
+  currentReplyTo = null;
+  renderReplyPreview();
+}
+
 // ---- Notifications (SSE) ----
 function startNotificationStream() {
   if (eventSource) {
@@ -678,6 +726,20 @@ function escapeHtml(s) {
   return div.innerHTML;
 }
 
+function scrollToMessage(messageId) {
+  const element = document.querySelector(`.message[data-message-id="${messageId}"]`);
+  if (element) {
+    element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    element.style.backgroundColor = 'rgba(99,102,241,0.2)';
+    setTimeout(() => {
+      element.style.backgroundColor = '';
+    }, 2000);
+  } else {
+    // Сообщение может быть не загружено, но по идее оно есть
+    console.warn('Message not found', messageId);
+  }
+}
+
 // ---- Создание элемента сообщения ----
 function createMessageElement(message, isGroup, currentUserId) {
   const messageDiv = document.createElement('div');
@@ -686,6 +748,24 @@ function createMessageElement(message, isGroup, currentUserId) {
 
   const contentDiv = document.createElement('div');
   contentDiv.className = 'message-content';
+
+  if (message.reply_to) {
+    const replyBlock = document.createElement('div');
+    replyBlock.className = 'message-reply-preview';
+    replyBlock.dataset.replyId = message.reply_to.id;
+    let replyText = message.reply_to.body || '';
+    if (replyText.length > 100) replyText = replyText.slice(0, 97) + '…';
+    replyBlock.innerHTML = `
+      <span class="reply-icon">↩️</span>
+      <strong>${escapeHtml(message.reply_to.senderName)}</strong>
+      <span>${escapeHtml(replyText)}</span>
+    `;
+    replyBlock.addEventListener('click', (e) => {
+      e.stopPropagation();
+      scrollToMessage(message.reply_to.id);
+    });
+    contentDiv.appendChild(replyBlock);
+  }
 
   if (isGroup && message.sender_id !== currentUserId) {
     const nameSpan = document.createElement('div');
@@ -1063,6 +1143,15 @@ function initContextMenu() {
   contextMenu = document.getElementById('message-context-menu');
   if (!contextMenu) return;
 
+  // Добавляем пункт "Ответить" перед "Удалить"
+  const actionsContainer = contextMenu.querySelector('.context-menu-actions');
+  const deleteItem = actionsContainer.querySelector('[data-action="delete"]');
+  const replyItem = document.createElement('div');
+  replyItem.className = 'context-menu-item';
+  replyItem.dataset.action = 'reply';
+  replyItem.textContent = 'Ответить';
+  actionsContainer.insertBefore(replyItem, deleteItem);
+
   // Закрытие по клику вне меню
   document.addEventListener('click', (e) => {
     if (!contextMenu.classList.contains('hidden') && 
@@ -1097,10 +1186,13 @@ function initContextMenu() {
       copyMessageContent(currentContextMessage);
     } else if (action === 'delete') {
       deleteMessage(currentContextMessage);
-    }else if (action === 'react') {
+    } else if (action === 'reply') {
+      setReplyTo(currentContextMessage);
+      hideContextMenu();
+    } else if (action === 'react') {
       e.preventDefault();
       e.stopPropagation();
-      const message = currentContextMessage; // сохраняем ссылку
+      const message = currentContextMessage;
       hideContextMenu();
       if (message) {
         const rect = message.getBoundingClientRect();
@@ -1272,52 +1364,40 @@ function showContextMenuAt(message, clientX, clientY) {
 
 const messagesList = document.getElementById('messages-list');
 if (messagesList) {
-  // ПК: правый клик
-  messagesList.addEventListener('contextmenu', (e) => {
+  // Двойной клик
+  messagesList.addEventListener('dblclick', (e) => {
     const message = e.target.closest('.message');
     if (!message) return;
-
     const interactive = e.target.closest('button, a, .audio-play-btn, .audio-download-btn, .delete-message-btn, input, label, video, audio');
     if (interactive) return;
-
-    showContextMenuAt(message, e.clientX, e.clientY);
+    setReplyTo(message);
     e.preventDefault();
-    e.stopPropagation();
   });
 
-  // Мобильные: долгое нажатие (резерв)
+  // Свайп вправо (мобильные)
+  let touchStartX = 0;
+  let touchStartY = 0;
   messagesList.addEventListener('touchstart', (e) => {
-    const message = e.target.closest('.message');
-    if (!message) return;
-
-    const interactive = e.target.closest('button, a, .audio-play-btn, .audio-download-btn, .delete-message-btn, input, label, video, audio');
-    if (interactive) return;
-
     const touch = e.touches[0];
-    longPressStartX = touch.clientX;
-    longPressStartY = touch.clientY;
-    longPressTarget = message;
-    longPressTimer = setTimeout(() => {
-      if (longPressTarget) {
-        showContextMenuAt(longPressTarget, longPressStartX, longPressStartY);
-        clearLongPress();
-      }
-    }, 500);
+    touchStartX = touch.clientX;
+    touchStartY = touch.clientY;
   });
-
-  messagesList.addEventListener('touchend', () => {
-    clearLongPress();
-  });
-
   messagesList.addEventListener('touchmove', (e) => {
-    if (longPressTarget) {
-      const touch = e.touches[0];
-      const dx = Math.abs(touch.clientX - longPressStartX);
-      const dy = Math.abs(touch.clientY - longPressStartY);
-      if (dx > 10 || dy > 10) {
-        clearLongPress();
+    if (!touchStartX) return;
+    const touch = e.touches[0];
+    const dx = touch.clientX - touchStartX;
+    const dy = touch.clientY - touchStartY;
+    if (Math.abs(dx) > 30 && Math.abs(dx) > Math.abs(dy) && dx > 0) {
+      const message = e.target.closest('.message');
+      if (message) {
+        setReplyTo(message);
+        e.preventDefault();
+        touchStartX = 0;
       }
     }
+  });
+  messagesList.addEventListener('touchend', () => {
+    touchStartX = 0;
   });
 }
 
@@ -1439,6 +1519,7 @@ async function restoreLastConversation() {
 
 async function selectConversation(convId) {
   adjustChatMessagesPadding();
+  clearReplyTo();
   convId = parseInt(convId, 10);
   
   currentConversationId = convId;
@@ -1738,14 +1819,17 @@ if (sendForm) {
 
     const body = input.value.trim();
     const files = pendingFiles.splice(0);
+    const replyToId = currentReplyTo ? currentReplyTo.id : null;
+
     renderFilePreviews();
 
     // Если есть и текст, и файлы → составное сообщение
     if (body && files.length) {
       try {
-        await sendCompositeMessage(body, files);
+        await sendCompositeMessage(body, files, replyToId);
         input.value = '';
         input.focus();
+        clearReplyTo();
       } catch (err) {
         alert('Ошибка при отправке: ' + err.message);
         pendingFiles.unshift(...files);
@@ -1760,7 +1844,8 @@ if (sendForm) {
 
       if (mediaFiles.length >= 2 && mediaFiles.length <= 10 && otherFiles.length === 0) {
         try {
-          await sendGallery(mediaFiles);
+          await sendGallery(mediaFiles, replyToId);
+          clearReplyTo();
         } catch (err) {
           alert('Ошибка при отправке галереи: ' + err.message);
           pendingFiles.unshift(...mediaFiles);
@@ -1769,7 +1854,8 @@ if (sendForm) {
       } else {
         for (const file of files) {
           try {
-            await sendFileWithProgress(file, currentConversationId);
+            await sendFileWithProgress(file, currentConversationId, replyToId);
+            clearReplyTo();
           } catch (err) {
             alert('Ошибка при отправке файла: ' + err.message);
             pendingFiles.unshift(file);
@@ -1783,7 +1869,7 @@ if (sendForm) {
       try {
         const msg = await api(`/api/conversations/${currentConversationId}/messages`, {
           method: 'POST',
-          body: JSON.stringify({ body }),
+          body: JSON.stringify({ body, replyToId }),
         });
         if (!currentConversationIsGroup) msg.read = false;
         appendMessageToChat(msg);
@@ -1792,6 +1878,7 @@ if (sendForm) {
         updateSidebarRow(currentConversationId, body);
         const conversation = conversationListCache.find(c => c.id === currentConversationId);
         if (conversation) conversation.lastMessage = body;
+        clearReplyTo();
       } catch (err) {
         input.value = body;
         alert('Failed to send message: ' + err.message);
@@ -1802,7 +1889,7 @@ if (sendForm) {
   });
 }
 
-async function sendFileWithProgress(file, conversationId) {
+async function sendFileWithProgress(file, conversationId, replyToId) {
   return new Promise((resolve, reject) => {
     const progressId = `upload-${Date.now()}-${Math.random()}`;
     showUploadProgress(file, progressId);
@@ -1834,11 +1921,11 @@ async function sendFileWithProgress(file, conversationId) {
 
           const msg = await api(`/api/conversations/${conversationId}/messages`, {
             method: 'POST',
-            body: JSON.stringify({ body: JSON.stringify(fileMessage) }),
+            body: JSON.stringify({ body: JSON.stringify(fileMessage), replyToId }),
           });
 
           if (!currentConversationIsGroup) {
-            msg.read = false; // новое сообщение в личке не прочитано
+            msg.read = false;
           }
           appendMessageToChat(msg);
           updateSidebarRow(conversationId, `📎 ${file.name}`);
@@ -2775,7 +2862,7 @@ function removeCompositeProgress(progressId) {
 }
 
 // Отправка составного сообщения (текст + файлы)
-async function sendCompositeMessage(text, files) {
+async function sendCompositeMessage(text, files, replyToId) {
   const total = files.length;
   const progressId = `composite-${Date.now()}-${Math.random()}`;
   let completed = 0;
@@ -2794,15 +2881,13 @@ async function sendCompositeMessage(text, files) {
     text: text,
     files: uploadedFiles
   };
-
   const msg = await api(`/api/conversations/${currentConversationId}/messages`, {
     method: 'POST',
-    body: JSON.stringify({ body: JSON.stringify(compositeBody) }),
+    body: JSON.stringify({ body: JSON.stringify(compositeBody), replyToId }),
   });
 
   if (!currentConversationIsGroup) msg.read = false;
   appendMessageToChat(msg);
-  // Обновляем предпросмотр в списке диалогов
   updateSidebarRow(currentConversationId, text ? text : `📎 ${files.length} файлов`);
   return msg;
 }
@@ -3455,13 +3540,12 @@ function uploadFile(file) {
   });
 }
 
-async function sendGallery(files) {
+async function sendGallery(files, replyToId) {
   const total = files.length;
   const progressId = `gallery-${Date.now()}-${Math.random()}`;
   let completed = 0;
   const uploadedFiles = [];
 
-  // Показываем общий прогресс
   showGalleryProgress(progressId, completed, total);
 
   for (const file of files) {
@@ -3471,13 +3555,11 @@ async function sendGallery(files) {
       completed++;
       updateGalleryProgress(progressId, completed, total);
     } catch (err) {
-      // Ошибка при загрузке файла — прерываем отправку
       removeGalleryProgress(progressId);
       throw new Error(`Failed to upload ${file.name}: ${err.message}`);
     }
   }
 
-  // Все файлы загружены, отправляем сообщение с галереей
   const galleryMessage = {
     type: 'gallery',
     files: uploadedFiles
@@ -3486,12 +3568,9 @@ async function sendGallery(files) {
   try {
     const msg = await api(`/api/conversations/${currentConversationId}/messages`, {
       method: 'POST',
-      body: JSON.stringify({ body: JSON.stringify(galleryMessage) }),
+      body: JSON.stringify({ body: JSON.stringify(galleryMessage), replyToId }),
     });
-
-    if (!currentConversationIsGroup) {
-      msg.read = false;
-    }
+    if (!currentConversationIsGroup) msg.read = false;
     appendMessageToChat(msg);
     updateSidebarRow(currentConversationId, `📷 Галерея (${total} файлов)`);
   } finally {

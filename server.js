@@ -986,7 +986,6 @@ app.get('/api/conversations/:id/messages', authMiddleware, async (req, res) => {
     'SELECT 1 FROM conversation_participants WHERE conversation_id = $1 AND user_id = $2',
     [convId, req.userId]
   );
-
   if (part.rows.length === 0) return res.status(404).json({ error: 'Conversation not found' });
 
   const r = await pool.query(`
@@ -996,32 +995,45 @@ app.get('/api/conversations/:id/messages', authMiddleware, async (req, res) => {
       m.created_at, 
       m.sender_id,
       u.username AS sender_username,
-      (
-        SELECT json_agg(json_build_object(
-          'emoji', r.emoji,
-          'count', r.cnt,
-          'me', r.me
-        ))
-        FROM (
-          SELECT 
-            emoji,
-            COUNT(*) as cnt,
-            bool_or(user_id = $2) as me
-          FROM reactions
-          WHERE message_id = m.id
-          GROUP BY emoji
-        ) r
-      ) AS reactions
+      u.display_name AS sender_display_name,
+      m.reply_to_id,
+      r.body AS reply_body,
+      ru.username AS reply_sender_username,
+      ru.display_name AS reply_sender_display_name,
+      (SELECT json_agg(json_build_object('emoji', r2.emoji, 'count', r2.cnt, 'me', r2.me))
+       FROM (SELECT emoji, COUNT(*) as cnt, bool_or(user_id = $2) as me
+             FROM reactions WHERE message_id = m.id GROUP BY emoji) r2) AS reactions
     FROM messages m
+    LEFT JOIN messages r ON r.id = m.reply_to_id
+    LEFT JOIN users ru ON ru.id = r.sender_id
     JOIN users u ON u.id = m.sender_id
     WHERE m.conversation_id = $1
     ORDER BY m.created_at ASC
   `, [convId, req.userId]);
 
-  const convCheck = await pool.query(
-    'SELECT is_group FROM conversations WHERE id = $1',
-    [convId]
-  );
+  // Преобразуем результат, добавляя поле reply_to
+  const messages = r.rows.map(row => {
+    const msg = {
+      id: row.id,
+      body: row.body,
+      created_at: row.created_at,
+      sender_id: row.sender_id,
+      sender_username: row.sender_username,
+      sender_display_name: row.sender_display_name,
+      reactions: row.reactions || [],
+      reply_to_id: row.reply_to_id
+    };
+    if (row.reply_to_id) {
+      msg.reply_to = {
+        id: row.reply_to_id,
+        body: row.reply_body,
+        senderName: row.reply_sender_display_name || row.reply_sender_username || 'Unknown'
+      };
+    }
+    return msg;
+  });
+
+  const convCheck = await pool.query('SELECT is_group FROM conversations WHERE id = $1', [convId]);
   const isGroup = convCheck.rows[0]?.is_group || false;
   if (!isGroup) {
     const participants = await pool.query(
@@ -1035,21 +1047,21 @@ app.get('/api/conversations/:id/messages', authMiddleware, async (req, res) => {
         [otherUserId, convId]
       );
       const unreadMessageIds = new Set(notifRes.rows.map(row => row.message_id));
-      for (const msg of r.rows) {
+      for (const msg of messages) {
         if (msg.sender_id === req.userId) {
           msg.read = !unreadMessageIds.has(msg.id);
         }
       }
     }
   }
-  res.json(r.rows);
+  res.json(messages);
 });
 
 app.post('/api/conversations/:id/messages', authMiddleware, async (req, res) => {
   const convId = parseInt(req.params.id, 10);
   if (isNaN(convId) || convId <= 0) return res.status(400).json({ error: 'Invalid conversation ID' });
 
-  const { body } = req.body || {};
+  const { body, replyToId } = req.body || {};
   const messageBody = String(body || '').trim();
   if (!messageBody) return res.status(400).json({ error: 'Message body required' });
   if (messageBody.length > 5000) return res.status(400).json({ error: 'Message too long (max 5000 characters)' });
@@ -1058,13 +1070,11 @@ app.post('/api/conversations/:id/messages', authMiddleware, async (req, res) => 
     'SELECT user_id FROM conversation_participants WHERE conversation_id = $1',
     [convId]
   );
-
   if (part.rows.length === 0) return res.status(404).json({ error: 'Conversation not found' });
 
   const isMember = part.rows.some(p => p.user_id === req.userId);
   if (!isMember) return res.status(403).json({ error: 'Not in this conversation' });
 
-  // Получаем информацию о диалоге (is_group и is_channel)
   const convInfo = await pool.query(
     'SELECT is_group, is_channel FROM conversations WHERE id = $1',
     [convId]
@@ -1072,7 +1082,6 @@ app.post('/api/conversations/:id/messages', authMiddleware, async (req, res) => 
   if (convInfo.rows.length === 0) return res.status(404).json({ error: 'Conversation not found' });
   const { is_group: isGroup, is_channel: isChannel } = convInfo.rows[0];
 
-  // Проверка прав для канала
   if (isChannel) {
     const roleCheck = await pool.query(
       'SELECT role FROM conversation_participants WHERE conversation_id = $1 AND user_id = $2',
@@ -1084,48 +1093,69 @@ app.post('/api/conversations/:id/messages', authMiddleware, async (req, res) => 
     }
   }
 
-  // Проверка мута
-  const muteCheck = await pool.query(`
-    SELECT muted_until FROM conversation_participants
-    WHERE conversation_id = $1 AND user_id = $2
-  `, [convId, req.userId]);
-
-  if (muteCheck.rows[0]?.muted_until &&
-      new Date(muteCheck.rows[0].muted_until) > new Date()) {
+  const muteCheck = await pool.query(
+    'SELECT muted_until FROM conversation_participants WHERE conversation_id = $1 AND user_id = $2',
+    [convId, req.userId]
+  );
+  if (muteCheck.rows[0]?.muted_until && new Date(muteCheck.rows[0].muted_until) > new Date()) {
     return res.status(403).json({ error: 'You are muted' });
   }
 
-  // Вставка сообщения
+  // Проверка replyToId
+  let replyToIdNum = replyToId ? parseInt(replyToId, 10) : null;
+  if (replyToIdNum) {
+    const orig = await pool.query('SELECT id, conversation_id FROM messages WHERE id = $1', [replyToIdNum]);
+    if (orig.rows.length === 0) {
+      return res.status(400).json({ error: 'Message to reply does not exist' });
+    }
+    if (orig.rows[0].conversation_id !== convId) {
+      return res.status(400).json({ error: 'Message to reply is not in this conversation' });
+    }
+  }
+
   const ins = await pool.query(
-    'INSERT INTO messages (conversation_id, sender_id, body) VALUES ($1, $2, $3) RETURNING id, body, created_at, sender_id',
-    [convId, req.userId, messageBody]
+    'INSERT INTO messages (conversation_id, sender_id, body, reply_to_id) VALUES ($1, $2, $3, $4) RETURNING id, body, created_at, sender_id',
+    [convId, req.userId, messageBody, replyToIdNum]
   );
   const msg = ins.rows[0];
 
-  // Добавляем поле read для личного чата (новое сообщение не прочитано)
-  if (!isGroup) {
-    msg.read = false;
+  // Получаем полные данные сообщения вместе с reply_to
+  const fullMsg = await pool.query(`
+    SELECT m.id, m.body, m.created_at, m.sender_id, u.username AS sender_username,
+           u.display_name AS sender_display_name,
+           m.reply_to_id, r.body AS reply_body,
+           ru.username AS reply_sender_username, ru.display_name AS reply_sender_display_name
+    FROM messages m
+    JOIN users u ON u.id = m.sender_id
+    LEFT JOIN messages r ON r.id = m.reply_to_id
+    LEFT JOIN users ru ON ru.id = r.sender_id
+    WHERE m.id = $1
+  `, [msg.id]);
+
+  const messageWithReply = fullMsg.rows[0];
+  const resultMsg = {
+    id: messageWithReply.id,
+    body: messageWithReply.body,
+    created_at: messageWithReply.created_at,
+    sender_id: messageWithReply.sender_id,
+    sender_username: messageWithReply.sender_username,
+    sender_display_name: messageWithReply.sender_display_name,
+  };
+  if (messageWithReply.reply_to_id) {
+    resultMsg.reply_to = {
+      id: messageWithReply.reply_to_id,
+      body: messageWithReply.reply_body,
+      senderName: messageWithReply.reply_sender_display_name || messageWithReply.reply_sender_username || 'Unknown'
+    };
   }
 
-  // Имя отправителя
-  const sender = await pool.query('SELECT username FROM users WHERE id = $1', [req.userId]);
-  const senderUsername = sender.rows[0]?.username || '';
-
+  // Отправляем уведомления
+  const otherUserIds = part.rows.filter(p => p.user_id !== req.userId).map(p => p.user_id);
   const payload = {
     type: 'new_message',
     conversationId: convId,
-    message: {
-      id: msg.id,
-      body: msg.body,
-      created_at: msg.created_at,
-      sender_id: msg.sender_id,
-      sender_username: senderUsername,
-      read: msg.read,
-    },
+    message: resultMsg,
   };
-
-  // Отправка уведомлений другим участникам
-  const otherUserIds = part.rows.filter(p => p.user_id !== req.userId).map(p => p.user_id);
 
   for (const uid of otherUserIds) {
     await pool.query(
@@ -1134,17 +1164,16 @@ app.post('/api/conversations/:id/messages', authMiddleware, async (req, res) => 
     );
     broadcastToUser(uid, payload);
   }
+
   const pushPayload = {
-    title: `New message from ${senderUsername}`,
+    title: `New message from ${resultMsg.sender_username}`,
     body: messageBody.length > 100 ? messageBody.slice(0, 97) + '...' : messageBody,
-    icon: '/images/logo.png',  // make sure this file exists
-    data: {
-      conversationId: convId,
-      messageId: msg.id,
-    },
+    icon: '/images/logo.png',
+    data: { conversationId: convId, messageId: msg.id },
   };
   sendPushNotifications(otherUserIds, pushPayload).catch(console.error);
-  res.status(201).json(payload.message);
+
+  res.status(201).json(resultMsg);
 });
 
 // Legacy DM endpoints (совместимость)
@@ -2010,6 +2039,9 @@ async function main() {
     await pool.query(`
       ALTER TABLE users
       ADD COLUMN IF NOT EXISTS last_seen TIMESTAMPTZ DEFAULT NOW()
+    `);
+    await pool.query(`
+      ALTER TABLE messages ADD COLUMN IF NOT EXISTS reply_to_id INTEGER REFERENCES messages(id) ON DELETE SET NULL
     `);
     console.log('Database ready');
 

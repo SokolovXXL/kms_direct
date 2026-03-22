@@ -2134,3 +2134,76 @@ body {
     max-width: 95%;
   }
 }
+
+/* Плашка ответа в сообщении */
+.message-reply-preview {
+  background: var(--surface-hover);
+  border-left: 3px solid var(--accent);
+  border-radius: 8px;
+  padding: 6px 10px;
+  margin-bottom: 8px;
+  font-size: 0.85rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: background 0.1s;
+}
+.message-reply-preview:hover {
+  background: var(--border);
+}
+.reply-icon {
+  opacity: 0.7;
+}
+.message-reply-preview strong {
+  font-weight: 600;
+  margin-right: 4px;
+}
+.message-reply-preview span {
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Плашка ответа в поле ввода */
+.reply-preview {
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  padding: 8px 16px;
+  font-size: 0.85rem;
+}
+.reply-preview-content {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.reply-icon {
+  font-size: 1.2rem;
+}
+.reply-info {
+  flex: 1;
+  overflow: hidden;
+}
+.reply-info strong {
+  display: block;
+  font-weight: 600;
+}
+.reply-info span {
+  display: block;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.reply-cancel {
+  background: none;
+  border: none;
+  font-size: 1.2rem;
+  cursor: pointer;
+  color: var(--text-muted);
+  padding: 4px;
+}
+.reply-cancel:hover {
+  color: var(--danger);
+}
