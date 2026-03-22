@@ -2423,7 +2423,6 @@ async function showGroupInfo(groupId, groupTitle) {
         }
         
         if (actionsDiv.children.length > 0) {
-          actionsDiv.style.marginLeft = 'auto';
           li.appendChild(actionsDiv);
         }
       }
