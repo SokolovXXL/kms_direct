@@ -177,6 +177,94 @@ function createScrollDownButton() {
 }
 
 let scrollDownBtn = null;
+let filePreviewList;
+let fileTypeMenu;
+let currentFileInputAccept = 'image/*,video/*'; // по умолчанию фото/видео
+
+function renderFilePreviews() {
+  if (!filePreviewList) return;
+  filePreviewList.innerHTML = '';
+  if (pendingFiles.length === 0) {
+    filePreviewList.style.display = 'none';
+    return;
+  }
+  filePreviewList.style.display = 'flex';
+  for (let i = 0; i < pendingFiles.length; i++) {
+    const file = pendingFiles[i];
+    const item = document.createElement('div');
+    item.className = 'file-preview-item';
+    item.dataset.index = i;
+
+    // Создаём превью
+    if (file.type.startsWith('image/')) {
+      const img = document.createElement('img');
+      const url = URL.createObjectURL(file);
+      img.src = url;
+      img.onload = () => URL.revokeObjectURL(url);
+      item.appendChild(img);
+    } else if (file.type.startsWith('video/')) {
+      const video = document.createElement('video');
+      const url = URL.createObjectURL(file);
+      video.src = url;
+      video.muted = true;
+      video.autoplay = false;
+      video.onloadeddata = () => URL.revokeObjectURL(url);
+      item.appendChild(video);
+    } else {
+      const iconDiv = document.createElement('div');
+      iconDiv.className = 'file-icon';
+      iconDiv.textContent = getFileIcon(file.type);
+      item.appendChild(iconDiv);
+    }
+
+    // Имя файла
+    const nameSpan = document.createElement('div');
+    nameSpan.className = 'file-name';
+    nameSpan.textContent = file.name.length > 15 ? file.name.slice(0, 12) + '…' : file.name;
+    item.appendChild(nameSpan);
+
+    // Кнопка удаления
+    const removeBtn = document.createElement('div');
+    removeBtn.className = 'remove-file';
+    removeBtn.textContent = '✕';
+    removeBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      pendingFiles.splice(i, 1);
+      renderFilePreviews();
+    });
+    item.appendChild(removeBtn);
+
+    filePreviewList.appendChild(item);
+  }
+}
+
+function showFileTypeMenu(buttonElement) {
+  if (!fileTypeMenu) return;
+  const rect = buttonElement.getBoundingClientRect();
+  const menuWidth = fileTypeMenu.offsetWidth || 150;
+  let left = rect.left;
+  let top = rect.bottom + 5;
+
+  if (left + menuWidth > window.innerWidth - 10) {
+    left = window.innerWidth - menuWidth - 10;
+  }
+  if (top + 100 > window.innerHeight - 10) {
+    top = rect.top - 100;
+  }
+
+  fileTypeMenu.style.left = left + 'px';
+  fileTypeMenu.style.top = top + 'px';
+  fileTypeMenu.classList.remove('hidden');
+
+  // Закрытие по клику вне
+  const closeMenu = (e) => {
+    if (!fileTypeMenu.contains(e.target) && e.target !== buttonElement) {
+      fileTypeMenu.classList.add('hidden');
+      document.removeEventListener('click', closeMenu);
+    }
+  };
+  setTimeout(() => document.addEventListener('click', closeMenu), 0);
+}
 
 function setupScrollListener() {
   const container = $('chat-messages-wrapper');
@@ -1509,7 +1597,7 @@ if (sendForm) {
 
     const body = input.value.trim();
     const files = pendingFiles.splice(0);
-    
+    renderFilePreviews();
     if (!body && files.length === 0) return;
 
     try {
@@ -1534,6 +1622,7 @@ if (sendForm) {
       
       for (const file of files) {
         await sendFileWithProgress(file, currentConversationId);
+        renderFilePreviews();
       }
 
       requestAnimationFrame(() => {
@@ -2530,46 +2619,54 @@ if (modalAddMember) {
 // ---- FILE HANDLING ----
 const MAX_FILE_SIZE = 1024 * 1024 * 1024; // 1 GB
 
-const fileInput = $('file-input');
-const fileInfo = $('fileInfo');
+const fileLabel = document.getElementById('file-label');
+const fileInput = document.getElementById('file-input');
 
-if (fileInput) {
+if (fileLabel && fileInput) {
+  fileLabel.addEventListener('click', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    showFileTypeMenu(fileLabel);
+  });
+
+  // Обработчики для кнопок меню
+  const mediaBtn = document.querySelector('#file-type-menu button[data-type="media"]');
+  const allBtn = document.querySelector('#file-type-menu button[data-type="all"]');
+  if (mediaBtn) {
+    mediaBtn.addEventListener('click', () => {
+      fileInput.accept = 'image/*,video/*';
+      fileInput.click();
+      fileTypeMenu.classList.add('hidden');
+    });
+  }
+  if (allBtn) {
+    allBtn.addEventListener('click', () => {
+      fileInput.accept = '*/*';
+      fileInput.click();
+      fileTypeMenu.classList.add('hidden');
+    });
+  }
+
   fileInput.addEventListener('change', async (e) => {
     const files = Array.from(e.target.files);
     if (files.length === 0) return;
-    
-    const validFiles = [];
+
     for (const file of files) {
       if (file.size > MAX_FILE_SIZE) {
         alert(`File "${file.name}" is too large (max ${MAX_FILE_SIZE / 1024 / 1024}MB)`);
         continue;
       }
-      validFiles.push(file);
+      pendingFiles.push(file);
     }
-    
-    if (validFiles.length === 0) return;
-    
-    pendingFiles.push(...validFiles);
-    
-    if (fileInfo) {
-      const fileNames = validFiles.map(f => f.name).join(', ');
-      fileInfo.innerHTML = `
-        <div style="color: var(--accent); padding: 4px 0;">
-          📎 Selected: ${fileNames}
-          <button onclick="window.clearSelectedFiles()" style="margin-left: 8px; padding: 2px 8px; background: var(--surface-hover); border: 1px solid var(--border); border-radius: 4px; cursor: pointer;">Clear</button>
-        </div>
-      `;
-    }
-    
-    e.target.value = '';
+
+    renderFilePreviews();
+    e.target.value = ''; // очистить input, чтобы можно было выбрать те же файлы повторно
   });
 }
 
 window.clearSelectedFiles = function() {
   pendingFiles = [];
-  if (fileInfo) {
-    fileInfo.innerHTML = '';
-  }
+  renderFilePreviews();
 };
 
 function showUploadProgress(file, progressId) {
@@ -3511,6 +3608,8 @@ window.addEventListener('resize', () => {
 // ---- Initialization ----
 document.addEventListener('DOMContentLoaded', () => {
   console.log('DOM loaded, initializing app');
+  filePreviewList = document.getElementById('file-preview-list');
+  fileTypeMenu = document.getElementById('file-type-menu');
   
   scrollDownBtn = createScrollDownButton();
   setupScrollListener();

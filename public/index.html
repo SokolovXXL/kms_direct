@@ -77,13 +77,19 @@
             </div>
             <form id="send-form" class="send-form">
               <input type="text" id="message-input" placeholder="Type a message..." autocomplete="off" />
-              <label for="file-input" style="cursor:pointer;background:var(--surface-hover);border:none;padding:0.5rem 1rem;border-radius:4px;color:var(--text);text-align:center;">
+              <label for="file-input" id="file-label" style="cursor:pointer;background:var(--surface-hover);border:none;padding:0.5rem 1rem;border-radius:4px;color:var(--text);text-align:center;">
                 <img src="/images/file.png" alt="Attach" style="width:18px; height:18px; vertical-align:middle;"> File
               </label>
               <input type="file" id="file-input" multiple style="display:none;" />
               <button type="submit">Send</button>
             </form>
-            <div id="fileInfo" style="color: gray; font-size: 12px;"></div>
+            <div id="file-preview-list" style="display: flex; flex-wrap: wrap; gap: 8px; padding: 8px 16px; background: var(--surface); border-top: 1px solid var(--border);"></div>
+            <div id="file-type-menu" class="file-type-menu hidden">
+              <div class="file-type-menu-content">
+                <button type="button" data-type="media">📷 Фото и видео</button>
+                <button type="button" data-type="all">📄 Другие файлы</button>
+              </div>
+            </div>
             <audio id="remote-audio-stream" autoplay></audio>
           </div>
         </main>
