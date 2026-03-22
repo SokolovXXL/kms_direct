@@ -240,23 +240,27 @@ function renderFilePreviews() {
 
 function showFileTypeMenu(buttonElement) {
   if (!fileTypeMenu) return;
+
+  // Временно показываем меню, чтобы измерить его реальные размеры
+  fileTypeMenu.classList.remove('hidden');
+  const menuWidth = fileTypeMenu.offsetWidth;
+  const menuHeight = fileTypeMenu.offsetHeight;
+  fileTypeMenu.classList.add('hidden');
+
   const rect = buttonElement.getBoundingClientRect();
-  const menuWidth = fileTypeMenu.offsetWidth || 150;
-  const menuHeight = fileTypeMenu.offsetHeight || 100;
-  const margin = 10; // отступ от края экрана
+  const margin = 10;
 
   let left, top;
   const spaceAbove = rect.top;
   const spaceBelow = window.innerHeight - rect.bottom;
 
-  // Решаем, открывать вверх или вниз
   let openUp = false;
   if (spaceAbove >= menuHeight + margin) {
     openUp = true;
   } else if (spaceBelow >= menuHeight + margin) {
     openUp = false;
   } else {
-    openUp = spaceAbove >= spaceBelow; // где больше места
+    openUp = spaceAbove >= spaceBelow;
   }
 
   if (openUp) {
@@ -269,7 +273,6 @@ function showFileTypeMenu(buttonElement) {
     }
   }
 
-  // Горизонтальное центрирование относительно кнопки, но с учётом краёв
   left = rect.left + (rect.width / 2) - (menuWidth / 2);
   if (left < margin) left = margin;
   if (left + menuWidth > window.innerWidth - margin) {
@@ -280,7 +283,6 @@ function showFileTypeMenu(buttonElement) {
   fileTypeMenu.style.top = top + 'px';
   fileTypeMenu.classList.remove('hidden');
 
-  // Закрытие по клику вне
   const closeMenu = (e) => {
     if (!fileTypeMenu.contains(e.target) && e.target !== buttonElement) {
       fileTypeMenu.classList.add('hidden');
