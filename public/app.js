@@ -243,26 +243,38 @@ function showFileTypeMenu(buttonElement) {
   const rect = buttonElement.getBoundingClientRect();
   const menuWidth = fileTypeMenu.offsetWidth || 150;
   const menuHeight = fileTypeMenu.offsetHeight || 100;
+  const margin = 10; // отступ от края экрана
 
-  let left = rect.left;
-  let top;
-
-  // Определяем, достаточно ли места сверху
+  let left, top;
   const spaceAbove = rect.top;
   const spaceBelow = window.innerHeight - rect.bottom;
 
-  // Предпочитаем открывать вверх, если есть место, иначе вниз
-  if (spaceAbove >= menuHeight + 10) {
-    top = rect.top - menuHeight - 5;
+  // Решаем, открывать вверх или вниз
+  let openUp = false;
+  if (spaceAbove >= menuHeight + margin) {
+    openUp = true;
+  } else if (spaceBelow >= menuHeight + margin) {
+    openUp = false;
   } else {
-    top = rect.bottom + 5;
+    openUp = spaceAbove >= spaceBelow; // где больше места
   }
 
-  // Корректировка по горизонтали, чтобы меню не выходило за правый край
-  if (left + menuWidth > window.innerWidth - 10) {
-    left = window.innerWidth - menuWidth - 10;
+  if (openUp) {
+    top = rect.top - menuHeight - 5;
+    if (top < margin) top = margin;
+  } else {
+    top = rect.bottom + 5;
+    if (top + menuHeight > window.innerHeight - margin) {
+      top = window.innerHeight - menuHeight - margin;
+    }
   }
-  if (left < 10) left = 10;
+
+  // Горизонтальное центрирование относительно кнопки, но с учётом краёв
+  left = rect.left + (rect.width / 2) - (menuWidth / 2);
+  if (left < margin) left = margin;
+  if (left + menuWidth > window.innerWidth - margin) {
+    left = window.innerWidth - menuWidth - margin;
+  }
 
   fileTypeMenu.style.left = left + 'px';
   fileTypeMenu.style.top = top + 'px';
