@@ -2363,40 +2363,21 @@ async function showGroupInfo(groupId, groupTitle) {
               });
               actionsDiv.appendChild(unmuteBtn);
             } else {
-              const muteContainer = document.createElement('div');
-              muteContainer.style.display = 'flex';
-              muteContainer.style.alignItems = 'center';
-              muteContainer.style.gap = '4px';
 
-              const muteIcon = document.createElement('img');
-              muteIcon.src = '/images/mute.png';
-              muteIcon.alt = 'Mute';
-              muteIcon.style.width = '16px';
-              muteIcon.style.height = '16px';
-              muteContainer.appendChild(muteIcon);
+              const muteBtn = document.createElement('button');
+              muteBtn.className = 'admin-action-btn';
+              muteBtn.title = 'Mute for 10 minutes';
 
-              const muteSelect = document.createElement('select');
-              muteSelect.className = 'admin-action-btn';
-              muteSelect.style.padding = '4px 8px';
+              const muteImg = document.createElement('img');
+              muteImg.src = '/images/mute.png';
+              muteImg.alt = 'Mute';
+              muteImg.style.width = '20px';
+              muteImg.style.height = '20px';
+              muteBtn.appendChild(muteImg);
 
-              const durations = [
-                { value: 5, label: '5 мин' },
-                { value: 10, label: '10 мин' },
-                { value: 30, label: '30 мин' },
-                { value: 60, label: '1 час' },
-                { value: 1440, label: '24 часа' }
-              ];
-
-              durations.forEach(d => {
-                const option = document.createElement('option');
-                option.value = d.value;
-                option.textContent = d.label;
-                muteSelect.appendChild(option);
-              });
-
-              muteSelect.addEventListener('change', async (e) => {
+              muteBtn.addEventListener('click', async (e) => {
                 e.stopPropagation();
-                const minutes = parseInt(muteSelect.value, 10);
+                const minutes = 10; // фиксированная длительность
                 try {
                   await api(`/api/groups/${groupId}/mute`, {
                     method: 'POST',
@@ -2407,9 +2388,7 @@ async function showGroupInfo(groupId, groupTitle) {
                   alert(err.message);
                 }
               });
-
-              muteContainer.appendChild(muteSelect);
-              actionsDiv.appendChild(muteContainer);
+              actionsDiv.appendChild(muteBtn);
             }
           }
           
