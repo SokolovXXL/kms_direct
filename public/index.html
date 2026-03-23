@@ -1,18 +1,19 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ru">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
-  <meta name="referrer" content="strict-origin-when-cross-origin">
-  <meta name="vapid-public-key" content="BIBfRyaglcWeBura_wosiaOfXnwBflmMntf_LjxmJpDc1He1t4-rrDTtgIJg9ASwcX1U5k8ccAN1cGmH9VMzox0">
-  <title>Messenger</title>
+  <meta name="referrer" content="strict-origin-when-cross-origin" />
+  <meta name="vapid-public-key" content="BIBfRyaglcWeBura_wosiaOfXnwBflmMntf_LjxmJpDc1He1t4-rrDTtgIJg9ASwcX1U5k8ccAN1cGmH9VMzox0" />
+  <title>Мессенджер</title>
   <link rel="stylesheet" href="/style.css" />
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&display=swap" rel="stylesheet">
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&display=swap" rel="stylesheet" />
 </head>
 <body>
   <div id="app">
+    <!-- Экран авторизации -->
     <div id="auth-screen">
       <div class="auth-card glass">
         <div class="auth-tabs">
@@ -33,35 +34,36 @@
       </div>
     </div>
 
+    <!-- Основной интерфейс -->
     <div id="main-screen" class="hidden">
       <header class="header">
         <button type="button" class="btn-menu" id="btn-menu">
-          <img src="/images/menu.png" alt="Menu" style="width:24px; height:24px;">
+          <img src="/images/menu.png" alt="Меню" style="width:24px; height:24px;" />
         </button>
-        <img src="/images/ksmgif.gif" alt="Messenger" class="logo" />
+        <img src="/images/ksmgif.gif" alt="Мессенджер" class="logo" />
         <span class="user-name" id="header-username"></span>
-        <button type="button" class="btn-header" id="btn-friends">Friends</button>
-        <button type="button" class="btn-header" id="btn-groups">Groups</button>
-        <button type="button" class="btn-logout" id="btn-logout">Sign out</button>
+        <button type="button" class="btn-header" id="btn-friends">Друзья</button>
+        <button type="button" class="btn-header" id="btn-groups">Группы</button>
+        <button type="button" class="btn-logout" id="btn-logout">Выйти</button>
       </header>
       <div class="layout">
         <aside class="sidebar" id="sidebar">
           <div class="sidebar-actions">
-            <button type="button" class="btn-primary" id="btn-create-group-btn" style="background:var(--surface-hover); color:var(--text);">Create group</button>
-            <button type="button" class="btn-primary" id="btn-create-channel" style="background:var(--surface-hover); color:var(--text); margin-top:0.5rem;">Create channel</button>
+            <button type="button" class="btn-primary" id="btn-create-group-btn" style="background:var(--surface-hover); color:var(--text);">Создать группу</button>
+            <button type="button" class="btn-primary" id="btn-create-channel" style="background:var(--surface-hover); color:var(--text); margin-top:0.5rem;">Создать канал</button>
           </div>
           <div id="dm-list" class="dm-list"></div>
         </aside>
         <main class="chat-area" id="chat-area">
           <div id="chat-placeholder" class="placeholder">
-            <p>Select a conversation or start a new message</p>
+            <p>Выберите чат или начните новое сообщение</p>
           </div>
           <div id="chat-active" class="hidden">
             <div class="chat-header" id="chat-header">
               <span id="chat-with-name"></span>
               <span id="chat-status" class="chat-status"></span>
-              <button type="button" class="btn-header" id="btn-call" title="Start call" style="margin-left:auto;background:none;border:none;color:var(--text);font-size:1.2rem;cursor:pointer;padding:0 10px;display:none;">
-                <img src="/images/call.png" alt="Call" style="width:20px; height:20px;">
+              <button type="button" class="btn-header" id="btn-call" title="Начать звонок" style="margin-left:auto;background:none;border:none;color:var(--text);font-size:1.2rem;cursor:pointer;padding:0 10px;display:none;">
+                <img src="/images/call.png" alt="Звонок" style="width:20px; height:20px;" />
               </button>
             </div>
             <div class="chat-messages-wrapper" id="chat-messages-wrapper">
@@ -72,7 +74,7 @@
             <div id="call-status-bar" class="hidden" style="background:var(--surface-hover);padding:0.75rem;text-align:center;border-top:1px solid var(--border);font-size:0.9rem;">
               <span id="call-status-text"></span>
               <button type="button" id="btn-end-call" style="margin-left:1rem;padding:0.25rem 0.75rem;background:var(--danger);color:white;border:none;border-radius:4px;cursor:pointer;">
-                <img src="/images/end.png" alt="End call" style="width:16px; height:16px;">
+                <img src="/images/end.png" alt="Завершить звонок" style="width:16px; height:16px;" />
               </button>
             </div>
             <form id="send-form" class="send-form">
@@ -86,13 +88,13 @@
                   <button id="reply-cancel" class="reply-cancel">✕</button>
                 </div>
               </div>
-              <input type="text" id="message-input" placeholder="Type a message..." autocomplete="off" />
+              <input type="text" id="message-input" placeholder="Введите сообщение..." autocomplete="off" />
               <label for="file-input" id="file-label" style="cursor:pointer;background:var(--surface-hover);border:none;padding:0.5rem 1rem;border-radius:4px;color:var(--text);text-align:center;">
-                <img src="/images/file.png" alt="Attach" style="width:18px; height:18px; vertical-align:middle;"> File
+                <img src="/images/file.png" alt="Файл" style="width:18px; height:18px; vertical-align:middle;" /> Файл
               </label>
               <input type="file" id="file-input" multiple style="display:none;" />
               <button type="submit">
-                <img src="/images/send.png" alt="Send" style="width:20px; height:20px; vertical-align:middle;">
+                <img src="/images/send.png" alt="Отправить" style="width:20px; height:20px; vertical-align:middle;" />
               </button>
             </form>
             <div id="file-preview-list" style="display: flex; flex-wrap: wrap; gap: 8px; padding: 8px 16px; background: var(--surface); border-top: 1px solid var(--border);"></div>
@@ -108,100 +110,96 @@
       </div>
     </div>
 
+    <!-- Модалка: друзья -->
     <div id="modal-friends" class="modal hidden">
       <div class="modal-content">
-        <h2>Friends</h2>
-        <p class="friend-code-row">My friend code: <strong id="my-friend-code"></strong> <button type="button" class="btn-copy" id="btn-copy-code">Copy</button></p>
-        <label class="add-friend-label">Add friend by code</label>
+        <h2>Друзья</h2>
+        <p class="friend-code-row">Мой код друга: <strong id="my-friend-code"></strong> <button type="button" class="btn-copy" id="btn-copy-code">Копировать</button></p>
+        <label class="add-friend-label">Добавить друга по коду</label>
         <div class="add-friend-row">
-          <input type="text" id="friend-code-input" placeholder="Paste friend code" />
-          <button type="button" class="btn-primary" id="btn-add-friend">Add</button>
+          <input type="text" id="friend-code-input" placeholder="Вставьте код друга" />
+          <button type="button" class="btn-primary" id="btn-add-friend">Добавить</button>
         </div>
         <p id="friends-error" class="auth-error"></p>
         <ul id="friends-list" class="user-list"></ul>
-        <div class="modal-actions">
-        </div>
+        <div class="modal-actions"></div>
       </div>
     </div>
 
+    <!-- Модалка: подтверждение удаления аккаунта -->
     <div id="modal-delete-confirm" class="modal hidden">
       <div class="modal-content">
-        <h2>Delete account</h2>
-        <p>This cannot be undone. Enter your password to confirm.</p>
-        <input type="password" id="delete-password" placeholder="Your password" />
+        <h2>Удаление аккаунта</h2>
+        <p>Это действие нельзя отменить. Введите пароль для подтверждения.</p>
+        <input type="password" id="delete-password" placeholder="Ваш пароль" />
         <p id="delete-error" class="auth-error"></p>
         <div class="modal-actions">
-          <button type="button" class="btn-danger" id="btn-confirm-delete">Delete my account</button>
+          <button type="button" class="btn-danger" id="btn-confirm-delete">Удалить мой аккаунт</button>
         </div>
       </div>
     </div>
+
+    <!-- Модалка: создание группы -->
     <div id="modal-create-group" class="modal hidden">
       <div class="modal-content">
-        <h2>Create group</h2>
-        <p>Select friends to add</p>
-        
-        <input type="text" id="group-title" placeholder="Group name" style="width:100%; margin-bottom:1rem; padding:0.75rem; background:var(--bg); border:1px solid var(--border); border-radius:8px; color:var(--text);" />
-        
-        <div style="margin-bottom:0.5rem; color:var(--text-muted); font-size:0.9rem;">Select friends:</div>
+        <h2>Создать группу</h2>
+        <p>Выберите друзей для добавления</p>
+        <input type="text" id="group-title" placeholder="Название группы" style="width:100%; margin-bottom:1rem; padding:0.75rem; background:var(--bg); border:1px solid var(--border); border-radius:8px; color:var(--text);" />
+        <div style="margin-bottom:0.5rem; color:var(--text-muted); font-size:0.9rem;">Выберите друзей:</div>
         <ul id="group-friends-list" class="user-list" style="max-height:200px;"></ul>
-        
         <p id="group-error" class="auth-error"></p>
-        
         <div class="modal-actions">
-          <button type="button" class="btn-primary" id="btn-create-group">Create group</button>
+          <button type="button" class="btn-primary" id="btn-create-group">Создать группу</button>
         </div>
       </div>
     </div>
-    
-    <!-- Модалка профиля (было) -->
+
+    <!-- Модалка: настройки профиля -->
     <div id="modal-profile" class="modal hidden">
       <div class="modal-content">
-        <h2>Profile settings</h2>
-        <p>Change your display name (how others see you)</p>
-        <input type="text" id="profile-display-name" placeholder="Display name" maxlength="50" />
+        <h2>Настройки профиля</h2>
+        <p>Измените отображаемое имя (как вас видят другие)</p>
+        <input type="text" id="profile-display-name" placeholder="Отображаемое имя" maxlength="50" />
         <p id="profile-error" class="auth-error"></p>
-        <!-- Новая секция с кнопкой удаления аккаунта -->
         <div class="delete-account-section" style="margin-top: 1.5rem; border-top: 1px solid var(--border); padding-top: 1rem;">
-          <p style="color: var(--text-muted); font-size: 0.85rem; margin-bottom: 0.5rem;">Danger zone</p>
-          <button type="button" class="btn-danger" id="btn-delete-account" style="width: 100%;">Delete account</button>
+          <p style="color: var(--text-muted); font-size: 0.85rem; margin-bottom: 0.5rem;">Опасная зона</p>
+          <button type="button" class="btn-danger" id="btn-delete-account" style="width: 100%;">Удалить аккаунт</button>
         </div>
         <div class="modal-actions">
-          <button type="button" class="btn-primary" id="btn-save-display-name">Save</button>
+          <button type="button" class="btn-primary" id="btn-save-display-name">Сохранить</button>
         </div>
       </div>
     </div>
 
-    <!-- Modal: Group info (view members) -->
+    <!-- Модалка: информация о группе (участники) -->
     <div id="modal-group-info" class="modal hidden">
       <div class="modal-content">
-        <h2 id="group-info-title">Group</h2>
-        <p>Members:</p>
+        <h2 id="group-info-title">Группа</h2>
+        <p>Участники:</p>
         <ul id="group-members-list" class="user-list" style="max-height:200px;"></ul>
-        
         <div class="modal-actions">
-          <button type="button" class="btn-primary" id="btn-add-member">Add member</button>
+          <button type="button" class="btn-primary" id="btn-add-member">Добавить участника</button>
         </div>
       </div>
     </div>
 
-    <!-- Modal: Add member to group -->
+    <!-- Модалка: добавить участника в группу -->
     <div id="modal-add-member" class="modal hidden">
       <div class="modal-content">
-        <h2>Add member</h2>
-        <p>Select a friend to add:</p>
+        <h2>Добавить участника</h2>
+        <p>Выберите друга для добавления:</p>
         <ul id="add-member-list" class="user-list" style="max-height:200px;"></ul>
         <p id="add-member-error" class="auth-error"></p>
-        <div class="modal-actions">
-        </div>
+        <div class="modal-actions"></div>
       </div>
     </div>
-    
+
     <!-- Контекстное меню сообщения -->
     <div id="message-context-menu" class="context-menu hidden">
       <div class="context-menu-arrow"></div>
       <div class="context-menu-content">
         <div class="context-menu-reactions">
-          <!-- Эмодзи будут вставлены динамически через JavaScript -->
+          <!-- Эмодзи вставляются через JS -->
         </div>
         <div class="context-menu-actions">
           <div class="context-menu-item" data-action="copy">Копировать</div>
@@ -210,21 +208,24 @@
       </div>
     </div>
 
+    <!-- Всплывающие уведомления -->
     <div id="notification-toast" class="toast hidden"></div>
     <div id="notification-badge" class="badge hidden">0</div>
   </div>
+
+  <!-- Панель выбора эмодзи -->
   <div id="emoji-picker" class="emoji-picker hidden">
     <div class="emoji-picker-content">
-      <!-- Emoji buttons will be inserted here -->
+      <!-- Эмодзи будут вставлены динамически -->
     </div>
   </div>
-  <!-- Modal: Groups list -->
+
+  <!-- Модалка: список групп -->
   <div id="modal-groups-list" class="modal hidden">
     <div class="modal-content">
-      <h2>Your groups</h2>
+      <h2>Ваши группы</h2>
       <ul id="groups-list" class="user-list" style="max-height:300px;"></ul>
-      <div class="modal-actions">
-      </div>
+      <div class="modal-actions"></div>
     </div>
   </div>
   <script src="/app.js"></script>
