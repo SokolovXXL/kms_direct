@@ -411,6 +411,41 @@ app.post('/api/display-name', authMiddleware, async (req, res) => {
   res.json({ displayName: trimmedName });
 });
 
+// Смена пароля
+app.post('/api/change-password', authMiddleware, async (req, res) => {
+  const { oldPassword, newPassword } = req.body || {};
+  const trimmedOld = oldPassword ? oldPassword.trim() : '';
+  const trimmedNew = newPassword ? newPassword.trim() : '';
+
+  if (!trimmedOld || !trimmedNew) {
+    return res.status(400).json({ error: 'Старый и новый пароль обязательны' });
+  }
+
+  if (trimmedNew.length < 6 || trimmedNew.length > 72) {
+    return res.status(400).json({ error: 'Новый пароль должен быть от 6 до 72 символов' });
+  }
+
+  // Получаем текущий хеш пароля пользователя
+  const userRes = await pool.query('SELECT password_hash FROM users WHERE id = $1', [req.userId]);
+  if (userRes.rows.length === 0) {
+    return res.status(404).json({ error: 'Пользователь не найден' });
+  }
+
+  const user = userRes.rows[0];
+  const isValid = await bcrypt.compare(trimmedOld, user.password_hash);
+  if (!isValid) {
+    return res.status(401).json({ error: 'Неверный старый пароль' });
+  }
+
+  // Генерируем новый хеш
+  const newHash = await bcrypt.hash(trimmedNew, 10);
+  await pool.query('UPDATE users SET password_hash = $1 WHERE id = $2', [newHash, req.userId]);
+
+  // Необязательно: сбросить все сессии – удалим куку на клиенте
+  // На сервере просто возвращаем успех, клиент сам выйдет
+  res.json({ success: true });
+});
+
 // ---- Delete account ----
 app.delete('/api/account', authMiddleware, async (req, res) => {
   const { password } = req.body || {};

@@ -161,6 +161,15 @@
         <p>Измените отображаемое имя (как вас видят другие)</p>
         <input type="text" id="profile-display-name" placeholder="Отображаемое имя" maxlength="50" />
         <p id="profile-error" class="auth-error"></p>
+        <!-- Смена пароля -->
+        <div style="margin-top: 1rem; border-top: 1px solid var(--border); padding-top: 1rem;">
+          <h3 style="margin-bottom: 0.5rem;">Смена пароля</h3>
+          <input type="password" id="old-password" placeholder="Старый пароль" style="width:100%; margin-bottom:0.5rem; padding:0.75rem; background:var(--bg); border:1px solid var(--border); border-radius:8px; color:var(--text);" />
+          <input type="password" id="new-password" placeholder="Новый пароль (мин. 6 символов)" style="width:100%; margin-bottom:0.5rem; padding:0.75rem; background:var(--bg); border:1px solid var(--border); border-radius:8px; color:var(--text);" />
+          <input type="password" id="confirm-password" placeholder="Подтвердите новый пароль" style="width:100%; margin-bottom:0.5rem; padding:0.75rem; background:var(--bg); border:1px solid var(--border); border-radius:8px; color:var(--text);" />
+          <button type="button" class="btn-primary" id="btn-change-password" style="background:var(--surface-hover); color:var(--text); margin-top:0.5rem;">Сменить пароль</button>
+          <p id="password-change-error" class="auth-error"></p>
+        </div>
         <div class="delete-account-section" style="margin-top: 1.5rem; border-top: 1px solid var(--border); padding-top: 1rem;">
           <p style="color: var(--text-muted); font-size: 0.85rem; margin-bottom: 0.5rem;">Опасная зона</p>
           <button type="button" class="btn-danger" id="btn-delete-account" style="width: 100%;">Удалить аккаунт</button>

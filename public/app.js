@@ -2107,6 +2107,73 @@ const modalProfile = $('modal-profile');
 const btnSaveDisplayName = $('btn-save-display-name');
 const profileDisplayNameInput = $('profile-display-name');
 const profileError = $('profile-error');
+const btnChangePassword = document.getElementById('btn-change-password');
+const oldPasswordInput = document.getElementById('old-password');
+const newPasswordInput = document.getElementById('new-password');
+const confirmPasswordInput = document.getElementById('confirm-password');
+const passwordChangeError = document.getElementById('password-change-error');
+
+if (btnChangePassword) {
+  btnChangePassword.addEventListener('click', async () => {
+    passwordChangeError.textContent = '';
+    const oldPassword = oldPasswordInput.value.trim();
+    const newPassword = newPasswordInput.value.trim();
+    const confirmPassword = confirmPasswordInput.value.trim();
+
+    if (!oldPassword || !newPassword || !confirmPassword) {
+      passwordChangeError.textContent = 'Все поля обязательны для заполнения';
+      return;
+    }
+
+    if (newPassword.length < 6) {
+      passwordChangeError.textContent = 'Новый пароль должен содержать минимум 6 символов';
+      return;
+    }
+
+    if (newPassword !== confirmPassword) {
+      passwordChangeError.textContent = 'Пароли не совпадают';
+      return;
+    }
+
+    try {
+      await api('/api/change-password', {
+        method: 'POST',
+        body: JSON.stringify({ oldPassword, newPassword })
+      });
+
+      // Очищаем поля
+      oldPasswordInput.value = '';
+      newPasswordInput.value = '';
+      confirmPasswordInput.value = '';
+
+      // Успешное уведомление
+      showToast('Пароль успешно изменён. Пожалуйста, войдите снова.', 'success');
+
+      // Выход из системы
+      if (callActive) await endCall();
+      if (signalingChannel) {
+        signalingChannel.close();
+        signalingChannel = null;
+      }
+
+      try {
+        await api('/api/logout', { method: 'POST' });
+      } catch (_) {}
+
+      currentUser = null;
+      localStorage.removeItem('user');
+      localStorage.removeItem('lastConversationId');
+      currentConversationId = null;
+      renderScreen();
+
+      // Закрыть модалку профиля
+      hide(modalProfile);
+
+    } catch (err) {
+      passwordChangeError.textContent = err.message || 'Ошибка при смене пароля';
+    }
+  });
+}
 
 if (btnMenu) {
   btnMenu.addEventListener('click', () => {
