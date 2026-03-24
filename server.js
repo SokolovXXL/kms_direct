@@ -94,7 +94,7 @@ const sseConnectionLimiter = rateLimit({
   windowMs: 60 * 1000,
   max: 10,
   keyGenerator: (req) => req.userId ? String(req.userId) : req.ip,
-  message: { error: 'Too many SSE connections, please try again later.' },
+  message: { error: 'Слишком много SSE-соединений, please try again later.' },
   standardHeaders: true,
   legacyHeaders: false,
 });
@@ -191,7 +191,7 @@ function authMiddleware(req, res, next) {
   }
 
   if (!token) {
-    return res.status(401).json({ error: 'Not authenticated' });
+    return res.status(401).json({ error: 'Не авторизован' });
   }
 
   try {
@@ -199,7 +199,7 @@ function authMiddleware(req, res, next) {
     req.userId = payload.userId;
     next();
   } catch {
-    return res.status(401).json({ error: 'Invalid token' });
+    return res.status(401).json({ error: 'Неверный токен' });
   }
 }
 
@@ -228,7 +228,7 @@ function streamAuthMiddleware(req, res, next) {
 app.post('/api/push/subscribe', authMiddleware, async (req, res) => {
   const { subscription } = req.body;
   if (!subscription || !subscription.endpoint) {
-    return res.status(400).json({ error: 'Invalid subscription' });
+    return res.status(400).json({ error: 'Неверная подписка' });
   }
 
   const client = await pool.connect();
@@ -244,7 +244,7 @@ app.post('/api/push/subscribe', authMiddleware, async (req, res) => {
     res.json({ ok: true });
   } catch (err) {
     console.error('Failed to save push subscription:', err);
-    res.status(500).json({ error: 'Could not save subscription' });
+    res.status(500).json({ error: 'Не удалось сохранить подписку' });
   } finally {
     client.release();
   }
@@ -286,10 +286,10 @@ app.post('/api/register', authLimiter, async (req, res) => {
   const { username, password } = req.body || {};
   const trimmedUsername = username?.trim();
   if (!trimmedUsername || trimmedUsername.length < 2 || trimmedUsername.length > 50) {
-    return res.status(400).json({ error: 'Username must be 2-50 characters' });
+    return res.status(400).json({ error: 'Имя пользователя должно быть от 2 до 50 символов' });
   }
   if (!password || password.length < 6 || password.length > 72) {
-    return res.status(400).json({ error: 'Password must be 6-72 characters' });
+    return res.status(400).json({ error: 'Пароль должен быть от 6 до 72 символов' });
   }
 
   const hash = await bcrypt.hash(password, 10);
@@ -322,24 +322,24 @@ app.post('/api/register', authLimiter, async (req, res) => {
           attempts++;
           continue;
         }
-        return res.status(400).json({ error: 'Username taken' });
+        return res.status(400).json({ error: 'Имя пользователя уже занято' });
       }
       throw e; // будет перехвачено express-async-errors
     }
   }
-  return res.status(500).json({ error: 'Could not generate unique friend code' });
+  return res.status(500).json({ error: 'Не удалось сгенерировать уникальный код друга' });
 });
 
 app.post('/api/login', authLimiter, async (req, res) => {
   const { username, password } = req.body || {};
   const trimmedUsername = username?.trim();
-  if (!trimmedUsername || !password) return res.status(400).json({ error: 'Username and password required' });
+  if (!trimmedUsername || !password) return res.status(400).json({ error: 'Требуется имя пользователя и пароль' });
 
   const r = await pool.query('SELECT id, username, password_hash, friend_code FROM users WHERE username = $1', [trimmedUsername]);
   const user = r.rows[0];
 
   if (!user || !(await bcrypt.compare(password, user.password_hash))) {
-    return res.status(401).json({ error: 'Invalid credentials' });
+    return res.status(401).json({ error: 'Неверное имя пользователя или пароль' });
   }
 
   let friendCode = user.friend_code;
@@ -370,7 +370,7 @@ app.post('/api/logout', (req, res) => {
 app.get('/api/me', authMiddleware, async (req, res) => {
   const r = await pool.query('SELECT id, username, display_name, friend_code FROM users WHERE id = $1', [req.userId]);
   const user = r.rows[0];
-  if (!user) return res.status(404).json({ error: 'Not found' });
+  if (!user) return res.status(404).json({ error: 'Не найдено' });
 
   if (!user.friend_code) {
     user.friend_code = generateFriendCode();
@@ -417,10 +417,10 @@ app.delete('/api/account', authMiddleware, async (req, res) => {
   const r = await pool.query('SELECT password_hash FROM users WHERE id = $1', [req.userId]);
   const user = r.rows[0];
 
-  if (!user) return res.status(404).json({ error: 'Not found' });
+  if (!user) return res.status(404).json({ error: 'Не найдено' });
 
   if (!password || !(await bcrypt.compare(password, user.password_hash))) {
-    return res.status(401).json({ error: 'Password required to delete account' });
+    return res.status(401).json({ error: 'Требуется пароль для удаления аккаунта' });
   }
 
   const client = await pool.connect();
@@ -483,7 +483,7 @@ app.delete('/api/account', authMiddleware, async (req, res) => {
   } catch (e) {
     await client.query('ROLLBACK');
     console.error('Delete account error:', e);
-    res.status(500).json({ error: 'Failed to delete account' });
+    res.status(500).json({ error: 'Не удалось удалить аккаунт' });
   } finally {
     client.release();
   }
@@ -511,13 +511,13 @@ app.post('/api/friends', authMiddleware, async (req, res) => {
   const { friendCode } = req.body || {};
   const code = String(friendCode || '').trim().toUpperCase();
 
-  if (!code) return res.status(400).json({ error: 'Friend code required' });
+  if (!code) return res.status(400).json({ error: 'Требуется код друга' });
 
   const other = await pool.query('SELECT id, username FROM users WHERE UPPER(friend_code) = $1', [code]);
   const friend = other.rows[0];
 
-  if (!friend) return res.status(404).json({ error: 'No user with this friend code' });
-  if (friend.id === req.userId) return res.status(400).json({ error: 'Cannot add yourself' });
+  if (!friend) return res.status(404).json({ error: 'Пользователь с таким кодом не найден' });
+  if (friend.id === req.userId) return res.status(400).json({ error: 'Нельзя добавить самого себя' });
 
   try {
     await pool.query(
@@ -525,7 +525,7 @@ app.post('/api/friends', authMiddleware, async (req, res) => {
       [req.userId, friend.id]
     );
   } catch (e) {
-    if (e.code === '23503') return res.status(400).json({ error: 'Invalid user' });
+    if (e.code === '23503') return res.status(400).json({ error: 'Неверный пользователь' });
     throw e;
   }
 
@@ -612,12 +612,12 @@ app.get('/api/conversations', authMiddleware, async (req, res) => {
 app.post('/api/dms', authMiddleware, async (req, res) => {
   const { otherUserId } = req.body || {};
   if (!otherUserId || otherUserId === req.userId) {
-    return res.status(400).json({ error: 'Valid other user required' });
+    return res.status(400).json({ error: 'Требуется корректный другой пользователь' });
   }
 
   const otherId = parseInt(otherUserId, 10);
   if (isNaN(otherId) || otherId <= 0) {
-    return res.status(400).json({ error: 'Invalid user ID' });
+    return res.status(400).json({ error: 'Неверный пользователь ID' });
   }
 
   const isFriend = await pool.query(
@@ -626,7 +626,7 @@ app.post('/api/dms', authMiddleware, async (req, res) => {
   );
 
   if (isFriend.rows.length === 0) {
-    return res.status(403).json({ error: 'Add this user as a friend first' });
+    return res.status(403).json({ error: 'Сначала добавьте этого пользователя в друзья' });
   }
 
   const client = await pool.connect();
@@ -670,7 +670,7 @@ app.post('/api/dms', authMiddleware, async (req, res) => {
     // Если ошибка сериализации – повторяем (маловероятно, но оставим)
     if (e.code === '40001') {
       // Можно реализовать повтор, но для простоты вернём ошибку
-      return res.status(500).json({ error: 'Concurrent creation, please retry' });
+      return res.status(500).json({ error: 'Одновременное создание, повторите попытку' });
     }
     throw e;
   } finally {
@@ -683,10 +683,10 @@ app.post('/api/typing', authMiddleware, async (req, res) => {
   const { conversationId, action } = req.body;
   const convId = parseInt(conversationId, 10);
   if (isNaN(convId) || convId <= 0) {
-    return res.status(400).json({ error: 'Invalid conversation ID' });
+    return res.status(400).json({ error: 'Неверный ID чата' });
   }
   if (action !== 'start' && action !== 'stop') {
-    return res.status(400).json({ error: 'Action must be "start" or "stop"' });
+    return res.status(400).json({ error: 'Действие должно быть "start" или "stop"' });
   }
 
   // Проверяем, является ли пользователь участником беседы
@@ -695,7 +695,7 @@ app.post('/api/typing', authMiddleware, async (req, res) => {
     [convId]
   );
   if (!part.rows.some(p => p.user_id === req.userId)) {
-    return res.status(403).json({ error: 'Not in this conversation' });
+    return res.status(403).json({ error: 'Вы не участвуете в этом чате' });
   }
 
   const otherUserIds = part.rows.filter(p => p.user_id !== req.userId).map(p => p.user_id);
@@ -719,18 +719,18 @@ app.post('/api/groups', authMiddleware, async (req, res) => {
   const { title, userIds } = req.body || {};
 
   if (!title || !Array.isArray(userIds) || userIds.length < 1) {
-    return res.status(400).json({ error: 'Title and at least 1 other user required' });
+    return res.status(400).json({ error: 'Название и хотя бы один другой пользователь обязательны' });
   }
 
   const otherUserIds = userIds.map(id => parseInt(id, 10)).filter(id => !isNaN(id) && id > 0 && id !== req.userId);
   if (otherUserIds.length === 0) {
-    return res.status(400).json({ error: 'At least one valid other user ID required' });
+    return res.status(400).json({ error: 'Требуется хотя бы один корректный ID другого пользователя' });
   }
 
   for (const uid of otherUserIds) {
     const userExists = await pool.query('SELECT id FROM users WHERE id = $1', [uid]);
     if (userExists.rows.length === 0) {
-      return res.status(404).json({ error: `User with ID ${uid} does not exist` });
+      return res.status(404).json({ error: `Пользователь с ID${uid} не существует` });
     }
 
     const isFriend = await pool.query(
@@ -738,7 +738,7 @@ app.post('/api/groups', authMiddleware, async (req, res) => {
       [req.userId, uid]
     );
     if (isFriend.rows.length === 0) {
-      return res.status(403).json({ error: `User ${uid} is not your friend` });
+      return res.status(403).json({ error: `Пользователь ${uid} не ваш друг` });
     }
   }
 
@@ -787,7 +787,7 @@ app.post('/api/groups', authMiddleware, async (req, res) => {
 
 app.get('/api/groups/:id', authMiddleware, async (req, res) => {
   const groupId = parseInt(req.params.id, 10);
-  if (isNaN(groupId) || groupId <= 0) return res.status(400).json({ error: 'Invalid group ID' });
+  if (isNaN(groupId) || groupId <= 0) return res.status(400).json({ error: 'Неверный ID группы' });
 
   const result = await pool.query(`
     SELECT c.id, c.title, c.created_at, c.is_channel,
@@ -808,13 +808,13 @@ app.get('/api/groups/:id', authMiddleware, async (req, res) => {
   `, [groupId]);
 
   if (result.rows.length === 0) {
-    return res.status(404).json({ error: 'Group not found' });
+    return res.status(404).json({ error: 'Группа не найдена' });
   }
 
   const group = result.rows[0];
   const isMember = group.participants.some(p => p.id === req.userId);
   if (!isMember) {
-    return res.status(403).json({ error: 'Not a member of this group' });
+    return res.status(403).json({ error: 'Вы не участник этой группы' });
   }
 
   // Добавляем online статус каждому участнику
@@ -835,26 +835,26 @@ app.post('/api/channels', authMiddleware, async (req, res) => {
   const { title, userIds } = req.body || {};
 
   if (!title || !Array.isArray(userIds) || userIds.length < 1) {
-    return res.status(400).json({ error: 'Title and at least 1 other user required' });
+    return res.status(400).json({ error: 'Название и хотя бы один другой пользователь обязательны' });
   }
 
   const otherUserIds = userIds.map(id => parseInt(id, 10)).filter(id => !isNaN(id) && id > 0 && id !== req.userId);
   if (otherUserIds.length === 0) {
-    return res.status(400).json({ error: 'At least one valid other user ID required' });
+    return res.status(400).json({ error: 'Требуется хотя бы один корректный ID другого пользователя' });
   }
 
   // Проверяем существование и дружбу
   for (const uid of otherUserIds) {
     const userExists = await pool.query('SELECT id FROM users WHERE id = $1', [uid]);
     if (userExists.rows.length === 0) {
-      return res.status(404).json({ error: `User with ID ${uid} does not exist` });
+      return res.status(404).json({ error: `Пользователь с ID${uid} не существует` });
     }
     const isFriend = await pool.query(
       'SELECT 1 FROM friends WHERE (user_id = $1 AND friend_id = $2) OR (user_id = $2 AND friend_id = $1)',
       [req.userId, uid]
     );
     if (isFriend.rows.length === 0) {
-      return res.status(403).json({ error: `User ${uid} is not your friend` });
+      return res.status(403).json({ error: `Пользователь ${uid} не ваш друг` });
     }
   }
 
@@ -902,7 +902,7 @@ app.post('/api/channels', authMiddleware, async (req, res) => {
 // ---- LEAVE GROUP ----
 app.post('/api/groups/:id/leave', authMiddleware, async (req, res) => {
   const groupId = parseInt(req.params.id, 10);
-  if (isNaN(groupId) || groupId <= 0) return res.status(400).json({ error: 'Invalid group ID' });
+  if (isNaN(groupId) || groupId <= 0) return res.status(400).json({ error: 'Неверный ID группы' });
 
   const check = await pool.query(`
     SELECT c.is_group, cp.role
@@ -912,7 +912,7 @@ app.post('/api/groups/:id/leave', authMiddleware, async (req, res) => {
   `, [groupId, req.userId]);
 
   if (check.rows.length === 0 || !check.rows[0].is_group) {
-    return res.status(404).json({ error: 'Group not found or not a member' });
+    return res.status(404).json({ error: 'Группа не найдена or not a member' });
   }
 
   const role = check.rows[0].role;
@@ -980,13 +980,13 @@ app.post('/api/groups/:id/leave', authMiddleware, async (req, res) => {
 // ---- Messages ----
 app.get('/api/conversations/:id/messages', authMiddleware, async (req, res) => {
   const convId = parseInt(req.params.id, 10);
-  if (isNaN(convId) || convId <= 0) return res.status(400).json({ error: 'Invalid conversation ID' });
+  if (isNaN(convId) || convId <= 0) return res.status(400).json({ error: 'Неверный ID чата' });
 
   const part = await pool.query(
     'SELECT 1 FROM conversation_participants WHERE conversation_id = $1 AND user_id = $2',
     [convId, req.userId]
   );
-  if (part.rows.length === 0) return res.status(404).json({ error: 'Conversation not found' });
+  if (part.rows.length === 0) return res.status(404).json({ error: 'Чат не найден' });
 
   const r = await pool.query(`
     SELECT 
@@ -1059,27 +1059,27 @@ app.get('/api/conversations/:id/messages', authMiddleware, async (req, res) => {
 
 app.post('/api/conversations/:id/messages', authMiddleware, async (req, res) => {
   const convId = parseInt(req.params.id, 10);
-  if (isNaN(convId) || convId <= 0) return res.status(400).json({ error: 'Invalid conversation ID' });
+  if (isNaN(convId) || convId <= 0) return res.status(400).json({ error: 'Неверный ID чата' });
 
   const { body, replyToId } = req.body || {};
   const messageBody = String(body || '').trim();
-  if (!messageBody) return res.status(400).json({ error: 'Message body required' });
-  if (messageBody.length > 5000) return res.status(400).json({ error: 'Message too long (max 5000 characters)' });
+  if (!messageBody) return res.status(400).json({ error: 'Текст сообщения обязателен' });
+  if (messageBody.length > 5000) return res.status(400).json({ error: 'Сообщение слишком длинное (максимум 5000 символов)' });
 
   const part = await pool.query(
     'SELECT user_id FROM conversation_participants WHERE conversation_id = $1',
     [convId]
   );
-  if (part.rows.length === 0) return res.status(404).json({ error: 'Conversation not found' });
+  if (part.rows.length === 0) return res.status(404).json({ error: 'Чат не найден' });
 
   const isMember = part.rows.some(p => p.user_id === req.userId);
-  if (!isMember) return res.status(403).json({ error: 'Not in this conversation' });
+  if (!isMember) return res.status(403).json({ error: 'Вы не участвуете в этом чате' });
 
   const convInfo = await pool.query(
     'SELECT is_group, is_channel FROM conversations WHERE id = $1',
     [convId]
   );
-  if (convInfo.rows.length === 0) return res.status(404).json({ error: 'Conversation not found' });
+  if (convInfo.rows.length === 0) return res.status(404).json({ error: 'Чат не найден' });
   const { is_group: isGroup, is_channel: isChannel } = convInfo.rows[0];
 
   if (isChannel) {
@@ -1089,7 +1089,7 @@ app.post('/api/conversations/:id/messages', authMiddleware, async (req, res) => 
     );
     const role = roleCheck.rows[0]?.role;
     if (role !== 'owner' && role !== 'admin') {
-      return res.status(403).json({ error: 'Only admins can post in channels' });
+      return res.status(403).json({ error: 'Только администраторы могут писать в каналах' });
     }
   }
 
@@ -1098,7 +1098,7 @@ app.post('/api/conversations/:id/messages', authMiddleware, async (req, res) => 
     [convId, req.userId]
   );
   if (muteCheck.rows[0]?.muted_until && new Date(muteCheck.rows[0].muted_until) > new Date()) {
-    return res.status(403).json({ error: 'You are muted' });
+    return res.status(403).json({ error: 'Вы заглушены' });
   }
 
   // Проверка replyToId
@@ -1106,10 +1106,10 @@ app.post('/api/conversations/:id/messages', authMiddleware, async (req, res) => 
   if (replyToIdNum) {
     const orig = await pool.query('SELECT id, conversation_id FROM messages WHERE id = $1', [replyToIdNum]);
     if (orig.rows.length === 0) {
-      return res.status(400).json({ error: 'Message to reply does not exist' });
+      return res.status(400).json({ error: 'Message to reply не существует' });
     }
     if (orig.rows[0].conversation_id !== convId) {
-      return res.status(400).json({ error: 'Message to reply is not in this conversation' });
+      return res.status(400).json({ error: 'Message to reply is Вы не участвуете в этом чате' });
     }
   }
 
@@ -1166,7 +1166,7 @@ app.post('/api/conversations/:id/messages', authMiddleware, async (req, res) => 
   }
 
   const pushPayload = {
-    title: `New message from ${resultMsg.sender_username}`,
+    title: `Новое сообщение от ${resultMsg.sender_username}`,
     body: messageBody.length > 100 ? messageBody.slice(0, 97) + '...' : messageBody,
     icon: '/images/logo.png',
     data: { conversationId: convId, messageId: msg.id },
@@ -1179,14 +1179,14 @@ app.post('/api/conversations/:id/messages', authMiddleware, async (req, res) => 
 // Legacy DM endpoints (совместимость)
 app.get('/api/dms/:id/messages', authMiddleware, async (req, res) => {
   const convId = parseInt(req.params.id, 10);
-  if (isNaN(convId) || convId <= 0) return res.status(400).json({ error: 'Invalid conversation ID' });
+  if (isNaN(convId) || convId <= 0) return res.status(400).json({ error: 'Неверный ID чата' });
 
   const part = await pool.query(
     'SELECT 1 FROM conversation_participants WHERE conversation_id = $1 AND user_id = $2',
     [convId, req.userId]
   );
 
-  if (part.rows.length === 0) return res.status(404).json({ error: 'Conversation not found' });
+  if (part.rows.length === 0) return res.status(404).json({ error: 'Чат не найден' });
 
   const r = await pool.query(`
     SELECT 
@@ -1206,22 +1206,22 @@ app.get('/api/dms/:id/messages', authMiddleware, async (req, res) => {
 
 app.post('/api/dms/:id/messages', authMiddleware, async (req, res) => {
   const convId = parseInt(req.params.id, 10);
-  if (isNaN(convId) || convId <= 0) return res.status(400).json({ error: 'Invalid conversation ID' });
+  if (isNaN(convId) || convId <= 0) return res.status(400).json({ error: 'Неверный ID чата' });
 
   const { body } = req.body || {};
   const messageBody = String(body || '').trim();
-  if (!messageBody) return res.status(400).json({ error: 'Message body required' });
-  if (messageBody.length > 5000) return res.status(400).json({ error: 'Message too long (max 5000 characters)' });
+  if (!messageBody) return res.status(400).json({ error: 'Текст сообщения обязателен' });
+  if (messageBody.length > 5000) return res.status(400).json({ error: 'Сообщение слишком длинное (максимум 5000 символов)' });
 
   const part = await pool.query(
     'SELECT user_id FROM conversation_participants WHERE conversation_id = $1',
     [convId]
   );
 
-  if (part.rows.length === 0) return res.status(404).json({ error: 'Conversation not found' });
+  if (part.rows.length === 0) return res.status(404).json({ error: 'Чат не найден' });
 
   const isMember = part.rows.some(p => p.user_id === req.userId);
-  if (!isMember) return res.status(403).json({ error: 'Not in this conversation' });
+  if (!isMember) return res.status(403).json({ error: 'Вы не участвуете в этом чате' });
 
   const muteCheck = await pool.query(`
     SELECT muted_until FROM conversation_participants
@@ -1230,7 +1230,7 @@ app.post('/api/dms/:id/messages', authMiddleware, async (req, res) => {
 
   if (muteCheck.rows[0]?.muted_until &&
       new Date(muteCheck.rows[0].muted_until) > new Date()) {
-    return res.status(403).json({ error: 'You are muted' });
+    return res.status(403).json({ error: 'Вы заглушены' });
   }
 
   const otherUserIds = part.rows.filter(p => p.user_id !== req.userId).map(p => p.user_id);
@@ -1278,7 +1278,7 @@ app.delete('/api/messages/:id', authMiddleware, async (req, res) => {
   );
 
   if (r.rows.length === 0) {
-    return res.status(404).json({ error: 'Message not found' });
+    return res.status(404).json({ error: 'Сообщение не найдено' });
   }
 
   const message = r.rows[0];
@@ -1292,7 +1292,7 @@ app.delete('/api/messages/:id', authMiddleware, async (req, res) => {
 
     if (roleCheck.rows.length === 0 ||
         (roleCheck.rows[0].role !== 'owner' && roleCheck.rows[0].role !== 'admin')) {
-      return res.status(403).json({ error: 'No permission to delete this message' });
+      return res.status(403).json({ error: 'Нет прав для удаления этого сообщения' });
     }
   }
 
@@ -1337,7 +1337,7 @@ app.post('/api/messages/:id/reactions', authMiddleware, async (req, res) => {
   const { emoji } = req.body;
 
   if (isNaN(messageId) || messageId <= 0 || !emoji) {
-    return res.status(400).json({ error: 'Invalid message ID or emoji' });
+    return res.status(400).json({ error: 'Неверный ID сообщения или эмодзи' });
   }
 
   // Проверяем, имеет ли пользователь доступ к сообщению
@@ -1346,7 +1346,7 @@ app.post('/api/messages/:id/reactions', authMiddleware, async (req, res) => {
     [messageId]
   );
   if (msg.rows.length === 0) {
-    return res.status(404).json({ error: 'Message not found' });
+    return res.status(404).json({ error: 'Сообщение не найдено' });
   }
   const convId = msg.rows[0].conversation_id;
 
@@ -1355,7 +1355,7 @@ app.post('/api/messages/:id/reactions', authMiddleware, async (req, res) => {
     [convId, req.userId]
   );
   if (part.rows.length === 0) {
-    return res.status(403).json({ error: 'Not in this conversation' });
+    return res.status(403).json({ error: 'Вы не участвуете в этом чате' });
   }
 
   // Переключаем реакцию
@@ -1425,7 +1425,7 @@ app.get('/api/notifications/stream', streamAuthMiddleware, sseConnectionLimiter,
 
   // Проверяем лимит
   if (sseClients.has(userId) && sseClients.get(userId).length >= MAX_SSE_PER_USER) {
-    res.status(429).end('Too many SSE connections');
+    res.status(429).end('Слишком много SSE-соединений');
     return;
   }
 
@@ -1512,7 +1512,7 @@ app.get('/api/signaling', streamAuthMiddleware, sseConnectionLimiter, (req, res)
   const userId = req.userId;
 
   if (signalingChannels.has(userId) && signalingChannels.get(userId).size >= MAX_SIGNALING_PER_USER) {
-    res.status(429).end('Too many signaling connections');
+    res.status(429).end('Слишком много сигнальных соединений');
     return;
   }
 
@@ -1533,29 +1533,29 @@ app.post('/api/signaling', authMiddleware, async (req, res) => {
   const { type, targetUserId, offer, answer, candidate } = req.body || {};
 
   if (!type || !targetUserId) {
-    return res.status(400).json({ error: 'Type and targetUserId required' });
+    return res.status(400).json({ error: 'Требуется тип и целевой пользователь' });
   }
 
   // Валидация в зависимости от типа
   if (type === 'offer' && !offer) {
-    return res.status(400).json({ error: 'Offer required' });
+    return res.status(400).json({ error: 'Требуется предложение' });
   }
   if (type === 'answer' && !answer) {
-    return res.status(400).json({ error: 'Answer required' });
+    return res.status(400).json({ error: 'Требуется ответ' });
   }
   if (type === 'ice-candidate' && !candidate) {
-    return res.status(400).json({ error: 'Candidate required' });
+    return res.status(400).json({ error: 'Требуется кандидат' });
   }
 
   const targetId = parseInt(targetUserId, 10);
   if (isNaN(targetId) || targetId <= 0) {
-    return res.status(400).json({ error: 'Invalid target user ID' });
+    return res.status(400).json({ error: 'Неверный ID целевого пользователя' });
   }
 
   // Проверяем, что целевой пользователь существует
   const userExists = await pool.query('SELECT id FROM users WHERE id = $1', [targetId]);
   if (userExists.rows.length === 0) {
-    return res.status(404).json({ error: 'Target user does not exist' });
+    return res.status(404).json({ error: 'Target user не существует' });
   }
 
   const areFriends = await pool.query(
@@ -1572,7 +1572,7 @@ app.post('/api/signaling', authMiddleware, async (req, res) => {
     `, [req.userId, targetId]);
 
     if (commonConversation.rows.length === 0) {
-      return res.status(403).json({ error: 'You are not friends and have no common conversation' });
+      return res.status(403).json({ error: 'Вы не друзья и у вас нет общего чата' });
     }
   }
 
@@ -1605,7 +1605,7 @@ app.post('/api/signaling', authMiddleware, async (req, res) => {
 app.get('/api/groups/:id/members', authMiddleware, async (req, res) => {
   const groupId = parseInt(req.params.id, 10);
   if (isNaN(groupId) || groupId <= 0) {
-    return res.status(400).json({ error: 'Invalid group ID' });
+    return res.status(400).json({ error: 'Неверный ID группы' });
   }
 
   // 1. Проверяем существование группы и что это действительно группа
@@ -1614,10 +1614,10 @@ app.get('/api/groups/:id/members', authMiddleware, async (req, res) => {
     [groupId]
   );
   if (groupCheck.rows.length === 0) {
-    return res.status(404).json({ error: 'Group not found' });
+    return res.status(404).json({ error: 'Группа не найдена' });
   }
   if (!groupCheck.rows[0].is_group) {
-    return res.status(400).json({ error: 'Not a group' });
+    return res.status(400).json({ error: 'Это не группа' });
   }
 
   // 2. Проверяем, является ли пользователь участником
@@ -1626,7 +1626,7 @@ app.get('/api/groups/:id/members', authMiddleware, async (req, res) => {
     [groupId, req.userId]
   );
   if (memberCheck.rows.length === 0) {
-    return res.status(403).json({ error: 'Not a member of this group' });
+    return res.status(403).json({ error: 'Вы не участник этой группы' });
   }
 
   // 3. Возвращаем список участников
@@ -1647,10 +1647,10 @@ app.post('/api/groups/:id/members', authMiddleware, async (req, res) => {
 
   // Валидация параметров
   if (isNaN(groupId) || groupId <= 0) {
-    return res.status(400).json({ error: 'Invalid group ID' });
+    return res.status(400).json({ error: 'Неверный ID группы' });
   }
   if (isNaN(targetUserId) || targetUserId <= 0) {
-    return res.status(400).json({ error: 'Valid user ID required' });
+    return res.status(400).json({ error: 'Требуется корректный ID пользователя' });
   }
 
   // Получаем информацию о группе и проверяем, что это группа/канал
@@ -1659,11 +1659,11 @@ app.post('/api/groups/:id/members', authMiddleware, async (req, res) => {
     [groupId]
   );
   if (convRes.rows.length === 0) {
-    return res.status(404).json({ error: 'Conversation not found' });
+    return res.status(404).json({ error: 'Чат не найден' });
   }
   const conversation = convRes.rows[0];
   if (!conversation.is_group) {
-    return res.status(400).json({ error: 'Not a group or channel' });
+    return res.status(400).json({ error: 'Это не группа or channel' });
   }
 
   // Проверяем права текущего пользователя
@@ -1672,11 +1672,11 @@ app.post('/api/groups/:id/members', authMiddleware, async (req, res) => {
     [groupId, req.userId]
   );
   if (roleRes.rows.length === 0) {
-    return res.status(403).json({ error: 'You are not a member of this group' });
+    return res.status(403).json({ error: 'You are Вы не участник этой группы' });
   }
   const userRole = roleRes.rows[0].role;
   if (userRole !== 'owner' && userRole !== 'admin') {
-    return res.status(403).json({ error: 'Only owners and admins can add members' });
+    return res.status(403).json({ error: 'Только владельцы и администраторы могут добавлять участников' });
   }
 
   // Проверяем существование добавляемого пользователя
@@ -1685,7 +1685,7 @@ app.post('/api/groups/:id/members', authMiddleware, async (req, res) => {
     [targetUserId]
   );
   if (userRes.rows.length === 0) {
-    return res.status(404).json({ error: 'User not found' });
+    return res.status(404).json({ error: 'User Не найдено' });
   }
   const targetUser = userRes.rows[0];
 
@@ -1695,7 +1695,7 @@ app.post('/api/groups/:id/members', authMiddleware, async (req, res) => {
     [groupId, targetUserId]
   );
   if (existing.rows.length > 0) {
-    return res.status(400).json({ error: 'User is already in the group' });
+    return res.status(400).json({ error: 'Пользователь уже в группе' });
   }
 
   // (Опционально) Проверяем, что добавляемый пользователь является другом текущего
@@ -1704,7 +1704,7 @@ app.post('/api/groups/:id/members', authMiddleware, async (req, res) => {
     [req.userId, targetUserId]
   );
   if (friendCheck.rows.length === 0) {
-    return res.status(403).json({ error: 'You can only add friends' });
+    return res.status(403).json({ error: 'Вы можете добавлять только друзей' });
   }
 
   // Добавляем участника
@@ -1751,7 +1751,7 @@ app.post('/api/groups/:id/members', authMiddleware, async (req, res) => {
 app.post('/api/upload', authMiddleware, upload.single('file'), (req, res) => {
   // Сначала проверяем, есть ли файл
   if (!req.file) {
-    return res.status(400).json({ error: 'No file uploaded' });
+    return res.status(400).json({ error: 'Файл не загружен' });
   }
 
   const originalName = req.file.originalname;
@@ -1769,7 +1769,7 @@ app.post('/api/upload', authMiddleware, upload.single('file'), (req, res) => {
 }, (error, req, res, next) => {
   if (error instanceof multer.MulterError) {
     if (error.code === 'LIMIT_FILE_SIZE') {
-      return res.status(400).json({ error: 'File too large. Max 1GB.' });
+      return res.status(400).json({ error: 'Файл слишком большой. Максимум 1 ГБ.' });
     }
     // Другие возможные ошибки Multer
     console.error('Multer error:', error);
@@ -1777,7 +1777,7 @@ app.post('/api/upload', authMiddleware, upload.single('file'), (req, res) => {
   }
   // Другие ошибки
   console.error('Upload error:', error);
-  res.status(400).json({ error: 'File upload failed.' });
+  res.status(400).json({ error: 'Не удалось загрузить файл.' });
 });
 
 // ---- Group moderation endpoints ----
@@ -1785,12 +1785,12 @@ app.post('/api/upload', authMiddleware, upload.single('file'), (req, res) => {
 // Повысить до админа (только owner)
 app.post('/api/groups/:id/promote', authMiddleware, async (req, res) => {
   const groupId = parseInt(req.params.id, 10);
-  if (isNaN(groupId) || groupId <= 0) return res.status(400).json({ error: 'Invalid group ID' });
+  if (isNaN(groupId) || groupId <= 0) return res.status(400).json({ error: 'Неверный ID группы' });
 
   const { userId } = req.body;
   const targetUserId = parseInt(userId, 10);
   if (isNaN(targetUserId) || targetUserId <= 0) {
-    return res.status(400).json({ error: 'Valid user ID required' });
+    return res.status(400).json({ error: 'Требуется корректный ID пользователя' });
   }
 
   const requester = await pool.query(`
@@ -1799,7 +1799,7 @@ app.post('/api/groups/:id/promote', authMiddleware, async (req, res) => {
   `, [groupId, req.userId]);
 
   if (requester.rows.length === 0 || requester.rows[0].role !== 'owner') {
-    return res.status(403).json({ error: 'Only the group owner can promote admins' });
+    return res.status(403).json({ error: 'Только владелец группы может назначать администраторов' });
   }
 
   await pool.query(`
@@ -1814,7 +1814,7 @@ app.post('/api/groups/:id/promote', authMiddleware, async (req, res) => {
 // Замутить (только админы, но админы не могут мутить других админов, только owner)
 app.post('/api/groups/:id/mute', authMiddleware, async (req, res) => {
   const groupId = parseInt(req.params.id, 10);
-  if (isNaN(groupId) || groupId <= 0) return res.status(400).json({ error: 'Invalid group ID' });
+  if (isNaN(groupId) || groupId <= 0) return res.status(400).json({ error: 'Неверный ID группы' });
 
   const { userId, minutes } = req.body;
   const targetUserId = parseInt(userId, 10);
@@ -1825,7 +1825,7 @@ app.post('/api/groups/:id/mute', authMiddleware, async (req, res) => {
 
   const MAX_MUTE_MINUTES = 525600; // 1 год
   if (muteMinutes > MAX_MUTE_MINUTES) {
-    return res.status(400).json({ error: `Mute duration cannot exceed ${MAX_MUTE_MINUTES} minutes` });
+    return res.status(400).json({ error: `Длительность мута не может превышать ${MAX_MUTE_MINUTES} минут` });
   }
 
   const requester = await pool.query(`
@@ -1838,7 +1838,7 @@ app.post('/api/groups/:id/mute', authMiddleware, async (req, res) => {
   }
 
   if (requester.rows[0].role !== 'owner' && requester.rows[0].role !== 'admin') {
-    return res.status(403).json({ error: 'Only admins can mute members' });
+    return res.status(403).json({ error: 'Только администраторы могут заглушать участников' });
   }
 
   const target = await pool.query(`
@@ -1852,11 +1852,11 @@ app.post('/api/groups/:id/mute', authMiddleware, async (req, res) => {
 
   // Админ не может мутить другого админа (только owner)
   if (target.rows[0].role === 'admin' && requester.rows[0].role !== 'owner') {
-    return res.status(403).json({ error: 'Only owner can mute admins' });
+    return res.status(403).json({ error: 'Только владелец может заглушать администраторов' });
   }
 
   if (target.rows[0].role === 'owner') {
-    return res.status(403).json({ error: 'Cannot mute the group owner' });
+    return res.status(403).json({ error: 'Нельзя заглушить владельца группы' });
   }
 
   await pool.query(`
@@ -1871,12 +1871,12 @@ app.post('/api/groups/:id/mute', authMiddleware, async (req, res) => {
 // Снять статус админа (только owner)
 app.post('/api/groups/:id/demote', authMiddleware, async (req, res) => {
   const groupId = parseInt(req.params.id, 10);
-  if (isNaN(groupId) || groupId <= 0) return res.status(400).json({ error: 'Invalid group ID' });
+  if (isNaN(groupId) || groupId <= 0) return res.status(400).json({ error: 'Неверный ID группы' });
 
   const { userId } = req.body;
   const targetUserId = parseInt(userId, 10);
   if (isNaN(targetUserId) || targetUserId <= 0) {
-    return res.status(400).json({ error: 'Valid user ID required' });
+    return res.status(400).json({ error: 'Требуется корректный ID пользователя' });
   }
 
   const requester = await pool.query(`
@@ -1885,7 +1885,7 @@ app.post('/api/groups/:id/demote', authMiddleware, async (req, res) => {
   `, [groupId, req.userId]);
 
   if (requester.rows.length === 0 || requester.rows[0].role !== 'owner') {
-    return res.status(403).json({ error: 'Only the group owner can demote admins' });
+    return res.status(403).json({ error: 'Только владелец группы может снимать администраторов' });
   }
 
   await pool.query(`
@@ -1900,12 +1900,12 @@ app.post('/api/groups/:id/demote', authMiddleware, async (req, res) => {
 // Размутить (owner или admin)
 app.post('/api/groups/:id/unmute', authMiddleware, async (req, res) => {
   const groupId = parseInt(req.params.id, 10);
-  if (isNaN(groupId) || groupId <= 0) return res.status(400).json({ error: 'Invalid group ID' });
+  if (isNaN(groupId) || groupId <= 0) return res.status(400).json({ error: 'Неверный ID группы' });
 
   const { userId } = req.body;
   const targetUserId = parseInt(userId, 10);
   if (isNaN(targetUserId) || targetUserId <= 0) {
-    return res.status(400).json({ error: 'Valid user ID required' });
+    return res.status(400).json({ error: 'Требуется корректный ID пользователя' });
   }
 
   const requester = await pool.query(`
@@ -1918,7 +1918,7 @@ app.post('/api/groups/:id/unmute', authMiddleware, async (req, res) => {
   }
 
   if (requester.rows[0].role !== 'owner' && requester.rows[0].role !== 'admin') {
-    return res.status(403).json({ error: 'Only admins can unmute members' });
+    return res.status(403).json({ error: 'Только администраторы могут разглушать участников' });
   }
 
   await pool.query(`
@@ -1940,7 +1940,7 @@ app.delete('/api/groups/:id/kick/:userId', authMiddleware, async (req, res) => {
 
   // Запрет на самокик
   if (targetUserId === req.userId) {
-    return res.status(400).json({ error: 'Cannot kick yourself, use /leave instead' });
+    return res.status(400).json({ error: 'Нельзя кикнуть самого себя, используйте /leave' });
   }
 
   const allParticipants = await pool.query(
@@ -1959,7 +1959,7 @@ app.delete('/api/groups/:id/kick/:userId', authMiddleware, async (req, res) => {
   }
 
   if (requester.rows[0].role !== 'owner' && requester.rows[0].role !== 'admin') {
-    return res.status(403).json({ error: 'Only admins can kick members' });
+    return res.status(403).json({ error: 'Только администраторы могут кикать участников' });
   }
 
   const target = await pool.query(`
@@ -1972,12 +1972,12 @@ app.delete('/api/groups/:id/kick/:userId', authMiddleware, async (req, res) => {
   }
 
   if (target.rows[0].role === 'owner') {
-    return res.status(403).json({ error: 'Cannot kick the group owner' });
+    return res.status(403).json({ error: 'Нельзя кикнуть владельца группы' });
   }
 
   // Админ не может кикнуть другого админа (только owner)
   if (target.rows[0].role === 'admin' && requester.rows[0].role !== 'owner') {
-    return res.status(403).json({ error: 'Only owner can kick admins' });
+    return res.status(403).json({ error: 'Только владелец может кикать администраторов' });
   }
 
   await pool.query(`
@@ -2029,7 +2029,7 @@ app.use((err, req, res, next) => {
 
 // Catch-all для клиентского приложения
 app.get('*', (req, res) => {
-  if (req.path.startsWith('/api/')) return res.status(404).json({ error: 'Not found' });
+  if (req.path.startsWith('/api/')) return res.status(404).json({ error: 'Не найдено' });
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 

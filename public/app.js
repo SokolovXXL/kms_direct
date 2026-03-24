@@ -1389,7 +1389,7 @@ async function loadConversationList(retryCount = 3) {
       }));
 
       if (conversations.length === 0) {
-        list.innerHTML = '<p style="padding:1rem;color:var(--text-muted)">No conversations yet. Start a new message!</p>';
+        list.innerHTML = '<p style="padding:1rem;color:var(--text-muted)">Нет чатов. Начните новый диалог!</p>';
         return;
       }
       
@@ -1460,7 +1460,7 @@ async function loadConversationList(retryCount = 3) {
     } catch (err) {
       console.error(`Failed to load conversations (attempt ${attempt}/${retryCount}):`, err);
       if (attempt === retryCount) {
-        list.innerHTML = '<p style="padding:1rem;color:var(--text-muted)">Could not load conversations</p>';
+        list.innerHTML = '<p style="padding:1rem;color:var(--text-muted)">Не удалось загрузить чаты</p>';
       } else {
         // ждём перед следующей попыткой (экспоненциальная задержка)
         await new Promise(r => setTimeout(r, 1000 * attempt));
@@ -1768,7 +1768,7 @@ async function loadMessages(convId) {
     }
   } catch (err) {
     console.error('Failed to load messages:', err);
-    list.innerHTML = '<p style="color:var(--text-muted)">Could not load messages</p>';
+    list.innerHTML = '<p style="color:var(--text-muted)">Не удалось загрузить сообщения</p>';
   }
 }
 
@@ -1847,7 +1847,7 @@ if (sendForm) {
         clearReplyTo();
       } catch (err) {
         input.value = body;
-        alert('Failed to send message: ' + err.message);
+        alert('Ошибка отправки сообщения: ' + err.message);
       }
     }
 
@@ -1946,7 +1946,7 @@ if (btnFriends) {
       
       if (friends.length === 0) {
         const li = document.createElement('li');
-        li.textContent = 'No friends yet. Share your code or add someone else\'s.';
+        li.textContent = 'Пока нет друзей. Поделитесь своим кодом или добавьте чужой.';
         li.style.color = 'var(--text-muted)';
         li.style.fontStyle = 'italic';
         friendsList.appendChild(li);
@@ -1982,7 +1982,7 @@ if (btnAddFriend) {
     errEl.textContent = '';
     
     if (!code) {
-      errEl.textContent = 'Enter a friend code';
+      errEl.textContent = 'Введите код друга';
       return;
     }
     
@@ -2015,7 +2015,7 @@ if (btnAddFriend) {
       }
       
       // Показываем уведомление об успехе (опционально)
-      showToast('Friend added and chat created', 'success');
+      showToast('Друг добавлен, чат создан', 'success');
       
       // Обновляем список друзей в модалке (оставляем как было)
       const friends = await api('/api/friends');
@@ -2072,7 +2072,7 @@ if (btnConfirmDelete) {
     errEl.textContent = '';
     
     if (!password) {
-      errEl.textContent = 'Enter your password';
+      errEl.textContent = 'Введите ваш пароль';
       return;
     }
     
@@ -2128,11 +2128,11 @@ if (btnSaveDisplayName) {
   btnSaveDisplayName.addEventListener('click', async () => {
     const newName = profileDisplayNameInput.value.trim();
     if (!newName) {
-      profileError.textContent = 'Display name cannot be empty';
+      profileError.textContent = 'Имя не может быть пустым';
       return;
     }
     if (newName.length < 2) {
-      profileError.textContent = 'Display name must be at least 2 characters';
+      profileError.textContent = 'Имя должно содержать минимум 2 символа';
       return;
     }
     try {
@@ -2200,7 +2200,7 @@ async function loadGroupsList() {
       list.appendChild(li);
     });
   } catch (err) {
-    list.innerHTML = '<li style="color:var(--danger);">Failed to load groups</li>';
+    list.innerHTML = '<li style="color:var(--danger);">Не удалось загрузить группы</li>';
   }
 }
 
@@ -2256,7 +2256,7 @@ async function loadFriendsForGroup() {
     const friends = await api('/api/friends');
     
     if (friends.length === 0) {
-      list.innerHTML = '<li style="color:var(--text-muted); padding:1rem;">Add friends first</li>';
+      list.innerHTML = '<li style="color:var(--text-muted); padding:1rem;">Сначала добавьте друзей</li>';
       return;
     }
     
@@ -2285,7 +2285,7 @@ async function loadFriendsForGroup() {
       list.appendChild(li);
     });
   } catch (err) {
-    list.innerHTML = '<li style="color:var(--danger);">Failed to load friends</li>';
+    list.innerHTML = '<li style="color:var(--danger);">Не удалось загрузить друзей</li>';
   }
 }
 
@@ -2298,11 +2298,11 @@ if (btnCreateGroup) {
     const errorEl = $('group-error');
     
     if (!title) {
-      errorEl.textContent = 'Group name required';
+      errorEl.textContent = 'Название группы обязательно';
       return;
     }
     if (userIds.length === 0) {
-      errorEl.textContent = 'Select at least one friend';
+      errorEl.textContent = 'Выберите хотя бы одного друга';
       return;
     }
     
@@ -2661,7 +2661,7 @@ async function showGroupInfo(groupId, groupTitle) {
     leaveBtnContainer.appendChild(leaveBtn);
     
   } catch (err) {
-    listEl.innerHTML = `<li style="color:var(--danger);">Failed to load members</li>`;
+    listEl.innerHTML = `<li style="color:var(--danger);">Не удалось загрузить участников</li>`;
   }
 }
 
@@ -2735,7 +2735,7 @@ async function loadFriendsToAdd(groupId, groupTitle) {
     const availableFriends = friends.filter(f => !memberIds.includes(f.id));
     
     if (availableFriends.length === 0) {
-      list.innerHTML = '<li style="color:var(--text-muted);">All friends are already in group</li>';
+      list.innerHTML = '<li style="color:var(--text-muted);">Все друзья уже в группе</li>';
       return;
     }
     
@@ -2768,7 +2768,7 @@ async function loadFriendsToAdd(groupId, groupTitle) {
     });
     
   } catch (err) {
-    list.innerHTML = `<li style="color:var(--danger);">Failed to load friends</li>`;
+    list.innerHTML = `<li style="color:var(--danger);">Не удалось загрузить друзей</li>`;
   }
 }
 
@@ -2934,7 +2934,7 @@ function showUploadProgress(file, progressId) {
   progressDiv.className = 'message system'; // используем класс system вместо theirs для визуального отличия
   progressDiv.innerHTML = `
     <div class="file-upload-progress">
-      <div class="file-name">📤 Uploading: ${escapeHtml(file.name)}</div>
+      <div class="file-name">📤 Загрузка: ${escapeHtml(file.name)}</div>
       <div class="progress-bar-container">
         <div class="progress-bar" style="width: 0%"></div>
       </div>
@@ -3809,7 +3809,7 @@ async function startCall() {
 
     // Проверить поддержку getUserMedia
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-      throw new Error('Your browser does not support audio calls.');
+      throw new Error('Ваш браузер не поддерживает аудиозвонки.');
     }
 
     localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
@@ -3853,7 +3853,7 @@ async function startCall() {
     } else if (error.name === 'NotFoundError') {
       message = 'No microphone found. Please connect a microphone.';
     }
-    alert('Failed to start call: ' + message);
+    alert('Не удалось начать звонок: ' + message);
     callActive = false;
     currentCallConversationId = null;
     updateCallStatus('');
@@ -3918,7 +3918,7 @@ async function createPeerConnection(targetUserId, initiator = false) {
         offer: offer,
         conversationId: currentCallConversationId
       });
-      updateCallStatus(`Calling ${getRemoteName(targetUserId)}...`);
+      updateCallStatus(`Вызов ${getRemoteName(targetUserId)}...`);
     }
     
   } catch (error) {
@@ -3963,7 +3963,7 @@ async function handleRemoteOffer(data) {
     
     if (!peerConnection) {
       if (!callActive) {
-        if (!confirm(`${getRemoteName(fromUserId)} is calling. Accept?`)) {
+        if (!confirm(`${getRemoteName(fromUserId)} звонит. Принять?`)) {
           sendSignalingMessage('call-rejected', { targetUserId: fromUserId, conversationId: targetConversationId });
           return;
         }
@@ -3998,7 +3998,7 @@ async function handleRemoteOffer(data) {
       conversationId: targetConversationId
     });
     
-    updateCallStatus('Connected');
+    updateCallStatus('Подключено');
     
   } catch (error) {
     console.error('Error handling offer:', error);
@@ -4012,7 +4012,7 @@ async function handleRemoteAnswer(data) {
     const peerConnection = peerConnections.get(fromUserId);
     if (peerConnection) {
       await peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
-      updateCallStatus('Connected');
+      updateCallStatus('Подключено');
     }
   } catch (error) {
     console.error('Error handling answer:', error);
