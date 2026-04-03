@@ -4401,7 +4401,7 @@ document.addEventListener('DOMContentLoaded', () => {
       touchStartX = 0;
     });
   }
-
+  renderFilePreviews();
   tryAutoLogin();
   updateChatMessagesPaddingBottom();
 });
