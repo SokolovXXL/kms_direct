@@ -2212,3 +2212,9 @@ body {
 .reply-cancel:hover {
   color: var(--danger);
 }
+
+#call-status-bar {
+  position: relative;
+  z-index: 20;
+  margin-bottom: 0;
+}

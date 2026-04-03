@@ -39,6 +39,7 @@ function updateChatMessagesPaddingBottom() {
   const wrapper = document.getElementById('chat-messages-wrapper');
   const sendForm = document.getElementById('send-form');
   const previewList = document.getElementById('file-preview-list');
+  const callBar = document.getElementById('call-status-bar');
   if (!wrapper) return;
 
   let totalHeight = 0;
@@ -47,6 +48,9 @@ function updateChatMessagesPaddingBottom() {
   }
   if (previewList && previewList.style.display !== 'none' && previewList.children.length > 0) {
     totalHeight += previewList.offsetHeight;
+  }
+  if (callBar && !callBar.classList.contains('hidden')) {
+    totalHeight += callBar.offsetHeight;
   }
   wrapper.style.paddingBottom = totalHeight + 'px';
 }
@@ -1572,13 +1576,19 @@ async function selectConversation(convId) {
   });
   
   // Загружаем сообщения
-  loadMessages(convId);
-  
-  // Скролл вниз
-  setTimeout(() => {
-    isAtBottom = true;
-    scrollMessagesToBottom();
-  }, 200);
+  await loadMessages(convId);
+
+  // Вместо setTimeout с 200 мс, используем более надёжный подход:
+  const waitForMessages = () => {
+    const container = $('chat-messages-wrapper');
+    if (container && $('messages-list').children.length > 0) {
+      scrollMessagesToBottom();
+    } else {
+      requestAnimationFrame(waitForMessages);
+    }
+  };
+  requestAnimationFrame(waitForMessages);
+  requestAnimationFrame(() => scrollMessagesToBottom());
 }
 // ---- emojis ----
 
@@ -1748,24 +1758,15 @@ function handleMessagesRead(data) {
 async function loadMessages(convId) {
   const list = $('messages-list');
   if (!list) return;
-  
   list.innerHTML = '';
-  
   try {
     const messages = await api(`/api/conversations/${convId}/messages`);
-    
     for (const msg of messages) {
       const messageDiv = createMessageElement(msg, currentConversationIsGroup, currentUser.id);
       list.appendChild(messageDiv);
     }
-    
-    const container = $('chat-messages-wrapper');
-    const shouldScroll = container.scrollHeight - container.scrollTop - container.clientHeight <= 20;
-    if (shouldScroll) {
-      requestAnimationFrame(() => {
-        scrollMessagesToBottom();
-      });
-    }
+    // Принудительно прокручиваем вниз после загрузки
+    scrollMessagesToBottom();
   } catch (err) {
     console.error('Failed to load messages:', err);
     list.innerHTML = '<p style="color:var(--text-muted)">Не удалось загрузить сообщения</p>';
@@ -2046,6 +2047,7 @@ if (modalFriends) {
 const btnDeleteAccount = $('btn-delete-account');
 if (btnDeleteAccount) {
   btnDeleteAccount.addEventListener('click', () => {
+    hide(modalProfile); // закрываем модалку профиля
     hide($('modal-friends'));
     show($('modal-delete-confirm'));
     const deletePassword = $('delete-password');
@@ -2120,6 +2122,7 @@ const confirmPasswordInputChange = document.getElementById('change-confirm-passw
 // Открытие модалки смены пароля
 if (btnChangePassword) {
   btnChangePassword.addEventListener('click', () => {
+    hide(modalProfile); // закрываем модалку профиля
     // Очищаем поля и ошибки
     if (oldPasswordInputChange) oldPasswordInputChange.value = '';
     if (newPasswordInputChange) newPasswordInputChange.value = '';
@@ -4236,6 +4239,7 @@ function updateCallStatus(status) {
   } else {
     if (bar) bar.classList.add('hidden');
   }
+  updateChatMessagesPaddingBottom(); // добавьте эту строку
 }
 
 function showCallUI() {
