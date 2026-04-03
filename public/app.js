@@ -2107,31 +2107,59 @@ const modalProfile = $('modal-profile');
 const btnSaveDisplayName = $('btn-save-display-name');
 const profileDisplayNameInput = $('profile-display-name');
 const profileError = $('profile-error');
+// Находим кнопку "Сменить пароль" внутри модалки профиля (старая)
 const btnChangePassword = document.getElementById('btn-change-password');
-const oldPasswordInput = document.getElementById('old-password');
-const newPasswordInput = document.getElementById('new-password');
-const confirmPasswordInput = document.getElementById('confirm-password');
-const passwordChangeError = document.getElementById('password-change-error');
+const modalChangePassword = document.getElementById('modal-change-password');
+const btnSubmitChangePassword = document.getElementById('btn-submit-change-password');
+const btnCancelChangePassword = document.getElementById('btn-cancel-change-password');
+const changePasswordError = document.getElementById('change-password-error');
+const oldPasswordInputChange = document.getElementById('change-old-password');
+const newPasswordInputChange = document.getElementById('change-new-password');
+const confirmPasswordInputChange = document.getElementById('change-confirm-password');
 
+// Открытие модалки смены пароля
 if (btnChangePassword) {
-  btnChangePassword.addEventListener('click', async () => {
-    passwordChangeError.textContent = '';
-    const oldPassword = oldPasswordInput.value.trim();
-    const newPassword = newPasswordInput.value.trim();
-    const confirmPassword = confirmPasswordInput.value.trim();
+  btnChangePassword.addEventListener('click', () => {
+    // Очищаем поля и ошибки
+    if (oldPasswordInputChange) oldPasswordInputChange.value = '';
+    if (newPasswordInputChange) newPasswordInputChange.value = '';
+    if (confirmPasswordInputChange) confirmPasswordInputChange.value = '';
+    if (changePasswordError) changePasswordError.textContent = '';
+    show(modalChangePassword);
+  });
+}
+
+// Закрытие по фону
+if (modalChangePassword) {
+  modalChangePassword.addEventListener('click', (e) => {
+    if (e.target === modalChangePassword) hide(modalChangePassword);
+  });
+}
+
+// Кнопка отмены
+if (btnCancelChangePassword) {
+  btnCancelChangePassword.addEventListener('click', () => hide(modalChangePassword));
+}
+
+// Выполнение смены пароля
+if (btnSubmitChangePassword) {
+  btnSubmitChangePassword.addEventListener('click', async () => {
+    if (changePasswordError) changePasswordError.textContent = '';
+    
+    const oldPassword = oldPasswordInputChange.value.trim();
+    const newPassword = newPasswordInputChange.value.trim();
+    const confirmPassword = confirmPasswordInputChange.value.trim();
 
     if (!oldPassword || !newPassword || !confirmPassword) {
-      passwordChangeError.textContent = 'Все поля обязательны для заполнения';
+      changePasswordError.textContent = 'Все поля обязательны для заполнения';
       return;
     }
-
     if (newPassword.length < 6) {
-      passwordChangeError.textContent = 'Новый пароль должен содержать минимум 6 символов';
+      changePasswordError.textContent = 'Новый пароль должен содержать минимум 6 символов';
       return;
     }
-
     if (newPassword !== confirmPassword) {
-      passwordChangeError.textContent = 'Пароли не совпадают';
+      changePasswordError.textContent = 'Пароли не совпадают';
       return;
     }
 
@@ -2141,13 +2169,11 @@ if (btnChangePassword) {
         body: JSON.stringify({ oldPassword, newPassword })
       });
 
-      // Очищаем поля
-      oldPasswordInput.value = '';
-      newPasswordInput.value = '';
-      confirmPasswordInput.value = '';
-
       // Успешное уведомление
       showToast('Пароль успешно изменён. Пожалуйста, войдите снова.', 'success');
+
+      // Закрываем модалку
+      hide(modalChangePassword);
 
       // Выход из системы
       if (callActive) await endCall();
@@ -2166,14 +2192,14 @@ if (btnChangePassword) {
       currentConversationId = null;
       renderScreen();
 
-      // Закрыть модалку профиля
-      hide(modalProfile);
-
     } catch (err) {
-      passwordChangeError.textContent = err.message || 'Ошибка при смене пароля';
+      changePasswordError.textContent = err.message || 'Ошибка при смене пароля';
     }
   });
 }
+
+
+
 
 if (btnMenu) {
   btnMenu.addEventListener('click', () => {
