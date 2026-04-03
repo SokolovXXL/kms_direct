@@ -2218,3 +2218,9 @@ body {
   z-index: 20;
   margin-bottom: 0;
 }
+
+@media (min-width: 769px) {
+  .sidebar-actions .btn-primary:first-child {
+    margin-bottom: 0.5rem;
+  }
+}
