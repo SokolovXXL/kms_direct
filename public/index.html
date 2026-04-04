@@ -172,6 +172,11 @@
     <div id="modal-profile" class="modal hidden">
       <div class="modal-content">
         <h2>Настройки профиля</h2>
+        <div class="avatar-upload">
+          <img id="profile-avatar-preview" class="avatar-preview" src="/images/default-avatar.png" alt="Avatar">
+          <input type="file" id="avatar-input" accept="image/jpeg,image/png,image/gif,image/webp">
+          <button type="button" id="btn-upload-avatar" class="btn-primary">Загрузить аватарку</button>
+        </div>
         <p>Измените отображаемое имя (как вас видят другие)</p>
         <input type="text" id="profile-display-name" placeholder="Отображаемое имя" maxlength="50" />
         <p id="profile-error" class="auth-error"></p>

@@ -772,12 +772,31 @@ function createMessageElement(message, isGroup, currentUserId) {
   }
 
   if (isGroup && message.sender_id !== currentUserId) {
+    const avatarHtml = getAvatarHtml(message.sender_id, '28px');
     const nameSpan = document.createElement('div');
     nameSpan.className = 'message-sender';
-    nameSpan.textContent = message.sender_username || 'Unknown';
+    nameSpan.innerHTML = `${avatarHtml} ${escapeHtml(message.sender_username || 'Unknown')}`;
     contentDiv.appendChild(nameSpan);
   }
 
+  if (!isGroup && message.sender_id !== currentUserId) {
+    const avatarHtml = getAvatarHtml(message.sender_id, '28px');
+    // Добавляем аватарку в начало сообщения, обернув содержимое в flex-контейнер
+    const flexWrapper = document.createElement('div');
+    flexWrapper.style.display = 'flex';
+    flexWrapper.style.alignItems = 'flex-start';
+    flexWrapper.style.gap = '8px';
+    
+    const avatarDiv = document.createElement('div');
+    avatarDiv.innerHTML = avatarHtml;
+    flexWrapper.appendChild(avatarDiv);
+    
+    // Переносим существующее содержимое contentDiv внутрь нового контейнера
+    const oldContent = contentDiv.cloneNode(true);
+    contentDiv.innerHTML = '';
+    flexWrapper.appendChild(oldContent);
+    contentDiv.appendChild(flexWrapper);
+  }
     // Проверка на файл или составное сообщение
   let isFile = false;
   let fileData = null;
@@ -844,6 +863,13 @@ function createMessageElement(message, isGroup, currentUserId) {
   }
   messageDiv.appendChild(contentDiv);
   return messageDiv;
+}
+
+function getAvatarHtml(userId, size = '32px') {
+  return `<img class="avatar" src="/api/avatar/${userId}" 
+          onerror="this.onerror=null;this.src='/images/default-avatar.png';" 
+          style="width:${size}; height:${size}; border-radius:50%; object-fit:cover; margin-right:8px;" 
+          alt="Avatar">`;
 }
 
 function appendMessageToChat(message) {
@@ -1008,13 +1034,10 @@ function updateTypingStatusInSidebar(conversationId, displayName, isTyping) {
     // Вернуть обычный статус, перезагрузив из кэша
     const conversation = conversationListCache.find(c => c.id === conversationId);
     if (conversation && !conversation.isGroup && conversation.otherUser) {
-      if (conversation.otherUser.online) {
-        row.innerHTML = '● онлайн';
-        row.className = 'dm-status online';
-      } else if (conversation.otherUser.last_seen) {
-        row.innerHTML = `был ${formatLastSeen(conversation.otherUser.last_seen)}`;
-        row.className = 'dm-status';
-      }
+      const avatarHtml = getAvatarHtml(conversation.otherUser.id, '32px');
+      chatWithName.innerHTML = `${avatarHtml} ${displayName}`;
+    } else {
+      chatWithName.textContent = displayName;
     }
     row.classList.remove('typing');
   }
@@ -1405,14 +1428,22 @@ async function loadConversationList(retryCount = 3) {
         item.dataset.id = conv.id;
         
         let nameHtml = '';
+        let avatarHtml = '';
+        
         if (conv.isChannel) {
           nameHtml = `<span class="dm-name"><img src="/images/channel.png" alt="Channel" style="width:18px;height:18px;vertical-align:middle;"> ${escapeHtml(conv.title || 'Channel')}</span>`;
+          avatarHtml = '<img src="/images/channel.png" style="width:32px; height:32px; margin-right:8px;" alt="Channel">';
         } else if (conv.isGroup) {
           nameHtml = `<span class="dm-name"><img src="/images/group.png" alt="Group" style="width:18px;height:18px;vertical-align:middle;"> ${escapeHtml(conv.title || 'Group')}</span>`;
+          avatarHtml = '<img src="/images/group.png" style="width:32px; height:32px; margin-right:8px;" alt="Group">';
         } else {
           const otherUserName = conv.otherUser?.name || conv.otherUser?.username || 'Unknown';
           nameHtml = `<span class="dm-name">${escapeHtml(otherUserName)}</span>`;
+          if (conv.otherUser) {
+            avatarHtml = getAvatarHtml(conv.otherUser.id, '32px');
+          }
         }
+        
         let previewText = conv.lastMessage || 'No messages yet';
         let statusHtml = '';
         
@@ -1436,14 +1467,16 @@ async function loadConversationList(retryCount = 3) {
         }
         previewText = truncate(previewText);
         
-        
         item.innerHTML = `
-          <div style="flex:1;min-width:0;">
-            ${nameHtml}
-            <span class="dm-preview">${escapeHtml(previewText)}</span>
-            ${statusHtml}
+          <div style="display:flex; align-items:center; width:100%;">
+            ${avatarHtml}
+            <div style="flex:1; min-width:0;">
+              ${nameHtml}
+              <span class="dm-preview">${escapeHtml(previewText)}</span>
+              ${statusHtml}
+            </div>
+            ${unread > 0 ? `<span class="dm-unread">${unread > 99 ? '99+' : unread}</span>` : ''}
           </div>
-          ${unread > 0 ? `<span class="dm-unread">${unread > 99 ? '99+' : unread}</span>` : ''}
         `;
         
         item.addEventListener('click', () => {
@@ -1459,14 +1492,13 @@ async function loadConversationList(retryCount = 3) {
       }
       updateBadgeFromCache();
       restoreLastConversation();
-      return; // успех – выходим из функции
+      return;
       
     } catch (err) {
       console.error(`Failed to load conversations (attempt ${attempt}/${retryCount}):`, err);
       if (attempt === retryCount) {
         list.innerHTML = '<p style="padding:1rem;color:var(--text-muted)">Не удалось загрузить чаты</p>';
       } else {
-        // ждём перед следующей попыткой (экспоненциальная задержка)
         await new Promise(r => setTimeout(r, 1000 * attempt));
       }
     }
@@ -1567,7 +1599,14 @@ async function selectConversation(convId) {
       displayName = conversation.otherUser?.name || conversation.otherUser?.username || '…';
     }
   }
-  if (chatWithName) chatWithName.textContent = displayName;
+  if (chatWithName) {
+    if (conversation && !conversation.isGroup && conversation.otherUser) {
+      const avatarHtml = getAvatarHtml(conversation.otherUser.id, '32px');
+      chatWithName.innerHTML = `${avatarHtml} ${escapeHtml(displayName)}`;
+    } else {
+      chatWithName.textContent = displayName;
+    }
+  }
   updateChatHeaderStatus(conversation);
   
   // Подсветка активного элемента в списке
@@ -4418,6 +4457,56 @@ document.addEventListener('DOMContentLoaded', () => {
   renderFilePreviews();
   tryAutoLogin();
   updateChatMessagesPaddingBottom();
+  // Avatar upload
+  const avatarInput = document.getElementById('avatar-input');
+  const btnUploadAvatar = document.getElementById('btn-upload-avatar');
+  const profileAvatarPreview = document.getElementById('profile-avatar-preview');
+
+  if (btnUploadAvatar) {
+    btnUploadAvatar.addEventListener('click', async () => {
+      const file = avatarInput.files[0];
+      if (!file) {
+        profileError.textContent = 'Выберите файл';
+        return;
+      }
+      const formData = new FormData();
+      formData.append('avatar', file);
+      try {
+        const res = await fetch(API + '/api/avatar', {
+          method: 'POST',
+          credentials: 'include',
+          body: formData
+        });
+        if (!res.ok) throw new Error(await res.text());
+        // Обновить превью
+        profileAvatarPreview.src = `/api/avatar/${currentUser.id}?t=${Date.now()}`;
+        // Перезагрузить список чатов и сообщения, чтобы обновились аватарки
+        loadConversationList();
+        if (currentConversationId) {
+          loadMessages(currentConversationId);
+        }
+        showToast('Аватарка обновлена', 'success');
+      } catch (err) {
+        profileError.textContent = err.message;
+      }
+    });
+  }
+
+  // Обновляем превью при открытии модалки (если аватарка уже есть)
+  if (modalProfile) {
+    const originalShow = modalProfile.classList.contains('hidden') ? () => {} : null;
+    // Добавляем обновление превью при показе модалки
+    const observer = new MutationObserver((mutations) => {
+      mutations.forEach((mutation) => {
+        if (mutation.type === 'attributes' && mutation.attributeName === 'class') {
+          if (!modalProfile.classList.contains('hidden')) {
+            profileAvatarPreview.src = `/api/avatar/${currentUser.id}?t=${Date.now()}`;
+          }
+        }
+      });
+    });
+    observer.observe(modalProfile, { attributes: true });
+  }
 });
 // Auth tabs switching
 const tabs = document.querySelectorAll('.auth-tab');
