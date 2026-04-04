@@ -1018,10 +1018,14 @@ function createMessageElement(message, isGroup, currentUserId) {
 }
 
 function getAvatarHtml(userId, size = '32px') {
-  return `<img class="avatar" src="/api/avatar/${userId}" 
-          onerror="this.onerror=null;this.src='/images/default-avatar.png';" 
-          style="width:${size}; height:${size}; border-radius:50%; object-fit:cover; margin-right:8px;" 
-          alt="Avatar">`;
+  try {
+    return `<img class="avatar" src="/api/avatar/${userId}" 
+            onerror="this.onerror=null;this.src='/images/default-avatar.png';" 
+            style="width:${size}; height:${size}; border-radius:50%; object-fit:cover; margin-right:8px;" 
+            alt="Avatar">`;
+  } catch(e) {
+    return '<div style="display:inline-block; width:'+size+'; height:'+size+'; background:#ccc; border-radius:50%; margin-right:8px;"></div>';
+  }
 }
 
 function appendMessageToChat(message) {
@@ -1455,12 +1459,13 @@ function hideContextMenu() {
 }
 
 function showContextMenuAt(message, clientX, clientY) {
-  if (contextMenu && !contextMenu.classList.contains('hidden') && currentContextMessage === message) {
-    hideContextMenu();
-    return;
-  } if (!contextMenu) {
+  if (!contextMenu) {
     initContextMenu();
     if (!contextMenu) return;
+  }
+  if (!contextMenu.classList.contains('hidden') && currentContextMessage === message) {
+    hideContextMenu();
+    return;
   }
   showContextMenu(message, clientX, clientY);
 }
@@ -1753,14 +1758,18 @@ async function selectConversation(convId) {
   loadMessages(convId);
   
   // Показать кнопку информации для группы/канала
-  setTimeout(() => {
-    const conversationNow = conversationListCache.find(c => c.id === convId);
-    if (conversationNow && conversationNow.isGroup) {
-      showGroupInfoButton(convId, conversationNow.title);
-    } else {
-      hideGroupInfoButton();
+  // Вместо простого setTimeout:
+  let attempts = 0;
+  function tryShowGroupInfo() {
+    const conv = conversationListCache.find(c => c.id === convId);
+    if (conv && conv.isGroup) {
+      showGroupInfoButton(convId, conv.title);
+    } else if (attempts < 5) {
+      attempts++;
+      setTimeout(tryShowGroupInfo, 200);
     }
-  }, 200);
+  }
+  tryShowGroupInfo();
   
   // Надёжная прокрутка вниз после загрузки сообщений
 }
