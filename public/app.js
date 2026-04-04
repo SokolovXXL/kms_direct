@@ -1320,54 +1320,57 @@ let currentContextMessage = null;
 
 function initContextMenu() {
   contextMenu = document.getElementById('message-context-menu');
-  if (!contextMenu) {
-    console.error('Context menu element not found!');
-    return;
-  }
+  if (!contextMenu) return;
 
-  // Очищаем старые обработчики, клонируем элемент
-  const oldMenu = contextMenu.cloneNode(true);
-  contextMenu.parentNode.replaceChild(oldMenu, contextMenu);
-  contextMenu = oldMenu;
-
-  // Добавляем пункт "Ответить", если его нет
+  // Добавляем пункт "Ответить" перед "Удалить"
   const actionsContainer = contextMenu.querySelector('.context-menu-actions');
-  if (actionsContainer && !actionsContainer.querySelector('[data-action="reply"]')) {
-    const replyItem = document.createElement('div');
-    replyItem.className = 'context-menu-item';
-    replyItem.dataset.action = 'reply';
-    replyItem.textContent = 'Ответить';
-    const deleteItem = actionsContainer.querySelector('[data-action="delete"]');
-    if (deleteItem) actionsContainer.insertBefore(replyItem, deleteItem);
-    else actionsContainer.appendChild(replyItem);
+  const deleteItem = actionsContainer.querySelector('[data-action="delete"]');
+  const replyItem = document.createElement('div');
+  replyItem.className = 'context-menu-item';
+  replyItem.dataset.action = 'reply';
+  replyItem.textContent = 'Ответить';
+
+  if (deleteItem) {
+    actionsContainer.insertBefore(replyItem, deleteItem);
+  } else {
+    actionsContainer.appendChild(replyItem);
   }
 
   // Закрытие по клику вне меню
-  const closeHandler = (e) => {
+  document.addEventListener('click', (e) => {
     if (!contextMenu.classList.contains('hidden') && 
         !contextMenu.contains(e.target) && 
         !e.target.closest('.message')) {
       hideContextMenu();
     }
-  };
-  document.removeEventListener('click', closeHandler);
-  document.addEventListener('click', closeHandler);
+  });
+
+  // Закрытие по прокрутке
+  const messagesWrapper = document.getElementById('chat-messages-wrapper');
+  if (messagesWrapper) {
+    messagesWrapper.addEventListener('scroll', () => {
+      hideContextMenu();
+    });
+  }
 
   // Закрытие по Escape
-  const escHandler = (e) => {
-    if (e.key === 'Escape') hideContextMenu();
-  };
-  document.removeEventListener('keydown', escHandler);
-  document.addEventListener('keydown', escHandler);
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      hideContextMenu();
+    }
+  });
 
   // Обработка кликов по пунктам меню
   contextMenu.addEventListener('click', (e) => {
     const actionItem = e.target.closest('.context-menu-item');
     if (!actionItem || !currentContextMessage) return;
+
     const action = actionItem.dataset.action;
-    if (action === 'copy') copyMessageContent(currentContextMessage);
-    else if (action === 'delete') deleteMessage(currentContextMessage);
-    else if (action === 'reply') {
+    if (action === 'copy') {
+      copyMessageContent(currentContextMessage);
+    } else if (action === 'delete') {
+      deleteMessage(currentContextMessage);
+    } else if (action === 'reply') {
       setReplyTo(currentContextMessage);
       hideContextMenu();
     } else if (action === 'react') {
@@ -1385,39 +1388,45 @@ function initContextMenu() {
 }
 
 function showContextMenu(messageElement, clickX, clickY) {
-  if (!contextMenu) {
-    initContextMenu();
-    if (!contextMenu) return;
-  }
+  if (!contextMenu) return;
+
   currentContextMessage = messageElement;
 
-  // Показываем/скрываем пункт "Удалить"
+  // Показываем или скрываем пункт "Удалить" в зависимости от того, своё ли сообщение
   const deleteItem = contextMenu.querySelector('[data-action="delete"]');
   if (deleteItem) {
-    deleteItem.style.display = messageElement.classList.contains('mine') ? 'block' : 'none';
+    if (messageElement.classList.contains('mine')) {
+      deleteItem.style.display = 'block';
+    } else {
+      deleteItem.style.display = 'none';
+    }
   }
 
   const menuWidth = contextMenu.offsetWidth || 180;
   const menuHeight = contextMenu.offsetHeight || 100;
+  
   let left = clickX;
   let top = clickY;
+
   const viewportWidth = window.innerWidth;
   const viewportHeight = window.innerHeight;
 
-  if (left + menuWidth > viewportWidth - 10) left = viewportWidth - menuWidth - 10;
-  if (top + menuHeight > viewportHeight - 10) top = viewportHeight - menuHeight - 10;
+  if (left + menuWidth > viewportWidth - 10) {
+    left = viewportWidth - menuWidth - 10;
+  }
+  if (top + menuHeight > viewportHeight - 10) {
+    top = viewportHeight - menuHeight - 10;
+  }
 
   contextMenu.style.left = left + 'px';
   contextMenu.style.top = top + 'px';
 
-  // Стрелка
   const arrow = contextMenu.querySelector('.context-menu-arrow');
   if (arrow) {
     const arrowLeft = clickX - left;
     arrow.style.left = Math.min(Math.max(arrowLeft - 6, 10), menuWidth - 20) + 'px';
   }
 
-  // Реакции
   const reactionsContainer = contextMenu.querySelector('.context-menu-reactions');
   if (reactionsContainer) {
     reactionsContainer.innerHTML = '';
@@ -2790,9 +2799,9 @@ async function showGroupInfo(groupId, groupTitle) {
 }
 
 function showGroupInfoButton(groupId, groupTitle) {
-  const header = document.getElementById('chat-header');
+  const header = $('chat-header');
   if (!header) return;
-  // удаляем старую кнопку, если есть
+  
   const oldBtn = document.getElementById('group-info-btn');
   if (oldBtn) oldBtn.remove();
   
@@ -2809,8 +2818,7 @@ function showGroupInfoButton(groupId, groupTitle) {
   btn.style.minWidth = '44px';
   btn.style.minHeight = '44px';
   btn.title = 'Group info';
-  btn.dataset.groupId = groupId;
-  btn.dataset.groupTitle = groupTitle;
+  
   btn.addEventListener('click', () => showGroupInfo(groupId, groupTitle));
   
   header.appendChild(btn);
