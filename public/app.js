@@ -1325,7 +1325,7 @@ function initContextMenu() {
     return;
   }
 
-  // Очищаем старые обработчики, чтобы не было дублей
+  // Очищаем старые обработчики, клонируем элемент
   const oldMenu = contextMenu.cloneNode(true);
   contextMenu.parentNode.replaceChild(oldMenu, contextMenu);
   contextMenu = oldMenu;
@@ -1449,6 +1449,9 @@ function showContextMenuAt(message, clientX, clientY) {
   if (contextMenu && !contextMenu.classList.contains('hidden') && currentContextMessage === message) {
     hideContextMenu();
     return;
+  } if (!contextMenu) {
+    initContextMenu();
+    if (!contextMenu) return;
   }
   showContextMenu(message, clientX, clientY);
 }
@@ -1676,14 +1679,13 @@ async function selectConversation(convId) {
     conversation = conversationListCache.find(c => c.id === convId);
   }
   
-
   // Определяем роль текущего пользователя (нужно для каналов)
   let userRole = 'member';
   if (conversation && conversation.participants) {
     const me = conversation.participants.find(p => p.id === currentUser.id);
     if (me) userRole = me.role;
   }
-  window.currentUserRole = userRole; // если нужно в других местах
+  window.currentUserRole = userRole;
   
   currentConversationIsGroup = conversation ? conversation.isGroup : false;
   currentConversationIsChannel = conversation ? conversation.isChannel : false;
@@ -1698,11 +1700,11 @@ async function selectConversation(convId) {
     } else {
       hide(sendForm);
     }
-    updateChatMessagesPaddingBottom(); // добавляем
+    updateChatMessagesPaddingBottom();
     hide(btnCall);
   } else {
     show(sendForm);
-    updateChatMessagesPaddingBottom(); // добавляем
+    updateChatMessagesPaddingBottom();
     if (btnCall) {
       if (callActive) {
         btnCall.style.display = 'none';
@@ -1730,14 +1732,7 @@ async function selectConversation(convId) {
       displayName = conversation.otherUser?.name || conversation.otherUser?.username || '…';
     }
   }
-  if (chatWithName) {
-    if (conversation && !conversation.isGroup && conversation.otherUser) {
-      const avatarHtml = getAvatarHtml(conversation.otherUser.id, '32px');
-      chatWithName.innerHTML = `${avatarHtml} ${escapeHtml(displayName)}`;
-    } else {
-      chatWithName.textContent = displayName;
-    }
-  }
+  if (chatWithName) chatWithName.textContent = displayName;
   updateChatHeaderStatus(conversation);
   
   // Подсветка активного элемента в списке
@@ -1746,29 +1741,19 @@ async function selectConversation(convId) {
   });
   
   // Загружаем сообщения
-  await loadMessages(convId);
-
-  // Показать кнопку информации для группы
+  loadMessages(convId);
+  
+  // Показать кнопку информации для группы/канала
   setTimeout(() => {
-    const conversation = conversationListCache.find(c => c.id === convId);
-    if (conversation && conversation.isGroup) {
-      showGroupInfoButton(convId, conversation.title);
+    const conversationNow = conversationListCache.find(c => c.id === convId);
+    if (conversationNow && conversationNow.isGroup) {
+      showGroupInfoButton(convId, conversationNow.title);
     } else {
       hideGroupInfoButton();
     }
   }, 200);
-
-  // Вместо setTimeout с 200 мс, используем более надёжный подход:
-  const waitForMessages = () => {
-    const container = $('chat-messages-wrapper');
-    if (container && $('messages-list').children.length > 0) {
-      scrollMessagesToBottom();
-    } else {
-      requestAnimationFrame(waitForMessages);
-    }
-  };
-  requestAnimationFrame(waitForMessages);
-  requestAnimationFrame(() => scrollMessagesToBottom());
+  
+  // Надёжная прокрутка вниз после загрузки сообщений
 }
 
 function handleMessagesRead(data) {
@@ -1882,7 +1867,6 @@ if (sendForm) {
       }
     }
 
-    requestAnimationFrame(() => scrollMessagesToBottom());
   });
 }
 
