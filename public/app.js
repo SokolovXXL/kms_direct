@@ -4457,20 +4457,26 @@ document.addEventListener('DOMContentLoaded', () => {
   renderFilePreviews();
   tryAutoLogin();
   updateChatMessagesPaddingBottom();
+  
   // Avatar upload
   const avatarInput = document.getElementById('avatar-input');
   const btnUploadAvatar = document.getElementById('btn-upload-avatar');
   const profileAvatarPreview = document.getElementById('profile-avatar-preview');
 
-  if (btnUploadAvatar) {
-    btnUploadAvatar.addEventListener('click', async () => {
+  if (btnUploadAvatar && avatarInput) {
+    // Клик по кнопке открывает диалог выбора файла
+    btnUploadAvatar.addEventListener('click', () => {
+      avatarInput.click();
+    });
+
+    // Когда файл выбран – отправляем
+    avatarInput.addEventListener('change', async () => {
       const file = avatarInput.files[0];
-      if (!file) {
-        profileError.textContent = 'Выберите файл';
-        return;
-      }
+      if (!file) return;
+
       const formData = new FormData();
       formData.append('avatar', file);
+
       try {
         const res = await fetch(API + '/api/avatar', {
           method: 'POST',
@@ -4478,24 +4484,42 @@ document.addEventListener('DOMContentLoaded', () => {
           body: formData
         });
         if (!res.ok) throw new Error(await res.text());
-        // Обновить превью
+
+        // Обновить превью в модалке (добавляем случайный параметр для обхода кеша)
         profileAvatarPreview.src = `/api/avatar/${currentUser.id}?t=${Date.now()}`;
-        // Перезагрузить список чатов и сообщения, чтобы обновились аватарки
+
+        // Обновить аватарки в списке чатов и в сообщениях
         loadConversationList();
         if (currentConversationId) {
           loadMessages(currentConversationId);
+          // Дополнительно обновить шапку чата, если открыт личный диалог
+          const conversation = conversationListCache.find(c => c.id === currentConversationId);
+          if (conversation && !conversation.isGroup && conversation.otherUser) {
+            const chatWithName = document.getElementById('chat-with-name');
+            if (chatWithName) {
+              const avatarHtml = getAvatarHtml(conversation.otherUser.id, '32px');
+              const displayName = conversation.otherUser.name || conversation.otherUser.username || '…';
+              chatWithName.innerHTML = `${avatarHtml} ${escapeHtml(displayName)}`;
+            }
+          }
         }
+
         showToast('Аватарка обновлена', 'success');
       } catch (err) {
         profileError.textContent = err.message;
       }
+
+      // Очистить input, чтобы можно было загрузить тот же файл повторно
+      avatarInput.value = '';
     });
   }
 
   // Обновляем превью при открытии модалки (если аватарка уже есть)
   if (modalProfile) {
-    const originalShow = modalProfile.classList.contains('hidden') ? () => {} : null;
-    // Добавляем обновление превью при показе модалки
+    modalProfile.addEventListener('click', (e) => {
+      if (e.target.id === 'modal-profile') hide(modalProfile);
+    });
+    // При открытии модалки обновляем превью
     const observer = new MutationObserver((mutations) => {
       mutations.forEach((mutation) => {
         if (mutation.type === 'attributes' && mutation.attributeName === 'class') {

@@ -2267,4 +2267,5 @@ body {
 }
 #avatar-input {
   margin: 0.5rem 0;
+  display: none;
 }
