@@ -1617,6 +1617,13 @@ async function selectConversation(convId) {
   // Загружаем сообщения
   await loadMessages(convId);
 
+  // Показать кнопку информации, если это группа или канал (и пользователь имеет права)
+  if (conversation && conversation.isGroup) {
+    showGroupInfoButton(convId, conversation.title);
+  } else {
+    hideGroupInfoButton();
+  }
+
   // Вместо setTimeout с 200 мс, используем более надёжный подход:
   const waitForMessages = () => {
     const container = $('chat-messages-wrapper');
@@ -1806,6 +1813,7 @@ async function loadMessages(convId) {
     }
     // Принудительно прокручиваем вниз после загрузки
     scrollMessagesToBottom();
+    if (typeof initContextMenu === 'function') initContextMenu();
   } catch (err) {
     console.error('Failed to load messages:', err);
     list.innerHTML = '<p style="color:var(--text-muted)">Не удалось загрузить сообщения</p>';
