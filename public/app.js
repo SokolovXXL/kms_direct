@@ -1186,10 +1186,13 @@ function initContextMenu() {
 
   // Закрытие по клику вне меню
   document.addEventListener('click', (e) => {
-    if (!contextMenu.classList.contains('hidden') && 
-        !contextMenu.contains(e.target) && 
-        !e.target.closest('.message')) {
-      hideContextMenu();
+    const infoBtn = e.target.closest('#group-info-btn');
+    if (!infoBtn) return;
+    const groupId = infoBtn.dataset.groupId;
+    const groupTitle = infoBtn.dataset.groupTitle;
+    if (groupId) {
+      e.preventDefault();
+      showGroupInfo(parseInt(groupId, 10), groupTitle);
     }
   });
 
@@ -1813,7 +1816,6 @@ async function loadMessages(convId) {
     }
     // Принудительно прокручиваем вниз после загрузки
     scrollMessagesToBottom();
-    if (typeof initContextMenu === 'function') initContextMenu();
   } catch (err) {
     console.error('Failed to load messages:', err);
     list.innerHTML = '<p style="color:var(--text-muted)">Не удалось загрузить сообщения</p>';
@@ -2842,8 +2844,8 @@ function showGroupInfoButton(groupId, groupTitle) {
   btn.style.minWidth = '44px';
   btn.style.minHeight = '44px';
   btn.title = 'Group info';
-  
-  btn.addEventListener('click', () => showGroupInfo(groupId, groupTitle));
+  btn.dataset.groupId = groupId;
+  btn.dataset.groupTitle = groupTitle;  
   
   header.appendChild(btn);
   adjustChatMessagesPadding();
@@ -4427,14 +4429,23 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // Правый клик (контекстное меню)
-    messagesList.addEventListener('contextmenu', (e) => {
+    // Удаляем старый listener, если он был привязан к конкретному элементу
+    // Вместо этого вешаем глобально, но с проверкой области чата
+
+    document.addEventListener('contextmenu', (e) => {
+      // 1. Находим ближайшее сообщение
       const message = e.target.closest('.message');
       if (!message) return;
-      const interactive = e.target.closest('button, a, .audio-play-btn, .audio-download-btn, .delete-message-btn, input, label, video, audio');
-      if (interactive) return;
-      showContextMenuAt(message, e.clientX, e.clientY);
+
+      // 2. Убедимся, что клик был именно в области активного чата (опционально)
+      const chatArea = document.getElementById('chat-active');
+      if (!chatArea || !chatArea.contains(message)) return;
+
+      // 3. Предотвращаем стандартное меню браузера
       e.preventDefault();
-      e.stopPropagation();
+
+      // 4. Показываем своё меню
+      showContextMenuAt(message, e.clientX, e.clientY);
     });
 
     // Свайп вправо (мобильные)
