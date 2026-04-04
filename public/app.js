@@ -1325,6 +1325,10 @@ let currentContextMessage = null;
 function initContextMenu() {
   contextMenu = document.getElementById('message-context-menu');
   if (!contextMenu) return;
+  
+  // Prevent re-initialization
+  if (contextMenu._initialized) return;
+  contextMenu._initialized = true;
 
   // Добавляем пункт "Ответить" перед "Удалить"
   const actionsContainer = contextMenu.querySelector('.context-menu-actions');
@@ -1341,13 +1345,14 @@ function initContextMenu() {
   }
 
   // Закрытие по клику вне меню
-  document.addEventListener('click', (e) => {
+  const handleOutsideClick = (e) => {
     if (!contextMenu.classList.contains('hidden') && 
         !contextMenu.contains(e.target) && 
         !e.target.closest('.message')) {
       hideContextMenu();
     }
-  });
+  };
+  document.addEventListener('click', handleOutsideClick);
 
   // Закрытие по прокрутке
   const messagesWrapper = document.getElementById('chat-messages-wrapper');
@@ -1358,28 +1363,32 @@ function initContextMenu() {
   }
 
   // Закрытие по Escape
-  document.addEventListener('keydown', (e) => {
+  const handleEscape = (e) => {
     if (e.key === 'Escape') {
       hideContextMenu();
     }
-  });
+  };
+  document.addEventListener('keydown', handleEscape);
 
   // Обработка кликов по пунктам меню
   contextMenu.addEventListener('click', (e) => {
+    e.stopPropagation(); // Prevent event from bubbling to document
+    
     const actionItem = e.target.closest('.context-menu-item');
     if (!actionItem || !currentContextMessage) return;
 
     const action = actionItem.dataset.action;
     if (action === 'copy') {
       copyMessageContent(currentContextMessage);
+      hideContextMenu();
     } else if (action === 'delete') {
       deleteMessage(currentContextMessage);
+      hideContextMenu();
     } else if (action === 'reply') {
       setReplyTo(currentContextMessage);
       hideContextMenu();
     } else if (action === 'react') {
       e.preventDefault();
-      e.stopPropagation();
       const message = currentContextMessage;
       hideContextMenu();
       if (message) {
@@ -1387,7 +1396,6 @@ function initContextMenu() {
         showEmojiPicker(message, rect.right, rect.top);
       }
     }
-    hideContextMenu();
   });
 }
 
@@ -2085,7 +2093,7 @@ if (btnAddFriend) {
 const modalFriends = $('modal-friends');
 if (modalFriends) {
   modalFriends.addEventListener('click', (e) => {
-    if (e.target.id === 'modal-friends') hide($('modal-friends'));
+    if (e.target === modalFriends) hide($('modal-friends'));
   });
 }
 
@@ -2106,7 +2114,7 @@ if (btnDeleteAccount) {
 const modalDeleteConfirm = $('modal-delete-confirm');
 if (modalDeleteConfirm) {
   modalDeleteConfirm.addEventListener('click', (e) => {
-    if (e.target.id === 'modal-delete-confirm') hide($('modal-delete-confirm'));
+    if (e.target === modalDeleteConfirm) hide($('modal-delete-confirm'));
   });
 }
 
@@ -2262,7 +2270,7 @@ if (btnMenu) {
 
 if (modalProfile) {
   modalProfile.addEventListener('click', (e) => {
-    if (e.target.id === 'modal-profile') hide(modalProfile);
+    if (e.target === modalProfile) hide(modalProfile);
   });
 }
 
@@ -2364,7 +2372,7 @@ if (btnCreateGroupBtn) {
 const modalCreateGroup = $('modal-create-group');
 if (modalCreateGroup) {
   modalCreateGroup.addEventListener('click', (e) => {
-    if (e.target.id === 'modal-create-group') {
+    if (e.target === modalCreateGroup) {
       hide(modalCreateGroup);
       creatingChannel = false;
       document.querySelector('#modal-create-group h2').textContent = 'Create group';
@@ -2373,16 +2381,10 @@ if (modalCreateGroup) {
   });
 }
 
-if (modalCreateGroup) {
-  modalCreateGroup.addEventListener('click', (e) => {
-    if (e.target.id === 'modal-create-group') hide(modalCreateGroup);
-  });
-}
-
 const modalGroupsList = $('modal-groups-list');
 if (modalGroupsList) {
   modalGroupsList.addEventListener('click', (e) => {
-    if (e.target.id === 'modal-groups-list') hide(modalGroupsList);
+    if (e.target === modalGroupsList) hide(modalGroupsList);
   });
 }
 
@@ -2842,7 +2844,10 @@ function hideGroupInfoButton() {
 
 if (modalGroupInfo) {
   modalGroupInfo.addEventListener('click', (e) => {
-    if (e.target.id === 'modal-group-info') hide(modalGroupInfo);
+    // Only close if clicking directly on the modal background, not on any children
+    if (e.target === modalGroupInfo) {
+      hide(modalGroupInfo);
+    }
   });
 }
 
@@ -2916,7 +2921,10 @@ async function loadFriendsToAdd(groupId, groupTitle) {
 
 if (modalAddMember) {
   modalAddMember.addEventListener('click', (e) => {
-    if (e.target.id === 'modal-add-member') hide(modalAddMember);
+    // Only close if clicking directly on the modal background, not on any children
+    if (e.target === modalAddMember) {
+      hide(modalAddMember);
+    }
   });
 }
 
@@ -4508,9 +4516,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Обновляем превью при открытии модалки (если аватарка уже есть)
   if (modalProfile) {
-    modalProfile.addEventListener('click', (e) => {
-      if (e.target.id === 'modal-profile') hide(modalProfile);
-    });
     // При открытии модалки обновляем превью
     const observer = new MutationObserver((mutations) => {
       mutations.forEach((mutation) => {
