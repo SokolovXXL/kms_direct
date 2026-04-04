@@ -20,6 +20,158 @@ let currentConversationIsChannel = false;
 let creatingChannel = false; // флаг для модалки создания канала
 let currentReplyTo = null; // { id, text, senderName }
 
+// ---- emojis ----
+
+const EMOJIS = [
+  { code: 'like', img: 'like.png', display: '👍' },
+  { code: 'heart', img: 'heart.png', display: '❤️' },
+  { code: 'laugh', img: 'laugh.png', display: '😂' },
+  { code: 'wow', img: 'wow.png', display: '😮' },
+  { code: 'sad', img: 'sad.png', display: '😢' },
+  { code: 'angry', img: 'angry.png', display: '😠' }
+];
+
+let currentReactionMessage = null;
+
+function showEmojiPicker(messageEl, x, y) {
+  const picker = document.getElementById('emoji-picker');
+  if (!picker) return;
+
+  currentReactionMessage = messageEl;
+
+  // Заполняем панель кнопками эмодзи
+  const content = picker.querySelector('.emoji-picker-content');
+  content.innerHTML = '';
+  EMOJIS.forEach(e => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'emoji-btn';
+    btn.dataset.emoji = e.code;
+    btn.innerHTML = `<img src="/images/emojis/${e.img}" alt="${e.code}" class="emoji-img">`;
+    btn.addEventListener('click', () => {
+      const messageId = messageEl.dataset.messageId;
+      toggleReaction(messageId, e.code);
+      hideEmojiPicker();
+    });
+    content.appendChild(btn);
+  });
+
+  // Показываем панель, чтобы измерить её размеры
+  picker.style.visibility = 'hidden';
+  picker.classList.remove('hidden');
+  
+  const pickerWidth = picker.offsetWidth;
+  const pickerHeight = picker.offsetHeight;
+  const viewportWidth = window.innerWidth;
+  const viewportHeight = window.innerHeight;
+
+  // Корректируем позицию, чтобы панель не выходила за края
+  if (x + pickerWidth > viewportWidth - 10) {
+    x = viewportWidth - pickerWidth - 10;
+  }
+  if (y + pickerHeight > viewportHeight - 10) {
+    y = viewportHeight - pickerHeight - 10;
+  }
+  if (x < 10) x = 10;
+  if (y < 10) y = 10;
+
+  picker.style.left = x + 'px';
+  picker.style.top = y + 'px';
+  picker.style.visibility = 'visible';
+
+  // Закрытие по клику вне панели
+  setTimeout(() => {
+    document.addEventListener('click', outsideClickHandler);
+  }, 0);
+}
+
+function hideEmojiPicker() {
+  const picker = document.getElementById('emoji-picker');
+  if (picker) picker.classList.add('hidden');
+  document.removeEventListener('click', outsideClickHandler);
+  currentReactionMessage = null;
+}
+
+function outsideClickHandler(e) {
+  const picker = document.getElementById('emoji-picker');
+  if (picker && !picker.contains(e.target)) {
+    hideEmojiPicker();
+  }
+}
+
+async function toggleReaction(messageId, emoji) {
+  try {
+    await api(`/api/messages/${messageId}/reactions`, {
+      method: 'POST',
+      body: JSON.stringify({ emoji })
+    });
+    // Optimistic update is handled by SSE, but we can also update locally
+  } catch (err) {
+    console.error('Failed to toggle reaction:', err);
+    showToast('Ошибка при добавлении реакции', 'error');
+  }
+}
+
+
+function handleReactionEvent(data) {
+  const { messageId, userId, emoji, action } = data;
+  const messageEl = document.querySelector(`.message[data-message-id="${messageId}"]`);
+  if (!messageEl) return;
+
+  // Находим контейнер содержимого сообщения
+  const contentDiv = messageEl.querySelector('.message-content');
+  if (!contentDiv) return;
+
+  let reactionsBar = contentDiv.querySelector('.message-reactions');
+  if (!reactionsBar) {
+    reactionsBar = document.createElement('div');
+    reactionsBar.className = 'message-reactions';
+    // Вставляем перед мета-информацией, если она есть, иначе в конец
+    const meta = contentDiv.querySelector('.message-meta');
+    if (meta) {
+      contentDiv.insertBefore(reactionsBar, meta);
+    } else {
+      contentDiv.appendChild(reactionsBar);
+    }
+  }
+
+  // Поиск или создание элемента для данного эмодзи
+  let reactionItem = Array.from(reactionsBar.children).find(
+    item => item.dataset.emoji === emoji
+  );
+
+  if (action === 'add') {
+    if (!reactionItem) {
+      reactionItem = document.createElement('span');
+      reactionItem.className = 'reaction';
+      reactionItem.dataset.emoji = emoji;
+      reactionItem.innerHTML = `<img src="/images/emojis/${emoji}.png" alt="${emoji}" class="reaction-emoji"> <span class="reaction-count">1</span>`;
+      if (userId === currentUser.id) reactionItem.classList.add('me');
+      reactionsBar.appendChild(reactionItem);
+    } else {
+      const countSpan = reactionItem.querySelector('.reaction-count');
+      const count = parseInt(countSpan.textContent, 10) + 1;
+      countSpan.textContent = count;
+      if (userId === currentUser.id) reactionItem.classList.add('me');
+    }
+  } else if (action === 'remove') {
+    if (reactionItem) {
+      const countSpan = reactionItem.querySelector('.reaction-count');
+      const count = parseInt(countSpan.textContent, 10) - 1;
+      if (count <= 0) {
+        reactionItem.remove();
+      } else {
+        countSpan.textContent = count;
+        if (userId === currentUser.id) reactionItem.classList.remove('me');
+      }
+    }
+  }
+
+  // Если после удаления реакций блок остался пустым – убираем его
+  if (reactionsBar.children.length === 0) reactionsBar.remove();
+}
+
+
 // В DOMContentLoaded или при создании, добавим плашку ответа
 const replyPreview = document.getElementById('reply-preview');
 const replySenderName = document.getElementById('reply-sender-name');
@@ -156,7 +308,7 @@ function renderScreen() {
       })
       .then(permission => {
         if (permission === 'granted') {
-          subscribeUserToPush();
+          if (typeof subscribeUserToPush === 'function') subscribeUserToPush();
         }
       })
       .catch(err => console.error('Service Worker error:', err));
@@ -1286,6 +1438,7 @@ function showContextMenu(messageElement, clickX, clickY) {
   }
 
   contextMenu.classList.remove('hidden');
+  console.log('Menu styles after removal:', window.getComputedStyle(contextMenu).display);
 }
 
 function hideContextMenu() {
@@ -1537,6 +1690,8 @@ async function selectConversation(convId) {
     conversation = conversationListCache.find(c => c.id === convId);
   }
   
+  console.log('selectConversation: isGroup =', conversation?.isGroup, conversation);
+
   // Определяем роль текущего пользователя (нужно для каналов)
   let userRole = 'member';
   if (conversation && conversation.participants) {
@@ -1616,7 +1771,7 @@ async function selectConversation(convId) {
     } else {
       hideGroupInfoButton();
     }
-  }, 50);
+  }, 200);
 
   // Вместо setTimeout с 200 мс, используем более надёжный подход:
   const waitForMessages = () => {
@@ -1629,156 +1784,6 @@ async function selectConversation(convId) {
   };
   requestAnimationFrame(waitForMessages);
   requestAnimationFrame(() => scrollMessagesToBottom());
-}
-// ---- emojis ----
-
-const EMOJIS = [
-  { code: 'like', img: 'like.png', display: '👍' },
-  { code: 'heart', img: 'heart.png', display: '❤️' },
-  { code: 'laugh', img: 'laugh.png', display: '😂' },
-  { code: 'wow', img: 'wow.png', display: '😮' },
-  { code: 'sad', img: 'sad.png', display: '😢' },
-  { code: 'angry', img: 'angry.png', display: '😠' }
-];
-
-let currentReactionMessage = null;
-
-function showEmojiPicker(messageEl, x, y) {
-  const picker = document.getElementById('emoji-picker');
-  if (!picker) return;
-
-  currentReactionMessage = messageEl;
-
-  // Заполняем панель кнопками эмодзи
-  const content = picker.querySelector('.emoji-picker-content');
-  content.innerHTML = '';
-  EMOJIS.forEach(e => {
-    const btn = document.createElement('button');
-    btn.type = 'button';
-    btn.className = 'emoji-btn';
-    btn.dataset.emoji = e.code;
-    btn.innerHTML = `<img src="/images/emojis/${e.img}" alt="${e.code}" class="emoji-img">`;
-    btn.addEventListener('click', () => {
-      const messageId = messageEl.dataset.messageId;
-      toggleReaction(messageId, e.code);
-      hideEmojiPicker();
-    });
-    content.appendChild(btn);
-  });
-
-  // Показываем панель, чтобы измерить её размеры
-  picker.style.visibility = 'hidden';
-  picker.classList.remove('hidden');
-  
-  const pickerWidth = picker.offsetWidth;
-  const pickerHeight = picker.offsetHeight;
-  const viewportWidth = window.innerWidth;
-  const viewportHeight = window.innerHeight;
-
-  // Корректируем позицию, чтобы панель не выходила за края
-  if (x + pickerWidth > viewportWidth - 10) {
-    x = viewportWidth - pickerWidth - 10;
-  }
-  if (y + pickerHeight > viewportHeight - 10) {
-    y = viewportHeight - pickerHeight - 10;
-  }
-  if (x < 10) x = 10;
-  if (y < 10) y = 10;
-
-  picker.style.left = x + 'px';
-  picker.style.top = y + 'px';
-  picker.style.visibility = 'visible';
-
-  // Закрытие по клику вне панели
-  setTimeout(() => {
-    document.addEventListener('click', outsideClickHandler);
-  }, 0);
-}
-
-function hideEmojiPicker() {
-  const picker = document.getElementById('emoji-picker');
-  if (picker) picker.classList.add('hidden');
-  document.removeEventListener('click', outsideClickHandler);
-  currentReactionMessage = null;
-}
-
-function outsideClickHandler(e) {
-  const picker = document.getElementById('emoji-picker');
-  if (picker && !picker.contains(e.target)) {
-    hideEmojiPicker();
-  }
-}
-
-async function toggleReaction(messageId, emoji) {
-  try {
-    await api(`/api/messages/${messageId}/reactions`, {
-      method: 'POST',
-      body: JSON.stringify({ emoji })
-    });
-    // Optimistic update is handled by SSE, but we can also update locally
-  } catch (err) {
-    console.error('Failed to toggle reaction:', err);
-    showToast('Ошибка при добавлении реакции', 'error');
-  }
-}
-
-
-function handleReactionEvent(data) {
-  const { messageId, userId, emoji, action } = data;
-  const messageEl = document.querySelector(`.message[data-message-id="${messageId}"]`);
-  if (!messageEl) return;
-
-  // Находим контейнер содержимого сообщения
-  const contentDiv = messageEl.querySelector('.message-content');
-  if (!contentDiv) return;
-
-  let reactionsBar = contentDiv.querySelector('.message-reactions');
-  if (!reactionsBar) {
-    reactionsBar = document.createElement('div');
-    reactionsBar.className = 'message-reactions';
-    // Вставляем перед мета-информацией, если она есть, иначе в конец
-    const meta = contentDiv.querySelector('.message-meta');
-    if (meta) {
-      contentDiv.insertBefore(reactionsBar, meta);
-    } else {
-      contentDiv.appendChild(reactionsBar);
-    }
-  }
-
-  // Поиск или создание элемента для данного эмодзи
-  let reactionItem = Array.from(reactionsBar.children).find(
-    item => item.dataset.emoji === emoji
-  );
-
-  if (action === 'add') {
-    if (!reactionItem) {
-      reactionItem = document.createElement('span');
-      reactionItem.className = 'reaction';
-      reactionItem.dataset.emoji = emoji;
-      reactionItem.innerHTML = `<img src="/images/emojis/${emoji}.png" alt="${emoji}" class="reaction-emoji"> <span class="reaction-count">1</span>`;
-      if (userId === currentUser.id) reactionItem.classList.add('me');
-      reactionsBar.appendChild(reactionItem);
-    } else {
-      const countSpan = reactionItem.querySelector('.reaction-count');
-      const count = parseInt(countSpan.textContent, 10) + 1;
-      countSpan.textContent = count;
-      if (userId === currentUser.id) reactionItem.classList.add('me');
-    }
-  } else if (action === 'remove') {
-    if (reactionItem) {
-      const countSpan = reactionItem.querySelector('.reaction-count');
-      const count = parseInt(countSpan.textContent, 10) - 1;
-      if (count <= 0) {
-        reactionItem.remove();
-      } else {
-        countSpan.textContent = count;
-        if (userId === currentUser.id) reactionItem.classList.remove('me');
-      }
-    }
-  }
-
-  // Если после удаления реакций блок остался пустым – убираем его
-  if (reactionsBar.children.length === 0) reactionsBar.remove();
 }
 
 function handleMessagesRead(data) {
@@ -2816,6 +2821,7 @@ async function showGroupInfo(groupId, groupTitle) {
 }
 
 function showGroupInfoButton(groupId, groupTitle) {
+  console.log('showGroupInfoButton called for', groupId, groupTitle);
   const header = document.getElementById('chat-header');
   if (!header) {
     console.warn('chat-header not found');
