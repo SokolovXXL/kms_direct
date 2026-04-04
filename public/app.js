@@ -1438,7 +1438,6 @@ function showContextMenu(messageElement, clickX, clickY) {
   }
 
   contextMenu.classList.remove('hidden');
-  console.log('Menu styles after removal:', window.getComputedStyle(contextMenu).display);
 }
 
 function hideContextMenu() {
@@ -1466,12 +1465,6 @@ function urlBase64ToUint8Array(base64String) {
   return outputArray;
 }
 
-function hideContextMenu() {
-  if (contextMenu) {
-    contextMenu.classList.add('hidden');
-    currentContextMessage = null;
-  }
-}
 
 function copyMessageContent(messageElement) {
   const bodyEl = messageElement.querySelector('.message-body');
@@ -1530,13 +1523,6 @@ function clearLongPress() {
   longPressTarget = null;
 }
 
-function showContextMenuAt(message, clientX, clientY) {
-  if (contextMenu && !contextMenu.classList.contains('hidden') && currentContextMessage === message) {
-    hideContextMenu();
-    return;
-  }
-  showContextMenu(message, clientX, clientY);
-}
 
 // ---- Conversations List ----
 async function loadConversationList(retryCount = 3) {
@@ -1690,7 +1676,6 @@ async function selectConversation(convId) {
     conversation = conversationListCache.find(c => c.id === convId);
   }
   
-  console.log('selectConversation: isGroup =', conversation?.isGroup, conversation);
 
   // Определяем роль текущего пользователя (нужно для каналов)
   let userRole = 'member';
@@ -2821,12 +2806,8 @@ async function showGroupInfo(groupId, groupTitle) {
 }
 
 function showGroupInfoButton(groupId, groupTitle) {
-  console.log('showGroupInfoButton called for', groupId, groupTitle);
   const header = document.getElementById('chat-header');
-  if (!header) {
-    console.warn('chat-header not found');
-    return;
-  }
+  if (!header) return;
   // удаляем старую кнопку, если есть
   const oldBtn = document.getElementById('group-info-btn');
   if (oldBtn) oldBtn.remove();
@@ -2845,7 +2826,8 @@ function showGroupInfoButton(groupId, groupTitle) {
   btn.style.minHeight = '44px';
   btn.title = 'Group info';
   btn.dataset.groupId = groupId;
-  btn.dataset.groupTitle = groupTitle;  
+  btn.dataset.groupTitle = groupTitle;
+  btn.addEventListener('click', () => showGroupInfo(groupId, groupTitle));
   
   header.appendChild(btn);
   adjustChatMessagesPadding();
@@ -4378,7 +4360,6 @@ window.addEventListener('resize', () => {
 
 // ---- Initialization ----
 document.addEventListener('DOMContentLoaded', () => {
-  console.log('DOM loaded, initializing app');
   adjustChatMessagesPadding();
   filePreviewList = document.getElementById('file-preview-list');
   fileTypeMenu = document.getElementById('file-type-menu');
@@ -4428,17 +4409,16 @@ document.addEventListener('DOMContentLoaded', () => {
       e.preventDefault();
     });
 
-    document.removeEventListener('contextmenu', document._contextMenuHandler);
-    const contextHandler = (e) => {
+    // Правый клик (контекстное меню)
+    messagesList.addEventListener('contextmenu', (e) => {
       const message = e.target.closest('.message');
-      if (message) {
-        e.preventDefault();
-        e.stopPropagation();
-        showContextMenuAt(message, e.clientX, e.clientY);
-      }
-    };
-    document.addEventListener('contextmenu', contextHandler);
-    document._contextMenuHandler = contextHandler;
+      if (!message) return;
+      const interactive = e.target.closest('button, a, .audio-play-btn, .audio-download-btn, .delete-message-btn, input, label, video, audio');
+      if (interactive) return;
+      showContextMenuAt(message, e.clientX, e.clientY);
+      e.preventDefault();
+      e.stopPropagation();
+    });
 
     // Свайп вправо (мобильные)
     let touchStartX = 0, touchStartY = 0;
