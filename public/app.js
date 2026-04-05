@@ -130,6 +130,7 @@ async function api(path, options = {}) {
 
 // Попытка автоматического входа при загрузке
 async function tryAutoLogin() {
+
   try {
     const me = await api('/api/me');
     currentUser = me;
@@ -144,12 +145,26 @@ async function tryAutoLogin() {
     currentUser = null;
     localStorage.removeItem('user');
   }
+
+  // В обработчиках успешного логина/регистрации:
+  const pendingToken = localStorage.getItem('pendingInviteToken');
+  if (pendingToken) {
+    localStorage.removeItem('pendingInviteToken');
+    try {
+      const result = await api('/api/join', { method: 'POST', body: JSON.stringify({ token: pendingToken }) });
+      showToast('Вы присоединились к беседе!', 'success');
+      await loadConversationList();
+      selectConversation(result.conversationId);
+      if (isMobile()) showChat();
+    } catch (err) {
+      showToast(err.message, 'error');
+    }
+  }
   renderScreen();
 }
 
 function renderScreen() {
   console.log('renderScreen called', { currentUser });
-  
   if ('serviceWorker' in navigator && 'PushManager' in window) {
     navigator.serviceWorker.register('/sw.js')
       .then(registration => {
@@ -2577,11 +2592,41 @@ if (btnCreateChannel) {
   });
 }
 
+function showInviteModal(link) {
+  const modal = document.createElement('div');
+  modal.className = 'modal';
+  modal.innerHTML = `
+    <div class="modal-content">
+      <h2>Пригласительная ссылка</h2>
+      <p>Поделитесь этой ссылкой – любой авторизованный пользователь сможет присоединиться.</p>
+      <input type="text" id="invite-link-input" value="${escapeHtml(link)}" readonly style="width:100%; margin-bottom:1rem;">
+      <div class="modal-actions">
+        <button class="btn-primary" id="copy-invite-link">Копировать</button>
+        <button class="btn-close-modal">Закрыть</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(modal);
+  modal.classList.remove('hidden');
+
+  modal.querySelector('#copy-invite-link').addEventListener('click', () => {
+    const input = modal.querySelector('#invite-link-input');
+    input.select();
+    document.execCommand('copy');
+    showToast('Ссылка скопирована', 'info');
+  });
+  modal.querySelector('.btn-close-modal').addEventListener('click', () => {
+    modal.remove();
+  });
+  modal.addEventListener('click', (e) => {
+    if (e.target === modal) modal.remove();
+  });
+}
+
 async function showGroupInfo(groupId, groupTitle) {
   const modal = $('modal-group-info');
   const titleEl = $('group-info-title');
   const listEl = $('group-members-list');
-  
   if (!modal || !titleEl || !listEl) return;
   
   titleEl.textContent = groupTitle || 'Group';
@@ -2796,7 +2841,27 @@ async function showGroupInfo(groupId, groupTitle) {
         addBtn.dataset.groupTitle = groupTitle;
       }
     }
-    
+    if (isOwner || isAdmin) {
+
+      const existingInviteBtn = document.getElementById('group-invite-btn');
+      if (existingInviteBtn) existingInviteBtn.remove();
+      const inviteBtn = document.createElement('button');
+      inviteBtn.textContent = '🔗 Создать ссылку-приглашение';
+      inviteBtn.className = 'btn-primary';
+      inviteBtn.style.marginTop = '1rem';
+      inviteBtn.style.width = '100%';
+      inviteBtn.id = 'group-invite-btn';
+      inviteBtn.addEventListener('click', async () => {
+        try {
+          const res = await api(`/api/conversations/${groupId}/invite`, { method: 'POST' });
+          // Показываем модалку со ссылкой
+          showInviteModal(res.link);
+        } catch (err) {
+          showToast(err.message, 'error');
+        }
+      });
+      listEl.parentNode.appendChild(inviteBtn);
+    }
     // Кнопка выхода из группы/канала (есть у всех)
     let leaveBtnContainer = document.getElementById('leave-group-container');
     if (!leaveBtnContainer) {

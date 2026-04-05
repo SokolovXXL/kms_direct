@@ -112,7 +112,21 @@ async function initDb(retries = 5) {
       await client.query(`CREATE INDEX IF NOT EXISTS idx_messages_conversation ON messages(conversation_id);`);
       await client.query(`CREATE INDEX IF NOT EXISTS idx_friends_user ON friends(user_id);`);
       await client.query(`CREATE INDEX IF NOT EXISTS idx_friends_friend ON friends(friend_id);`);
-
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS group_invites (
+          id SERIAL PRIMARY KEY,
+          conversation_id INTEGER NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+          token VARCHAR(64) UNIQUE NOT NULL,
+          created_by INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          created_at TIMESTAMPTZ DEFAULT NOW(),
+          expires_at TIMESTAMPTZ,
+          max_uses INTEGER DEFAULT 1,
+          uses INTEGER DEFAULT 0,
+          CHECK (uses <= max_uses)
+        );
+      `);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_group_invites_token ON group_invites(token);`);
+      
       console.log(`Database initialized successfully (attempt ${attempt})`);
       return; // успех
     } catch (err) {

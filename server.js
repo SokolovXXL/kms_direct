@@ -869,6 +869,112 @@ app.get('/api/groups/:id', authMiddleware, async (req, res) => {
   });
 });
 
+// server.js – добавить после всех маршрутов, но до обработчика ошибок
+app.post('/api/conversations/:id/invite', authMiddleware, async (req, res) => {
+  const convId = parseInt(req.params.id, 10);
+  if (isNaN(convId)) return res.status(400).json({ error: 'Invalid conversation ID' });
+
+  // Проверяем, что это группа или канал
+  const convCheck = await pool.query(
+    'SELECT is_group FROM conversations WHERE id = $1',
+    [convId]
+  );
+  if (convCheck.rows.length === 0 || !convCheck.rows[0].is_group) {
+    return res.status(400).json({ error: 'Only groups and channels can have invites' });
+  }
+
+  // Права: только owner или admin
+  const roleRes = await pool.query(
+    'SELECT role FROM conversation_participants WHERE conversation_id = $1 AND user_id = $2',
+    [convId, req.userId]
+  );
+  if (roleRes.rows.length === 0) return res.status(403).json({ error: 'Not a member' });
+  const role = roleRes.rows[0].role;
+  if (role !== 'owner' && role !== 'admin') {
+    return res.status(403).json({ error: 'Only owners and admins can create invites' });
+  }
+
+  // Генерируем уникальный токен (16-байт случайных + hex)
+  const token = crypto.randomBytes(32).toString('hex');
+  const expiresAt = new Date();
+  expiresAt.setDate(expiresAt.getDate() + 7); // через 7 дней
+
+  await pool.query(
+    `INSERT INTO group_invites (conversation_id, token, created_by, expires_at, max_uses, uses)
+     VALUES ($1, $2, $3, $4, $5, $6)`,
+    [convId, token, req.userId, expiresAt, 1, 0]
+  );
+
+  const inviteLink = `${process.env.FRONTEND_URL || req.protocol + '://' + req.get('host')}/?join=${token}`;
+  res.json({ link: inviteLink, token });
+});
+
+app.post('/api/join', authMiddleware, async (req, res) => {
+  const { token } = req.body;
+  if (!token || typeof token !== 'string') {
+    return res.status(400).json({ error: 'Token required' });
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    // Получаем информацию о приглашении
+    const inviteRes = await client.query(
+      `SELECT id, conversation_id, expires_at, max_uses, uses
+       FROM group_invites WHERE token = $1 FOR UPDATE`,
+      [token]
+    );
+    if (inviteRes.rows.length === 0) {
+      return res.status(404).json({ error: 'Invalid or expired invite' });
+    }
+    const invite = inviteRes.rows[0];
+
+    // Проверяем срок действия
+    if (invite.expires_at && new Date(invite.expires_at) < new Date()) {
+      await client.query('DELETE FROM group_invites WHERE id = $1', [invite.id]);
+      return res.status(410).json({ error: 'Invite expired' });
+    }
+    // Проверяем лимит использований
+    if (invite.uses >= invite.max_uses) {
+      await client.query('DELETE FROM group_invites WHERE id = $1', [invite.id]);
+      return res.status(410).json({ error: 'Invite already used' });
+    }
+
+    const conversationId = invite.conversation_id;
+
+    // Проверяем, не состоит ли уже пользователь в беседе
+    const memberCheck = await client.query(
+      'SELECT 1 FROM conversation_participants WHERE conversation_id = $1 AND user_id = $2',
+      [conversationId, req.userId]
+    );
+    if (memberCheck.rows.length === 0) {
+      // Добавляем участника с ролью 'member'
+      await client.query(
+        'INSERT INTO conversation_participants (conversation_id, user_id, role) VALUES ($1, $2, $3)',
+        [conversationId, req.userId, 'member']
+      );
+    }
+
+    // Увеличиваем счётчик использований
+    const newUses = invite.uses + 1;
+    if (newUses >= invite.max_uses) {
+      await client.query('DELETE FROM group_invites WHERE id = $1', [invite.id]);
+    } else {
+      await client.query('UPDATE group_invites SET uses = $1 WHERE id = $2', [newUses, invite.id]);
+    }
+
+    await client.query('COMMIT');
+    res.json({ conversationId });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('Join error:', err);
+    res.status(500).json({ error: 'Failed to join' });
+  } finally {
+    client.release();
+  }
+});
+
 // ---- Channels ----
 app.post('/api/channels', authMiddleware, async (req, res) => {
   const { title, userIds } = req.body || {};
