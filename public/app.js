@@ -4486,27 +4486,41 @@ document.addEventListener('DOMContentLoaded', () => {
       e.stopPropagation();
     });
 
-    // Свайп вправо (мобильные)
+    // Свайпы для мобильных (ответ влево, назад вправо)
     let touchStartX = 0, touchStartY = 0;
+    let isVerticalSwipe = false;
+
     messagesList.addEventListener('touchstart', (e) => {
       const touch = e.touches[0];
       touchStartX = touch.clientX;
       touchStartY = touch.clientY;
+      isVerticalSwipe = false;
     });
+
     messagesList.addEventListener('touchmove', (e) => {
       if (!touchStartX) return;
       const touch = e.touches[0];
       const dx = touch.clientX - touchStartX;
       const dy = touch.clientY - touchStartY;
-      if (Math.abs(dx) > 30 && Math.abs(dx) > Math.abs(dy)) {
+      
+      // Если вертикальное движение превысило 20px, считаем жест вертикальным скроллом
+      if (Math.abs(dy) > 20 && !isVerticalSwipe) {
+        isVerticalSwipe = true;
+      }
+      
+      // Если это вертикальный скролл – не обрабатываем горизонтальные команды
+      if (isVerticalSwipe) return;
+      
+      // Горизонтальный жест: только если смещение по X больше Y и превышает порог
+      if (Math.abs(dx) > 40 && Math.abs(dx) > Math.abs(dy)) {
         if (dx < 0) { // Свайп влево → ответить на сообщение
           const message = e.target.closest('.message');
           if (message) {
             setReplyTo(message);
             e.preventDefault();
-            touchStartX = 0;
+            touchStartX = 0; // сброс, чтобы не обрабатывать повторно
           }
-        } else if (dx > 0) {
+        } else if (dx > 0) { // Свайп вправо → вернуться к списку чатов
           e.preventDefault();
           touchStartX = 0;
           if (isMobile()) {
@@ -4515,8 +4529,10 @@ document.addEventListener('DOMContentLoaded', () => {
         }
       }
     });
+
     messagesList.addEventListener('touchend', () => {
       touchStartX = 0;
+      isVerticalSwipe = false;
     });
   }
   renderFilePreviews();
