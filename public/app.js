@@ -2107,31 +2107,43 @@ const modalProfile = $('modal-profile');
 const btnSaveDisplayName = $('btn-save-display-name');
 const profileDisplayNameInput = $('profile-display-name');
 const profileError = $('profile-error');
-const btnChangePassword = document.getElementById('btn-change-password');
-const oldPasswordInput = document.getElementById('old-password');
-const newPasswordInput = document.getElementById('new-password');
-const confirmPasswordInput = document.getElementById('confirm-password');
-const passwordChangeError = document.getElementById('password-change-error');
 
+// Новая модалка смены пароля
+const modalChangePassword = document.getElementById('modal-change-password');
+const btnChangePassword = document.getElementById('btn-change-password');
+const btnConfirmChangePassword = document.getElementById('btn-confirm-change-password');
+
+// Открытие модалки смены пароля
 if (btnChangePassword) {
-  btnChangePassword.addEventListener('click', async () => {
-    passwordChangeError.textContent = '';
-    const oldPassword = oldPasswordInput.value.trim();
-    const newPassword = newPasswordInput.value.trim();
-    const confirmPassword = confirmPasswordInput.value.trim();
+  btnChangePassword.addEventListener('click', () => {
+    // Очищаем поля и ошибки перед показом
+    document.getElementById('change-old-password').value = '';
+    document.getElementById('change-new-password').value = '';
+    document.getElementById('change-confirm-password').value = '';
+    document.getElementById('change-password-error').textContent = '';
+    show(modalChangePassword);
+  });
+}
+
+// Подтверждение смены пароля
+if (btnConfirmChangePassword) {
+  btnConfirmChangePassword.addEventListener('click', async () => {
+    const oldPassword = document.getElementById('change-old-password').value.trim();
+    const newPassword = document.getElementById('change-new-password').value.trim();
+    const confirmPassword = document.getElementById('change-confirm-password').value.trim();
+    const errorEl = document.getElementById('change-password-error');
+    errorEl.textContent = '';
 
     if (!oldPassword || !newPassword || !confirmPassword) {
-      passwordChangeError.textContent = 'Все поля обязательны для заполнения';
+      errorEl.textContent = 'Все поля обязательны для заполнения';
       return;
     }
-
     if (newPassword.length < 6) {
-      passwordChangeError.textContent = 'Новый пароль должен содержать минимум 6 символов';
+      errorEl.textContent = 'Новый пароль должен содержать минимум 6 символов';
       return;
     }
-
     if (newPassword !== confirmPassword) {
-      passwordChangeError.textContent = 'Пароли не совпадают';
+      errorEl.textContent = 'Пароли не совпадают';
       return;
     }
 
@@ -2141,24 +2153,15 @@ if (btnChangePassword) {
         body: JSON.stringify({ oldPassword, newPassword })
       });
 
-      // Очищаем поля
-      oldPasswordInput.value = '';
-      newPasswordInput.value = '';
-      confirmPasswordInput.value = '';
-
-      // Успешное уведомление
       showToast('Пароль успешно изменён. Пожалуйста, войдите снова.', 'success');
 
-      // Выход из системы
       if (callActive) await endCall();
       if (signalingChannel) {
         signalingChannel.close();
         signalingChannel = null;
       }
 
-      try {
-        await api('/api/logout', { method: 'POST' });
-      } catch (_) {}
+      await api('/api/logout', { method: 'POST' });
 
       currentUser = null;
       localStorage.removeItem('user');
@@ -2166,14 +2169,22 @@ if (btnChangePassword) {
       currentConversationId = null;
       renderScreen();
 
-      // Закрыть модалку профиля
+      hide(modalChangePassword);
       hide(modalProfile);
-
     } catch (err) {
-      passwordChangeError.textContent = err.message || 'Ошибка при смене пароля';
+      errorEl.textContent = err.message || 'Ошибка при смене пароля';
     }
   });
 }
+
+// Закрытие модалки смены пароля по клику на фон
+if (modalChangePassword) {
+  modalChangePassword.addEventListener('click', (e) => {
+    if (e.target.id === 'modal-change-password') hide(modalChangePassword);
+  });
+}
+
+// Остальной код (меню, сохранение отображаемого имени, удаление аккаунта и т.д.) остаётся без изменений
 
 if (btnMenu) {
   btnMenu.addEventListener('click', () => {
