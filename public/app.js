@@ -1991,7 +1991,7 @@ if (btnAddFriend) {
     // 2. Блокируем кнопку на время запроса (чтобы не спамить)
     const originalText = btnAddFriend.textContent;
     btnAddFriend.disabled = true;
-    btnAddFriend.textContent = 'Добавляем...';
+    btnAddFriend.textContent = 'Добавить';
 
     try {
       // 3. Запрос на добавление друга

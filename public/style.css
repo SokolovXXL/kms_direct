@@ -564,7 +564,7 @@ body {
   align-items: flex-start;
 }
 
-/* ========== MESSAGE STYLES (FIXED) ========== */
+/* ========== MESSAGE STYLES ========== */
 .message {
   display: flex;
   width: 100%;
@@ -597,7 +597,7 @@ body {
   background: var(--accent);
   color: white;
   border-bottom-right-radius: 4px;
-  padding-bottom: 1.2rem; /* space for read indicator */
+  padding-bottom: 1.2rem;
 }
 
 /* Theirs */
@@ -1556,9 +1556,9 @@ body {
 }
 
 .admin-action-btn {
-  width: 32px;            /* фиксированная ширина */
+  width: 32px;          
   height: 32px;
-  padding: 0 !important;  /* перебиваем padding от .user-list button */
+  padding: 0 !important;
   background: var(--surface-hover) !important;
   border: 1px solid var(--border) !important;
   color: var(--text);
@@ -1593,7 +1593,7 @@ body {
   gap: 1rem; 
 }
 
-/* Контейнер действий: фиксированная ширина, без переноса */
+
 #group-members-list li > div:last-child {
   display: flex;
   gap: 0.4rem;
@@ -2096,13 +2096,13 @@ body {
   transform: scale(0.97);
 }
 
-/* Расширяем сообщение, если внутри галерея */
+
 .message-content:has(.gallery-message) {
   max-width: min(800px, 95%);
   width: auto;
 }
 
-/* Базовая обёртка галереи — блочная, чтобы внутренняя сетка работала */
+
 .gallery-message {
   display: block;
   width: 100%;
@@ -2118,26 +2118,26 @@ body {
   width: 100% !important;
 }
 
-/* Расширенная ширина для сообщений-галерей */
+
 .message-content.gallery-message-container {
   max-width: min(800px, 95%);
   width: 80%;
 }
 
-/* Гарантия, что внутренние сетки занимают всю ширину */
+
 .gallery-message,
 .gallery-message > div {
   width: 100% !important;
 }
 
-/* На мобильных устройствах ещё шире */
+
 @media (max-width: 768px) {
   .message-content.gallery-message-container {
     max-width: 95%;
   }
 }
 
-/* Плашка ответа в сообщении */
+
 .message-reply-preview {
   background: var(--surface-hover);
   border-left: 3px solid var(--accent);
@@ -2168,7 +2168,7 @@ body {
   text-overflow: ellipsis;
 }
 
-/* Плашка ответа в поле ввода */
+
 .reply-preview {
   background: var(--surface);
   border-bottom: 1px solid var(--border);
@@ -2214,7 +2214,7 @@ body {
   color: var(--danger);
 }
 
-/* Стили для полей ввода внутри модальных окон */
+
 .modal-content input[type="text"],
 .modal-content input[type="password"],
 .modal-content input[type="email"],
@@ -2260,7 +2260,7 @@ body {
   }
   .chat-header {
     position: relative;
-    padding-right: 56px; /* чтобы текст не заезжал под кнопку */
+    padding-right: 56px;
   }
 }
 
@@ -2277,4 +2277,17 @@ body {
   background: var(--accent);       
   line-height: 1;                  
   height: auto;                    
+}
+
+
+.add-friend-row input,
+.add-friend-row .btn-primary {
+  padding: 0.5rem 0.75rem;
+  font-size: 0.9rem;
+  line-height: 1.4;
+  box-sizing: border-box;
+}
+
+.add-friend-row .btn-primary {
+  width: auto;
 }
