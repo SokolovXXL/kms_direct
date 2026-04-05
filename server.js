@@ -13,7 +13,7 @@ const fs = require('fs');
 const { v4: uuidv4 } = require('uuid');
 const rateLimit = require('express-rate-limit');
 const webpush = require('web-push');
-
+const fsPromises = require('fs').promises;
 // Setup VAPID
 webpush.setVapidDetails(
   process.env.VAPID_SUBJECT || 'mailto:admin@example.com',
@@ -451,52 +451,32 @@ app.delete('/api/account', authMiddleware, async (req, res) => {
   const { password } = req.body || {};
   const r = await pool.query('SELECT password_hash FROM users WHERE id = $1', [req.userId]);
   const user = r.rows[0];
-
   if (!user) return res.status(404).json({ error: 'Не найдено' });
-
   if (!password || !(await bcrypt.compare(password, user.password_hash))) {
     return res.status(401).json({ error: 'Требуется пароль для удаления аккаунта' });
   }
 
+  // --- ПОЛУЧАЕМ СПИСОК СООБЩЕНИЙ ПОЛЬЗОВАТЕЛЯ ДО УДАЛЕНИЯ ---
+  const messagesResult = await pool.query('SELECT body FROM messages WHERE sender_id = $1', [req.userId]);
+  const messages = messagesResult.rows; // <-- теперь переменная определена
+
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-
-    // 1. Удалить файлы, загруженные пользователем (из сообщений)
-    const messages = await client.query('SELECT body FROM messages WHERE sender_id = $1', [req.userId]);
-    for (const msg of messages.rows) {
-      if (msg.body && msg.body.includes('/uploads/')) {
-        const matches = msg.body.match(/\/uploads\/([^"'\s]+)/g);
-        if (matches) {
-          for (const match of matches) {
-            const filename = path.basename(match);
-            const filePath = path.join(__dirname, 'uploads', filename);
-            if (fs.existsSync(filePath)) {
-              fs.unlinkSync(filePath);
-            }
-          }
-        }
-      }
-    }
 
     // 2. Удалить уведомления, адресованные другим пользователям о сообщениях удаляемого
     await client.query(
       'DELETE FROM notifications WHERE message_id IN (SELECT id FROM messages WHERE sender_id = $1)',
       [req.userId]
     );
-
     // 3. Удалить уведомления самого пользователя
     await client.query('DELETE FROM notifications WHERE user_id = $1', [req.userId]);
-
     // 4. Удалить сообщения пользователя
     await client.query('DELETE FROM messages WHERE sender_id = $1', [req.userId]);
-
     // 5. Удалить записи из conversation_participants
     await client.query('DELETE FROM conversation_participants WHERE user_id = $1', [req.userId]);
-
     // 6. Удалить связи друзей
     await client.query('DELETE FROM friends WHERE user_id = $1 OR friend_id = $1', [req.userId]);
-
     // 7. Удалить пустые диалоги
     await client.query(`
       DELETE FROM conversations
@@ -508,17 +488,35 @@ app.delete('/api/account', authMiddleware, async (req, res) => {
         HAVING COUNT(cp.user_id) = 0
       )
     `);
-
     // 8. Удалить пользователя
     await client.query('DELETE FROM users WHERE id = $1', [req.userId]);
 
     await client.query('COMMIT');
+
+    // --- УДАЛЯЕМ ФАЙЛЫ ПОСЛЕ ФИКСАЦИИ ТРАНЗАКЦИИ ---
+    for (const msg of messages) {
+      if (msg.body && msg.body.includes('/uploads/')) {
+        const matches = msg.body.match(/\/uploads\/([^"'\s]+)/g);
+        if (matches) {
+          for (const match of matches) {
+            const filename = path.basename(match);
+            const filePath = path.join(__dirname, 'uploads', filename);
+            try {
+              await fsPromises.unlink(filePath);
+            } catch (unlinkErr) {
+              console.error(`Failed to delete file ${filePath}:`, unlinkErr.message);
+            }
+          }
+        }
+      }
+    }
+
     res.clearCookie('token', COOKIE_OPTIONS);
     res.json({ ok: true });
   } catch (e) {
     await client.query('ROLLBACK');
     console.error('Delete account error:', e);
-    res.status(500).json({ error: 'Не удалось удалить аккаунт' });
+    res.status(500).json({ error: 'Не удалось удалить аккаунт: ' + e.message });
   } finally {
     client.release();
   }
