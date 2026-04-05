@@ -638,6 +638,8 @@ function startNotificationStream() {
         loadConversationList();
       } else if (data.type === 'added_to_group') {
         loadConversationList();
+      } else if (data.type === 'new_dm') {
+        loadConversationList();
       } else if (data.type === 'message_deleted') {
         if (currentConversationId === data.conversationId) {
           const msgElement = document.querySelector(`.message[data-message-id="${data.messageId}"]`);
@@ -686,7 +688,7 @@ function startNotificationStream() {
         }
         loadConversationList();
         showToast('Группа удалена', 'info');
-      }
+      } 
     } catch (_) {}
   };
   

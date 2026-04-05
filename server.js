@@ -697,6 +697,12 @@ app.post('/api/dms', authMiddleware, async (req, res) => {
     }
 
     await client.query('COMMIT');
+    const otherUserId = (req.userId === user1 ? user2 : user1);
+    broadcastToUser(otherUserId, {
+        type: 'new_dm',
+        conversationId: conversationId
+    });
+
     res.json({ conversationId });
   } catch (e) {
     await client.query('ROLLBACK');
