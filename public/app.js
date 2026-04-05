@@ -1975,61 +1975,75 @@ if (btnCopyCode) {
 const btnAddFriend = $('btn-add-friend');
 if (btnAddFriend) {
   btnAddFriend.addEventListener('click', async () => {
-    const code = $('friend-code-input')?.value.trim();
+    const codeInput = $('friend-code-input');
     const errEl = $('friends-error');
-    if (!errEl) return;
-    
+    if (!errEl || !codeInput) return;
+
     errEl.textContent = '';
-    
+    const code = codeInput.value.trim();
+
+    // 1. Валидация
     if (!code) {
       errEl.textContent = 'Введите код друга';
       return;
     }
-    
+
+    // 2. Блокируем кнопку на время запроса (чтобы не спамить)
+    const originalText = btnAddFriend.textContent;
+    btnAddFriend.disabled = true;
+    btnAddFriend.textContent = 'Добавляем...';
+
     try {
-      // Добавляем друга
-      const addedFriend = await api('/api/friends', { 
-        method: 'POST', 
-        body: JSON.stringify({ friendCode: code }) 
+      // 3. Запрос на добавление друга
+      const addedFriend = await api('/api/friends', {
+        method: 'POST',
+        body: JSON.stringify({ friendCode: code })
       });
-      
-      // Очищаем поле и закрываем ошибку
-      if ($('friend-code-input')) $('friend-code-input').value = '';
-      errEl.textContent = '';
-      
-      // Создаём личный чат с добавленным другом (если его ещё нет)
+
+      // 4. Убедимся, что сервер вернул объект с id друга
+      if (!addedFriend || !addedFriend.id) {
+        throw new Error('Сервер не вернул данные о друге');
+      }
+
+      // 5. Создаём личный чат (если ещё не существует)
       const dmData = await api('/api/dms', {
         method: 'POST',
         body: JSON.stringify({ otherUserId: addedFriend.id })
       });
-      
-      // Обновляем список чатов
+
+      if (!dmData || !dmData.conversationId) {
+        throw new Error('Не удалось создать чат');
+      }
+
+      // 6. Успех – очищаем поле, обновляем список, переходим в чат
+      codeInput.value = '';
+      errEl.textContent = '';
       await loadConversationList();
-      
-      // Переходим в созданный (или существующий) диалог
       selectConversation(dmData.conversationId);
-      
-      // На мобильных устройствах показываем окно чата
-      if (isMobile()) {
-        setTimeout(() => showChat(), 10);
-      }
-      
-      // Показываем уведомление об успехе (опционально)
+      if (isMobile()) setTimeout(() => showChat(), 10);
       showToast('Друг добавлен, чат создан', 'success');
-      
-      // Обновляем список друзей в модалке (оставляем как было)
-      const friends = await api('/api/friends');
-      const ul = $('friends-list');
-      if (ul) {
-        ul.innerHTML = '';
-        for (const u of friends) {
-          const li = document.createElement('li');
-          li.textContent = u.username;
-          ul.appendChild(li);
+
+      // 7. Обновляем список друзей в модалке (если она открыта)
+      try {
+        const friends = await api('/api/friends');
+        const ul = $('friends-list');
+        if (ul) {
+          ul.innerHTML = '';
+          for (const u of friends) {
+            const li = document.createElement('li');
+            li.textContent = u.username;
+            ul.appendChild(li);
+          }
         }
-      }
+      } catch (e) { /* не критично */ }
+
     } catch (err) {
-      errEl.textContent = err.message || 'Failed';
+      // 8. Показываем понятную ошибку
+      console.error('Add friend error:', err);
+      errEl.textContent = err.message || 'Не удалось добавить друга. Проверьте код и повторите.';
+    } finally {
+      btnAddFriend.disabled = false;
+      btnAddFriend.textContent = originalText;
     }
   });
 }
@@ -4386,6 +4400,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
   renderFilePreviews();
   tryAutoLogin();
+  updateChatMessagesPaddingBottom();
   updateChatMessagesPaddingBottom();
 });
 // Auth tabs switching
