@@ -20,158 +20,6 @@ let currentConversationIsChannel = false;
 let creatingChannel = false; // флаг для модалки создания канала
 let currentReplyTo = null; // { id, text, senderName }
 
-// ---- emojis ----
-
-const EMOJIS = [
-  { code: 'like', img: 'like.png', display: '👍' },
-  { code: 'heart', img: 'heart.png', display: '❤️' },
-  { code: 'laugh', img: 'laugh.png', display: '😂' },
-  { code: 'wow', img: 'wow.png', display: '😮' },
-  { code: 'sad', img: 'sad.png', display: '😢' },
-  { code: 'angry', img: 'angry.png', display: '😠' }
-];
-
-let currentReactionMessage = null;
-
-function showEmojiPicker(messageEl, x, y) {
-  const picker = document.getElementById('emoji-picker');
-  if (!picker) return;
-
-  currentReactionMessage = messageEl;
-
-  // Заполняем панель кнопками эмодзи
-  const content = picker.querySelector('.emoji-picker-content');
-  content.innerHTML = '';
-  EMOJIS.forEach(e => {
-    const btn = document.createElement('button');
-    btn.type = 'button';
-    btn.className = 'emoji-btn';
-    btn.dataset.emoji = e.code;
-    btn.innerHTML = `<img src="/images/emojis/${e.img}" alt="${e.code}" class="emoji-img">`;
-    btn.addEventListener('click', () => {
-      const messageId = messageEl.dataset.messageId;
-      toggleReaction(messageId, e.code);
-      hideEmojiPicker();
-    });
-    content.appendChild(btn);
-  });
-
-  // Показываем панель, чтобы измерить её размеры
-  picker.style.visibility = 'hidden';
-  picker.classList.remove('hidden');
-  
-  const pickerWidth = picker.offsetWidth;
-  const pickerHeight = picker.offsetHeight;
-  const viewportWidth = window.innerWidth;
-  const viewportHeight = window.innerHeight;
-
-  // Корректируем позицию, чтобы панель не выходила за края
-  if (x + pickerWidth > viewportWidth - 10) {
-    x = viewportWidth - pickerWidth - 10;
-  }
-  if (y + pickerHeight > viewportHeight - 10) {
-    y = viewportHeight - pickerHeight - 10;
-  }
-  if (x < 10) x = 10;
-  if (y < 10) y = 10;
-
-  picker.style.left = x + 'px';
-  picker.style.top = y + 'px';
-  picker.style.visibility = 'visible';
-
-  // Закрытие по клику вне панели
-  setTimeout(() => {
-    document.addEventListener('click', outsideClickHandler);
-  }, 0);
-}
-
-function hideEmojiPicker() {
-  const picker = document.getElementById('emoji-picker');
-  if (picker) picker.classList.add('hidden');
-  document.removeEventListener('click', outsideClickHandler);
-  currentReactionMessage = null;
-}
-
-function outsideClickHandler(e) {
-  const picker = document.getElementById('emoji-picker');
-  if (picker && !picker.contains(e.target)) {
-    hideEmojiPicker();
-  }
-}
-
-async function toggleReaction(messageId, emoji) {
-  try {
-    await api(`/api/messages/${messageId}/reactions`, {
-      method: 'POST',
-      body: JSON.stringify({ emoji })
-    });
-    // Optimistic update is handled by SSE, but we can also update locally
-  } catch (err) {
-    console.error('Failed to toggle reaction:', err);
-    showToast('Ошибка при добавлении реакции', 'error');
-  }
-}
-
-
-function handleReactionEvent(data) {
-  const { messageId, userId, emoji, action } = data;
-  const messageEl = document.querySelector(`.message[data-message-id="${messageId}"]`);
-  if (!messageEl) return;
-
-  // Находим контейнер содержимого сообщения
-  const contentDiv = messageEl.querySelector('.message-content');
-  if (!contentDiv) return;
-
-  let reactionsBar = contentDiv.querySelector('.message-reactions');
-  if (!reactionsBar) {
-    reactionsBar = document.createElement('div');
-    reactionsBar.className = 'message-reactions';
-    // Вставляем перед мета-информацией, если она есть, иначе в конец
-    const meta = contentDiv.querySelector('.message-meta');
-    if (meta) {
-      contentDiv.insertBefore(reactionsBar, meta);
-    } else {
-      contentDiv.appendChild(reactionsBar);
-    }
-  }
-
-  // Поиск или создание элемента для данного эмодзи
-  let reactionItem = Array.from(reactionsBar.children).find(
-    item => item.dataset.emoji === emoji
-  );
-
-  if (action === 'add') {
-    if (!reactionItem) {
-      reactionItem = document.createElement('span');
-      reactionItem.className = 'reaction';
-      reactionItem.dataset.emoji = emoji;
-      reactionItem.innerHTML = `<img src="/images/emojis/${emoji}.png" alt="${emoji}" class="reaction-emoji"> <span class="reaction-count">1</span>`;
-      if (userId === currentUser.id) reactionItem.classList.add('me');
-      reactionsBar.appendChild(reactionItem);
-    } else {
-      const countSpan = reactionItem.querySelector('.reaction-count');
-      const count = parseInt(countSpan.textContent, 10) + 1;
-      countSpan.textContent = count;
-      if (userId === currentUser.id) reactionItem.classList.add('me');
-    }
-  } else if (action === 'remove') {
-    if (reactionItem) {
-      const countSpan = reactionItem.querySelector('.reaction-count');
-      const count = parseInt(countSpan.textContent, 10) - 1;
-      if (count <= 0) {
-        reactionItem.remove();
-      } else {
-        countSpan.textContent = count;
-        if (userId === currentUser.id) reactionItem.classList.remove('me');
-      }
-    }
-  }
-
-  // Если после удаления реакций блок остался пустым – убираем его
-  if (reactionsBar.children.length === 0) reactionsBar.remove();
-}
-
-
 // В DOMContentLoaded или при создании, добавим плашку ответа
 const replyPreview = document.getElementById('reply-preview');
 const replySenderName = document.getElementById('reply-sender-name');
@@ -191,7 +39,6 @@ function updateChatMessagesPaddingBottom() {
   const wrapper = document.getElementById('chat-messages-wrapper');
   const sendForm = document.getElementById('send-form');
   const previewList = document.getElementById('file-preview-list');
-  const callBar = document.getElementById('call-status-bar');
   if (!wrapper) return;
 
   let totalHeight = 0;
@@ -200,9 +47,6 @@ function updateChatMessagesPaddingBottom() {
   }
   if (previewList && previewList.style.display !== 'none' && previewList.children.length > 0) {
     totalHeight += previewList.offsetHeight;
-  }
-  if (callBar && !callBar.classList.contains('hidden')) {
-    totalHeight += callBar.offsetHeight;
   }
   wrapper.style.paddingBottom = totalHeight + 'px';
 }
@@ -308,7 +152,7 @@ function renderScreen() {
       })
       .then(permission => {
         if (permission === 'granted') {
-          if (typeof subscribeUserToPush === 'function') subscribeUserToPush();
+          subscribeUserToPush();
         }
       })
       .catch(err => console.error('Service Worker error:', err));
@@ -924,31 +768,12 @@ function createMessageElement(message, isGroup, currentUserId) {
   }
 
   if (isGroup && message.sender_id !== currentUserId) {
-    const avatarHtml = getAvatarHtml(message.sender_id, '28px');
     const nameSpan = document.createElement('div');
     nameSpan.className = 'message-sender';
-    nameSpan.innerHTML = `${avatarHtml} ${escapeHtml(message.sender_username || 'Unknown')}`;
+    nameSpan.textContent = message.sender_username || 'Unknown';
     contentDiv.appendChild(nameSpan);
   }
 
-  if (!isGroup && message.sender_id !== currentUserId) {
-    const avatarHtml = getAvatarHtml(message.sender_id, '28px');
-    // Добавляем аватарку в начало сообщения, обернув содержимое в flex-контейнер
-    const flexWrapper = document.createElement('div');
-    flexWrapper.style.display = 'flex';
-    flexWrapper.style.alignItems = 'flex-start';
-    flexWrapper.style.gap = '8px';
-    
-    const avatarDiv = document.createElement('div');
-    avatarDiv.innerHTML = avatarHtml;
-    flexWrapper.appendChild(avatarDiv);
-    
-    // Переносим существующее содержимое contentDiv внутрь нового контейнера
-    const oldContent = contentDiv.cloneNode(true);
-    contentDiv.innerHTML = '';
-    flexWrapper.appendChild(oldContent);
-    contentDiv.appendChild(flexWrapper);
-  }
     // Проверка на файл или составное сообщение
   let isFile = false;
   let fileData = null;
@@ -1015,17 +840,6 @@ function createMessageElement(message, isGroup, currentUserId) {
   }
   messageDiv.appendChild(contentDiv);
   return messageDiv;
-}
-
-function getAvatarHtml(userId, size = '32px') {
-  try {
-    return `<img class="avatar" src="/api/avatar/${userId}" 
-            onerror="this.onerror=null;this.src='/images/default-avatar.png';" 
-            style="width:${size}; height:${size}; border-radius:50%; object-fit:cover; margin-right:8px;" 
-            alt="Avatar">`;
-  } catch(e) {
-    return '<div style="display:inline-block; width:'+size+'; height:'+size+'; background:#ccc; border-radius:50%; margin-right:8px;"></div>';
-  }
 }
 
 function appendMessageToChat(message) {
@@ -1190,10 +1004,13 @@ function updateTypingStatusInSidebar(conversationId, displayName, isTyping) {
     // Вернуть обычный статус, перезагрузив из кэша
     const conversation = conversationListCache.find(c => c.id === conversationId);
     if (conversation && !conversation.isGroup && conversation.otherUser) {
-      const avatarHtml = getAvatarHtml(conversation.otherUser.id, '32px');
-      chatWithName.innerHTML = `${avatarHtml} ${displayName}`;
-    } else {
-      chatWithName.textContent = displayName;
+      if (conversation.otherUser.online) {
+        row.innerHTML = '● онлайн';
+        row.className = 'dm-status online';
+      } else if (conversation.otherUser.last_seen) {
+        row.innerHTML = `был ${formatLastSeen(conversation.otherUser.last_seen)}`;
+        row.className = 'dm-status';
+      }
     }
     row.classList.remove('typing');
   }
@@ -1318,17 +1135,13 @@ if (messageInput) {
   }
 }
 
-// ---- Контекстное меню сообщений (FIXED) ----
+// ---- Контекстное меню сообщений ----
 let contextMenu = null;
 let currentContextMessage = null;
 
 function initContextMenu() {
   contextMenu = document.getElementById('message-context-menu');
   if (!contextMenu) return;
-  
-  // Prevent re-initialization
-  if (contextMenu._initialized) return;
-  contextMenu._initialized = true;
 
   // Добавляем пункт "Ответить" перед "Удалить"
   const actionsContainer = contextMenu.querySelector('.context-menu-actions');
@@ -1345,14 +1158,13 @@ function initContextMenu() {
   }
 
   // Закрытие по клику вне меню
-  const handleOutsideClick = (e) => {
+  document.addEventListener('click', (e) => {
     if (!contextMenu.classList.contains('hidden') && 
         !contextMenu.contains(e.target) && 
         !e.target.closest('.message')) {
       hideContextMenu();
     }
-  };
-  document.addEventListener('click', handleOutsideClick);
+  });
 
   // Закрытие по прокрутке
   const messagesWrapper = document.getElementById('chat-messages-wrapper');
@@ -1363,32 +1175,28 @@ function initContextMenu() {
   }
 
   // Закрытие по Escape
-  const handleEscape = (e) => {
+  document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
       hideContextMenu();
     }
-  };
-  document.addEventListener('keydown', handleEscape);
+  });
 
   // Обработка кликов по пунктам меню
   contextMenu.addEventListener('click', (e) => {
-    e.stopPropagation(); // Prevent event from bubbling to document
-    
     const actionItem = e.target.closest('.context-menu-item');
     if (!actionItem || !currentContextMessage) return;
 
     const action = actionItem.dataset.action;
     if (action === 'copy') {
       copyMessageContent(currentContextMessage);
-      hideContextMenu();
     } else if (action === 'delete') {
       deleteMessage(currentContextMessage);
-      hideContextMenu();
     } else if (action === 'reply') {
       setReplyTo(currentContextMessage);
       hideContextMenu();
     } else if (action === 'react') {
       e.preventDefault();
+      e.stopPropagation();
       const message = currentContextMessage;
       hideContextMenu();
       if (message) {
@@ -1396,6 +1204,7 @@ function initContextMenu() {
         showEmojiPicker(message, rect.right, rect.top);
       }
     }
+    hideContextMenu();
   });
 }
 
@@ -1461,21 +1270,17 @@ function showContextMenu(messageElement, clickX, clickY) {
   contextMenu.classList.remove('hidden');
 }
 
-function hideContextMenu() {
-  if (contextMenu) contextMenu.classList.add('hidden');
-  currentContextMessage = null;
-}
+async function subscribeUserToPush() {
+  const registration = await navigator.serviceWorker.ready;
+  const subscription = await registration.pushManager.subscribe({
+    userVisibleOnly: true,
+    applicationServerKey: urlBase64ToUint8Array(publicVapidKey)
+  });
 
-function showContextMenuAt(message, clientX, clientY) {
-  if (!contextMenu) {
-    initContextMenu();
-    if (!contextMenu) return;
-  }
-  if (!contextMenu.classList.contains('hidden') && currentContextMessage === message) {
-    hideContextMenu();
-    return;
-  }
-  showContextMenu(message, clientX, clientY);
+  await api('/api/push/subscribe', {
+    method: 'POST',
+    body: JSON.stringify({ subscription })
+  });
 }
 
 // Helper to convert VAPID key
@@ -1490,6 +1295,12 @@ function urlBase64ToUint8Array(base64String) {
   return outputArray;
 }
 
+function hideContextMenu() {
+  if (contextMenu) {
+    contextMenu.classList.add('hidden');
+    currentContextMessage = null;
+  }
+}
 
 function copyMessageContent(messageElement) {
   const bodyEl = messageElement.querySelector('.message-body');
@@ -1548,6 +1359,13 @@ function clearLongPress() {
   longPressTarget = null;
 }
 
+function showContextMenuAt(message, clientX, clientY) {
+  if (contextMenu && !contextMenu.classList.contains('hidden') && currentContextMessage === message) {
+    hideContextMenu();
+    return;
+  }
+  showContextMenu(message, clientX, clientY);
+}
 
 // ---- Conversations List ----
 async function loadConversationList(retryCount = 3) {
@@ -1583,22 +1401,14 @@ async function loadConversationList(retryCount = 3) {
         item.dataset.id = conv.id;
         
         let nameHtml = '';
-        let avatarHtml = '';
-        
         if (conv.isChannel) {
           nameHtml = `<span class="dm-name"><img src="/images/channel.png" alt="Channel" style="width:18px;height:18px;vertical-align:middle;"> ${escapeHtml(conv.title || 'Channel')}</span>`;
-          avatarHtml = '<img src="/images/channel.png" style="width:32px; height:32px; margin-right:8px;" alt="Channel">';
         } else if (conv.isGroup) {
           nameHtml = `<span class="dm-name"><img src="/images/group.png" alt="Group" style="width:18px;height:18px;vertical-align:middle;"> ${escapeHtml(conv.title || 'Group')}</span>`;
-          avatarHtml = '<img src="/images/group.png" style="width:32px; height:32px; margin-right:8px;" alt="Group">';
         } else {
           const otherUserName = conv.otherUser?.name || conv.otherUser?.username || 'Unknown';
           nameHtml = `<span class="dm-name">${escapeHtml(otherUserName)}</span>`;
-          if (conv.otherUser) {
-            avatarHtml = getAvatarHtml(conv.otherUser.id, '32px');
-          }
         }
-        
         let previewText = conv.lastMessage || 'No messages yet';
         let statusHtml = '';
         
@@ -1622,16 +1432,14 @@ async function loadConversationList(retryCount = 3) {
         }
         previewText = truncate(previewText);
         
+        
         item.innerHTML = `
-          <div style="display:flex; align-items:center; width:100%;">
-            ${avatarHtml}
-            <div style="flex:1; min-width:0;">
-              ${nameHtml}
-              <span class="dm-preview">${escapeHtml(previewText)}</span>
-              ${statusHtml}
-            </div>
-            ${unread > 0 ? `<span class="dm-unread">${unread > 99 ? '99+' : unread}</span>` : ''}
+          <div style="flex:1;min-width:0;">
+            ${nameHtml}
+            <span class="dm-preview">${escapeHtml(previewText)}</span>
+            ${statusHtml}
           </div>
+          ${unread > 0 ? `<span class="dm-unread">${unread > 99 ? '99+' : unread}</span>` : ''}
         `;
         
         item.addEventListener('click', () => {
@@ -1647,13 +1455,14 @@ async function loadConversationList(retryCount = 3) {
       }
       updateBadgeFromCache();
       restoreLastConversation();
-      return;
+      return; // успех – выходим из функции
       
     } catch (err) {
       console.error(`Failed to load conversations (attempt ${attempt}/${retryCount}):`, err);
       if (attempt === retryCount) {
         list.innerHTML = '<p style="padding:1rem;color:var(--text-muted)">Не удалось загрузить чаты</p>';
       } else {
+        // ждём перед следующей попыткой (экспоненциальная задержка)
         await new Promise(r => setTimeout(r, 1000 * attempt));
       }
     }
@@ -1707,7 +1516,7 @@ async function selectConversation(convId) {
     const me = conversation.participants.find(p => p.id === currentUser.id);
     if (me) userRole = me.role;
   }
-  window.currentUserRole = userRole;
+  window.currentUserRole = userRole; // если нужно в других местах
   
   currentConversationIsGroup = conversation ? conversation.isGroup : false;
   currentConversationIsChannel = conversation ? conversation.isChannel : false;
@@ -1722,11 +1531,11 @@ async function selectConversation(convId) {
     } else {
       hide(sendForm);
     }
-    updateChatMessagesPaddingBottom();
+    updateChatMessagesPaddingBottom(); // добавляем
     hide(btnCall);
   } else {
     show(sendForm);
-    updateChatMessagesPaddingBottom();
+    updateChatMessagesPaddingBottom(); // добавляем
     if (btnCall) {
       if (callActive) {
         btnCall.style.display = 'none';
@@ -1765,21 +1574,161 @@ async function selectConversation(convId) {
   // Загружаем сообщения
   loadMessages(convId);
   
-  // Показать кнопку информации для группы/канала
-  // Вместо простого setTimeout:
-  let attempts = 0;
-  function tryShowGroupInfo() {
-    const conv = conversationListCache.find(c => c.id === convId);
-    if (conv && conv.isGroup) {
-      showGroupInfoButton(convId, conv.title);
-    } else if (attempts < 5) {
-      attempts++;
-      setTimeout(tryShowGroupInfo, 200);
+  // Скролл вниз
+  setTimeout(() => {
+    isAtBottom = true;
+    scrollMessagesToBottom();
+  }, 200);
+}
+// ---- emojis ----
+
+const EMOJIS = [
+  { code: 'like', img: 'like.png', display: '👍' },
+  { code: 'heart', img: 'heart.png', display: '❤️' },
+  { code: 'laugh', img: 'laugh.png', display: '😂' },
+  { code: 'wow', img: 'wow.png', display: '😮' },
+  { code: 'sad', img: 'sad.png', display: '😢' },
+  { code: 'angry', img: 'angry.png', display: '😠' }
+];
+
+let currentReactionMessage = null;
+
+function showEmojiPicker(messageEl, x, y) {
+  const picker = document.getElementById('emoji-picker');
+  if (!picker) return;
+
+  currentReactionMessage = messageEl;
+
+  // Заполняем панель кнопками эмодзи
+  const content = picker.querySelector('.emoji-picker-content');
+  content.innerHTML = '';
+  EMOJIS.forEach(e => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'emoji-btn';
+    btn.dataset.emoji = e.code;
+    btn.innerHTML = `<img src="/images/emojis/${e.img}" alt="${e.code}" class="emoji-img">`;
+    btn.addEventListener('click', () => {
+      const messageId = messageEl.dataset.messageId;
+      toggleReaction(messageId, e.code);
+      hideEmojiPicker();
+    });
+    content.appendChild(btn);
+  });
+
+  // Показываем панель, чтобы измерить её размеры
+  picker.style.visibility = 'hidden';
+  picker.classList.remove('hidden');
+  
+  const pickerWidth = picker.offsetWidth;
+  const pickerHeight = picker.offsetHeight;
+  const viewportWidth = window.innerWidth;
+  const viewportHeight = window.innerHeight;
+
+  // Корректируем позицию, чтобы панель не выходила за края
+  if (x + pickerWidth > viewportWidth - 10) {
+    x = viewportWidth - pickerWidth - 10;
+  }
+  if (y + pickerHeight > viewportHeight - 10) {
+    y = viewportHeight - pickerHeight - 10;
+  }
+  if (x < 10) x = 10;
+  if (y < 10) y = 10;
+
+  picker.style.left = x + 'px';
+  picker.style.top = y + 'px';
+  picker.style.visibility = 'visible';
+
+  // Закрытие по клику вне панели
+  setTimeout(() => {
+    document.addEventListener('click', outsideClickHandler);
+  }, 0);
+}
+
+function hideEmojiPicker() {
+  const picker = document.getElementById('emoji-picker');
+  if (picker) picker.classList.add('hidden');
+  document.removeEventListener('click', outsideClickHandler);
+  currentReactionMessage = null;
+}
+
+function outsideClickHandler(e) {
+  const picker = document.getElementById('emoji-picker');
+  if (picker && !picker.contains(e.target)) {
+    hideEmojiPicker();
+  }
+}
+
+async function toggleReaction(messageId, emoji) {
+  try {
+    await api(`/api/messages/${messageId}/reactions`, {
+      method: 'POST',
+      body: JSON.stringify({ emoji })
+    });
+    // Optimistic update is handled by SSE, but we can also update locally
+  } catch (err) {
+    console.error('Failed to toggle reaction:', err);
+    showToast('Ошибка при добавлении реакции', 'error');
+  }
+}
+
+
+function handleReactionEvent(data) {
+  const { messageId, userId, emoji, action } = data;
+  const messageEl = document.querySelector(`.message[data-message-id="${messageId}"]`);
+  if (!messageEl) return;
+
+  // Находим контейнер содержимого сообщения
+  const contentDiv = messageEl.querySelector('.message-content');
+  if (!contentDiv) return;
+
+  let reactionsBar = contentDiv.querySelector('.message-reactions');
+  if (!reactionsBar) {
+    reactionsBar = document.createElement('div');
+    reactionsBar.className = 'message-reactions';
+    // Вставляем перед мета-информацией, если она есть, иначе в конец
+    const meta = contentDiv.querySelector('.message-meta');
+    if (meta) {
+      contentDiv.insertBefore(reactionsBar, meta);
+    } else {
+      contentDiv.appendChild(reactionsBar);
     }
   }
-  tryShowGroupInfo();
-  
-  // Надёжная прокрутка вниз после загрузки сообщений
+
+  // Поиск или создание элемента для данного эмодзи
+  let reactionItem = Array.from(reactionsBar.children).find(
+    item => item.dataset.emoji === emoji
+  );
+
+  if (action === 'add') {
+    if (!reactionItem) {
+      reactionItem = document.createElement('span');
+      reactionItem.className = 'reaction';
+      reactionItem.dataset.emoji = emoji;
+      reactionItem.innerHTML = `<img src="/images/emojis/${emoji}.png" alt="${emoji}" class="reaction-emoji"> <span class="reaction-count">1</span>`;
+      if (userId === currentUser.id) reactionItem.classList.add('me');
+      reactionsBar.appendChild(reactionItem);
+    } else {
+      const countSpan = reactionItem.querySelector('.reaction-count');
+      const count = parseInt(countSpan.textContent, 10) + 1;
+      countSpan.textContent = count;
+      if (userId === currentUser.id) reactionItem.classList.add('me');
+    }
+  } else if (action === 'remove') {
+    if (reactionItem) {
+      const countSpan = reactionItem.querySelector('.reaction-count');
+      const count = parseInt(countSpan.textContent, 10) - 1;
+      if (count <= 0) {
+        reactionItem.remove();
+      } else {
+        countSpan.textContent = count;
+        if (userId === currentUser.id) reactionItem.classList.remove('me');
+      }
+    }
+  }
+
+  // Если после удаления реакций блок остался пустым – убираем его
+  if (reactionsBar.children.length === 0) reactionsBar.remove();
 }
 
 function handleMessagesRead(data) {
@@ -1799,15 +1748,24 @@ function handleMessagesRead(data) {
 async function loadMessages(convId) {
   const list = $('messages-list');
   if (!list) return;
+  
   list.innerHTML = '';
+  
   try {
     const messages = await api(`/api/conversations/${convId}/messages`);
+    
     for (const msg of messages) {
       const messageDiv = createMessageElement(msg, currentConversationIsGroup, currentUser.id);
       list.appendChild(messageDiv);
     }
-    // Принудительно прокручиваем вниз после загрузки
-    scrollMessagesToBottom();
+    
+    const container = $('chat-messages-wrapper');
+    const shouldScroll = container.scrollHeight - container.scrollTop - container.clientHeight <= 20;
+    if (shouldScroll) {
+      requestAnimationFrame(() => {
+        scrollMessagesToBottom();
+      });
+    }
   } catch (err) {
     console.error('Failed to load messages:', err);
     list.innerHTML = '<p style="color:var(--text-muted)">Не удалось загрузить сообщения</p>';
@@ -1893,6 +1851,7 @@ if (sendForm) {
       }
     }
 
+    requestAnimationFrame(() => scrollMessagesToBottom());
   });
 }
 
@@ -2016,75 +1975,61 @@ if (btnCopyCode) {
 const btnAddFriend = $('btn-add-friend');
 if (btnAddFriend) {
   btnAddFriend.addEventListener('click', async () => {
-    const codeInput = $('friend-code-input');
+    const code = $('friend-code-input')?.value.trim();
     const errEl = $('friends-error');
-    if (!errEl || !codeInput) return;
-
+    if (!errEl) return;
+    
     errEl.textContent = '';
-    const code = codeInput.value.trim();
-
-    // 1. Валидация
+    
     if (!code) {
       errEl.textContent = 'Введите код друга';
       return;
     }
-
-    // 2. Блокируем кнопку на время запроса (чтобы не спамить)
-    const originalText = btnAddFriend.textContent;
-    btnAddFriend.disabled = true;
-    btnAddFriend.textContent = 'Добавляем...';
-
+    
     try {
-      // 3. Запрос на добавление друга
-      const addedFriend = await api('/api/friends', {
-        method: 'POST',
-        body: JSON.stringify({ friendCode: code })
+      // Добавляем друга
+      const addedFriend = await api('/api/friends', { 
+        method: 'POST', 
+        body: JSON.stringify({ friendCode: code }) 
       });
-
-      // 4. Убедимся, что сервер вернул объект с id друга
-      if (!addedFriend || !addedFriend.id) {
-        throw new Error('Сервер не вернул данные о друге');
-      }
-
-      // 5. Создаём личный чат (если ещё не существует)
+      
+      // Очищаем поле и закрываем ошибку
+      if ($('friend-code-input')) $('friend-code-input').value = '';
+      errEl.textContent = '';
+      
+      // Создаём личный чат с добавленным другом (если его ещё нет)
       const dmData = await api('/api/dms', {
         method: 'POST',
         body: JSON.stringify({ otherUserId: addedFriend.id })
       });
-
-      if (!dmData || !dmData.conversationId) {
-        throw new Error('Не удалось создать чат');
-      }
-
-      // 6. Успех – очищаем поле, обновляем список, переходим в чат
-      codeInput.value = '';
-      errEl.textContent = '';
+      
+      // Обновляем список чатов
       await loadConversationList();
+      
+      // Переходим в созданный (или существующий) диалог
       selectConversation(dmData.conversationId);
-      if (isMobile()) setTimeout(() => showChat(), 10);
+      
+      // На мобильных устройствах показываем окно чата
+      if (isMobile()) {
+        setTimeout(() => showChat(), 10);
+      }
+      
+      // Показываем уведомление об успехе (опционально)
       showToast('Друг добавлен, чат создан', 'success');
-
-      // 7. Обновляем список друзей в модалке (если она открыта)
-      try {
-        const friends = await api('/api/friends');
-        const ul = $('friends-list');
-        if (ul) {
-          ul.innerHTML = '';
-          for (const u of friends) {
-            const li = document.createElement('li');
-            li.textContent = u.username;
-            ul.appendChild(li);
-          }
+      
+      // Обновляем список друзей в модалке (оставляем как было)
+      const friends = await api('/api/friends');
+      const ul = $('friends-list');
+      if (ul) {
+        ul.innerHTML = '';
+        for (const u of friends) {
+          const li = document.createElement('li');
+          li.textContent = u.username;
+          ul.appendChild(li);
         }
-      } catch (e) { /* не критично */ }
-
+      }
     } catch (err) {
-      // 8. Показываем понятную ошибку
-      console.error('Add friend error:', err);
-      errEl.textContent = err.message || 'Не удалось добавить друга. Проверьте код и повторите.';
-    } finally {
-      btnAddFriend.disabled = false;
-      btnAddFriend.textContent = originalText;
+      errEl.textContent = err.message || 'Failed';
     }
   });
 }
@@ -2093,7 +2038,7 @@ if (btnAddFriend) {
 const modalFriends = $('modal-friends');
 if (modalFriends) {
   modalFriends.addEventListener('click', (e) => {
-    if (e.target === modalFriends) hide($('modal-friends'));
+    if (e.target.id === 'modal-friends') hide($('modal-friends'));
   });
 }
 
@@ -2101,7 +2046,6 @@ if (modalFriends) {
 const btnDeleteAccount = $('btn-delete-account');
 if (btnDeleteAccount) {
   btnDeleteAccount.addEventListener('click', () => {
-    hide(modalProfile); // закрываем модалку профиля
     hide($('modal-friends'));
     show($('modal-delete-confirm'));
     const deletePassword = $('delete-password');
@@ -2114,7 +2058,7 @@ if (btnDeleteAccount) {
 const modalDeleteConfirm = $('modal-delete-confirm');
 if (modalDeleteConfirm) {
   modalDeleteConfirm.addEventListener('click', (e) => {
-    if (e.target === modalDeleteConfirm) hide($('modal-delete-confirm'));
+    if (e.target.id === 'modal-delete-confirm') hide($('modal-delete-confirm'));
   });
 }
 
@@ -2163,60 +2107,31 @@ const modalProfile = $('modal-profile');
 const btnSaveDisplayName = $('btn-save-display-name');
 const profileDisplayNameInput = $('profile-display-name');
 const profileError = $('profile-error');
-// Находим кнопку "Сменить пароль" внутри модалки профиля (старая)
 const btnChangePassword = document.getElementById('btn-change-password');
-const modalChangePassword = document.getElementById('modal-change-password');
-const btnSubmitChangePassword = document.getElementById('btn-submit-change-password');
-const btnCancelChangePassword = document.getElementById('btn-cancel-change-password');
-const changePasswordError = document.getElementById('change-password-error');
-const oldPasswordInputChange = document.getElementById('change-old-password');
-const newPasswordInputChange = document.getElementById('change-new-password');
-const confirmPasswordInputChange = document.getElementById('change-confirm-password');
+const oldPasswordInput = document.getElementById('old-password');
+const newPasswordInput = document.getElementById('new-password');
+const confirmPasswordInput = document.getElementById('confirm-password');
+const passwordChangeError = document.getElementById('password-change-error');
 
-// Открытие модалки смены пароля
 if (btnChangePassword) {
-  btnChangePassword.addEventListener('click', () => {
-    hide(modalProfile); // закрываем модалку профиля
-    // Очищаем поля и ошибки
-    if (oldPasswordInputChange) oldPasswordInputChange.value = '';
-    if (newPasswordInputChange) newPasswordInputChange.value = '';
-    if (confirmPasswordInputChange) confirmPasswordInputChange.value = '';
-    if (changePasswordError) changePasswordError.textContent = '';
-    show(modalChangePassword);
-  });
-}
-
-// Закрытие по фону
-if (modalChangePassword) {
-  modalChangePassword.addEventListener('click', (e) => {
-    if (e.target === modalChangePassword) hide(modalChangePassword);
-  });
-}
-
-// Кнопка отмены
-if (btnCancelChangePassword) {
-  btnCancelChangePassword.addEventListener('click', () => hide(modalChangePassword));
-}
-
-// Выполнение смены пароля
-if (btnSubmitChangePassword) {
-  btnSubmitChangePassword.addEventListener('click', async () => {
-    if (changePasswordError) changePasswordError.textContent = '';
-    
-    const oldPassword = oldPasswordInputChange.value.trim();
-    const newPassword = newPasswordInputChange.value.trim();
-    const confirmPassword = confirmPasswordInputChange.value.trim();
+  btnChangePassword.addEventListener('click', async () => {
+    passwordChangeError.textContent = '';
+    const oldPassword = oldPasswordInput.value.trim();
+    const newPassword = newPasswordInput.value.trim();
+    const confirmPassword = confirmPasswordInput.value.trim();
 
     if (!oldPassword || !newPassword || !confirmPassword) {
-      changePasswordError.textContent = 'Все поля обязательны для заполнения';
+      passwordChangeError.textContent = 'Все поля обязательны для заполнения';
       return;
     }
+
     if (newPassword.length < 6) {
-      changePasswordError.textContent = 'Новый пароль должен содержать минимум 6 символов';
+      passwordChangeError.textContent = 'Новый пароль должен содержать минимум 6 символов';
       return;
     }
+
     if (newPassword !== confirmPassword) {
-      changePasswordError.textContent = 'Пароли не совпадают';
+      passwordChangeError.textContent = 'Пароли не совпадают';
       return;
     }
 
@@ -2226,11 +2141,13 @@ if (btnSubmitChangePassword) {
         body: JSON.stringify({ oldPassword, newPassword })
       });
 
+      // Очищаем поля
+      oldPasswordInput.value = '';
+      newPasswordInput.value = '';
+      confirmPasswordInput.value = '';
+
       // Успешное уведомление
       showToast('Пароль успешно изменён. Пожалуйста, войдите снова.', 'success');
-
-      // Закрываем модалку
-      hide(modalChangePassword);
 
       // Выход из системы
       if (callActive) await endCall();
@@ -2249,14 +2166,14 @@ if (btnSubmitChangePassword) {
       currentConversationId = null;
       renderScreen();
 
+      // Закрыть модалку профиля
+      hide(modalProfile);
+
     } catch (err) {
-      changePasswordError.textContent = err.message || 'Ошибка при смене пароля';
+      passwordChangeError.textContent = err.message || 'Ошибка при смене пароля';
     }
   });
 }
-
-
-
 
 if (btnMenu) {
   btnMenu.addEventListener('click', () => {
@@ -2270,7 +2187,7 @@ if (btnMenu) {
 
 if (modalProfile) {
   modalProfile.addEventListener('click', (e) => {
-    if (e.target === modalProfile) hide(modalProfile);
+    if (e.target.id === 'modal-profile') hide(modalProfile);
   });
 }
 
@@ -2372,7 +2289,7 @@ if (btnCreateGroupBtn) {
 const modalCreateGroup = $('modal-create-group');
 if (modalCreateGroup) {
   modalCreateGroup.addEventListener('click', (e) => {
-    if (e.target === modalCreateGroup) {
+    if (e.target.id === 'modal-create-group') {
       hide(modalCreateGroup);
       creatingChannel = false;
       document.querySelector('#modal-create-group h2').textContent = 'Create group';
@@ -2381,10 +2298,16 @@ if (modalCreateGroup) {
   });
 }
 
+if (modalCreateGroup) {
+  modalCreateGroup.addEventListener('click', (e) => {
+    if (e.target.id === 'modal-create-group') hide(modalCreateGroup);
+  });
+}
+
 const modalGroupsList = $('modal-groups-list');
 if (modalGroupsList) {
   modalGroupsList.addEventListener('click', (e) => {
-    if (e.target === modalGroupsList) hide(modalGroupsList);
+    if (e.target.id === 'modal-groups-list') hide(modalGroupsList);
   });
 }
 
@@ -2844,10 +2767,7 @@ function hideGroupInfoButton() {
 
 if (modalGroupInfo) {
   modalGroupInfo.addEventListener('click', (e) => {
-    // Only close if clicking directly on the modal background, not on any children
-    if (e.target === modalGroupInfo) {
-      hide(modalGroupInfo);
-    }
+    if (e.target.id === 'modal-group-info') hide(modalGroupInfo);
   });
 }
 
@@ -2921,10 +2841,7 @@ async function loadFriendsToAdd(groupId, groupTitle) {
 
 if (modalAddMember) {
   modalAddMember.addEventListener('click', (e) => {
-    // Only close if clicking directly on the modal background, not on any children
-    if (e.target === modalAddMember) {
-      hide(modalAddMember);
-    }
+    if (e.target.id === 'modal-add-member') hide(modalAddMember);
   });
 }
 
@@ -4293,7 +4210,6 @@ function updateCallStatus(status) {
   } else {
     if (bar) bar.classList.add('hidden');
   }
-  updateChatMessagesPaddingBottom(); // добавьте эту строку
 }
 
 function showCallUI() {
@@ -4369,6 +4285,7 @@ window.addEventListener('resize', () => {
 
 // ---- Initialization ----
 document.addEventListener('DOMContentLoaded', () => {
+  console.log('DOM loaded, initializing app');
   adjustChatMessagesPadding();
   filePreviewList = document.getElementById('file-preview-list');
   fileTypeMenu = document.getElementById('file-type-menu');
@@ -4454,80 +4371,9 @@ document.addEventListener('DOMContentLoaded', () => {
       touchStartX = 0;
     });
   }
-  renderFilePreviews();
+
   tryAutoLogin();
   updateChatMessagesPaddingBottom();
-  
-  // Avatar upload
-  const avatarInput = document.getElementById('avatar-input');
-  const btnUploadAvatar = document.getElementById('btn-upload-avatar');
-  const profileAvatarPreview = document.getElementById('profile-avatar-preview');
-
-  if (btnUploadAvatar && avatarInput) {
-    // Клик по кнопке открывает диалог выбора файла
-    btnUploadAvatar.addEventListener('click', () => {
-      avatarInput.click();
-    });
-
-    // Когда файл выбран – отправляем
-    avatarInput.addEventListener('change', async () => {
-      const file = avatarInput.files[0];
-      if (!file) return;
-
-      const formData = new FormData();
-      formData.append('avatar', file);
-
-      try {
-        const res = await fetch(API + '/api/avatar', {
-          method: 'POST',
-          credentials: 'include',
-          body: formData
-        });
-        if (!res.ok) throw new Error(await res.text());
-
-        // Обновить превью в модалке (добавляем случайный параметр для обхода кеша)
-        profileAvatarPreview.src = `/api/avatar/${currentUser.id}?t=${Date.now()}`;
-
-        // Обновить аватарки в списке чатов и в сообщениях
-        loadConversationList();
-        if (currentConversationId) {
-          loadMessages(currentConversationId);
-          // Дополнительно обновить шапку чата, если открыт личный диалог
-          const conversation = conversationListCache.find(c => c.id === currentConversationId);
-          if (conversation && !conversation.isGroup && conversation.otherUser) {
-            const chatWithName = document.getElementById('chat-with-name');
-            if (chatWithName) {
-              const avatarHtml = getAvatarHtml(conversation.otherUser.id, '32px');
-              const displayName = conversation.otherUser.name || conversation.otherUser.username || '…';
-              chatWithName.innerHTML = `${avatarHtml} ${escapeHtml(displayName)}`;
-            }
-          }
-        }
-
-        showToast('Аватарка обновлена', 'success');
-      } catch (err) {
-        profileError.textContent = err.message;
-      }
-
-      // Очистить input, чтобы можно было загрузить тот же файл повторно
-      avatarInput.value = '';
-    });
-  }
-
-  // Обновляем превью при открытии модалки (если аватарка уже есть)
-  if (modalProfile) {
-    // При открытии модалки обновляем превью
-    const observer = new MutationObserver((mutations) => {
-      mutations.forEach((mutation) => {
-        if (mutation.type === 'attributes' && mutation.attributeName === 'class') {
-          if (!modalProfile.classList.contains('hidden')) {
-            profileAvatarPreview.src = `/api/avatar/${currentUser.id}?t=${Date.now()}`;
-          }
-        }
-      });
-    });
-    observer.observe(modalProfile, { attributes: true });
-  }
 });
 // Auth tabs switching
 const tabs = document.querySelectorAll('.auth-tab');

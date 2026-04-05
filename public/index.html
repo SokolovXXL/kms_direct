@@ -50,7 +50,7 @@
         <aside class="sidebar" id="sidebar">
           <div class="sidebar-actions">
             <button type="button" class="btn-primary" id="btn-create-group-btn" style="background:var(--surface-hover); color:var(--text);">Создать группу</button>
-            <button type="button" class="btn-primary" id="btn-create-channel" style="background:var(--surface-hover); color:var(--text);">Создать канал</button>
+            <button type="button" class="btn-primary" id="btn-create-channel" style="background:var(--surface-hover); color:var(--text); margin-top:0.5rem;">Создать канал</button>
           </div>
           <div id="dm-list" class="dm-list"></div>
         </aside>
@@ -131,24 +131,10 @@
       <div class="modal-content">
         <h2>Удаление аккаунта</h2>
         <p>Это действие нельзя отменить. Введите пароль для подтверждения.</p>
-        <input type="password" id="delete-password" placeholder="Ваш пароль" style="width:100%; margin-bottom:1rem; padding:0.75rem; background:var(--bg); border:1px solid var(--border); border-radius:8px; color:var(--text);" />
+        <input type="password" id="delete-password" placeholder="Ваш пароль" />
         <p id="delete-error" class="auth-error"></p>
         <div class="modal-actions">
           <button type="button" class="btn-danger" id="btn-confirm-delete">Удалить мой аккаунт</button>
-        </div>
-      </div>
-    </div>
-    <div id="modal-change-password" class="modal hidden">
-      <div class="modal-content">
-        <h2>Смена пароля</h2>
-        <p>Введите старый пароль и новый пароль (мин. 6 символов).</p>
-        <input type="password" id="change-old-password" placeholder="Старый пароль" style="width:100%; margin-bottom:1rem; padding:0.75rem; background:var(--bg); border:1px solid var(--border); border-radius:8px; color:var(--text);" />
-        <input type="password" id="change-new-password" placeholder="Новый пароль (мин. 6 символов)" style="width:100%; margin-bottom:1rem; padding:0.75rem; background:var(--bg); border:1px solid var(--border); border-radius:8px; color:var(--text);" />
-        <input type="password" id="change-confirm-password" placeholder="Подтвердите новый пароль" style="width:100%; margin-bottom:1rem; padding:0.75rem; background:var(--bg); border:1px solid var(--border); border-radius:8px; color:var(--text);" />
-        <p id="change-password-error" class="auth-error"></p>
-        <div class="modal-actions">
-          <button type="button" class="btn-primary" id="btn-submit-change-password">Сменить пароль</button>
-          <button type="button" class="btn-close-modal" id="btn-cancel-change-password">Отмена</button>
         </div>
       </div>
     </div>
@@ -172,18 +158,18 @@
     <div id="modal-profile" class="modal hidden">
       <div class="modal-content">
         <h2>Настройки профиля</h2>
-        <div class="avatar-upload">
-          <img id="profile-avatar-preview" class="avatar-preview" src="/images/default-avatar.png" alt="Avatar">
-          <input type="file" id="avatar-input" accept="image/jpeg,image/png,image/gif,image/webp">
-          <button type="button" id="btn-upload-avatar" class="btn-primary">Загрузить аватарку</button>
-        </div>
         <p>Измените отображаемое имя (как вас видят другие)</p>
         <input type="text" id="profile-display-name" placeholder="Отображаемое имя" maxlength="50" />
         <p id="profile-error" class="auth-error"></p>
-        <div style="margin: 1rem 0;">
-          <button type="button" class="btn-primary" id="btn-change-password" style="width: 100%; background: var(--surface-hover);">Сменить пароль</button>
+        <!-- Смена пароля -->
+        <div style="margin-top: 1rem; border-top: 1px solid var(--border); padding-top: 1rem;">
+          <h3 style="margin-bottom: 0.5rem;">Смена пароля</h3>
+          <input type="password" id="old-password" placeholder="Старый пароль" style="width:100%; margin-bottom:0.5rem; padding:0.75rem; background:var(--bg); border:1px solid var(--border); border-radius:8px; color:var(--text);" />
+          <input type="password" id="new-password" placeholder="Новый пароль (мин. 6 символов)" style="width:100%; margin-bottom:0.5rem; padding:0.75rem; background:var(--bg); border:1px solid var(--border); border-radius:8px; color:var(--text);" />
+          <input type="password" id="confirm-password" placeholder="Подтвердите новый пароль" style="width:100%; margin-bottom:0.5rem; padding:0.75rem; background:var(--bg); border:1px solid var(--border); border-radius:8px; color:var(--text);" />
+          <button type="button" class="btn-primary" id="btn-change-password" style="background:var(--surface-hover); color:var(--text); margin-top:0.5rem;">Сменить пароль</button>
+          <p id="password-change-error" class="auth-error"></p>
         </div>
-        <div class="delete-account-section">
         <div class="delete-account-section" style="margin-top: 1.5rem; border-top: 1px solid var(--border); padding-top: 1rem;">
           <p style="color: var(--text-muted); font-size: 0.85rem; margin-bottom: 0.5rem;">Опасная зона</p>
           <button type="button" class="btn-danger" id="btn-delete-account" style="width: 100%;">Удалить аккаунт</button>

@@ -13,7 +13,6 @@ const fs = require('fs');
 const { v4: uuidv4 } = require('uuid');
 const rateLimit = require('express-rate-limit');
 const webpush = require('web-push');
-const sharp = require('sharp');
 
 // Setup VAPID
 webpush.setVapidDetails(
@@ -48,17 +47,6 @@ const upload = multer({
     cb(null, true);
   }
 });
-
-// Для аватарок используем memoryStorage
-const avatarUpload = multer({
-  storage: multer.memoryStorage(),
-  limits: { fileSize: 5 * 1024 * 1024 }, // 5 MB
-  fileFilter: (req, file, cb) => {
-    const allowed = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
-    cb(null, allowed.includes(file.mimetype));
-  }
-});
-
 
 // Генерация friend code
 function generateFriendCode(length = 8) {
@@ -214,56 +202,6 @@ function authMiddleware(req, res, next) {
     return res.status(401).json({ error: 'Неверный токен' });
   }
 }
-
-// Загрузка аватарки
-app.post('/api/avatar', authMiddleware, avatarUpload.single('avatar'), async (req, res) => {
-  if (!req.file) {
-    return res.status(400).json({ error: 'Файл не загружен' });
-  }
-  try {
-    const processed = await sharp(req.file.buffer)
-      .resize(200, 200, { fit: 'cover' })
-      .webp({ quality: 80 })
-      .toBuffer();
-    await pool.query(
-      'UPDATE users SET avatar_data = $1, avatar_mime = $2 WHERE id = $3',
-      [processed, 'image/webp', req.userId]
-    );
-    res.json({ success: true });
-  } catch (err) {
-    console.error('Avatar processing error:', err);
-    res.status(500).json({ error: 'Не удалось обработать изображение' });
-  }
-});
-
-// Получение аватарки
-app.get('/api/avatar/:userId', authMiddleware, async (req, res) => {
-  const targetId = parseInt(req.params.userId, 10);
-  if (isNaN(targetId)) return res.status(400).json({ error: 'Неверный ID пользователя' });
-
-  // Проверка доступа: только для себя, друзей или участников общего чата
-  if (targetId !== req.userId) {
-    const access = await pool.query(`
-      SELECT 1 FROM friends
-      WHERE (user_id = $1 AND friend_id = $2) OR (user_id = $2 AND friend_id = $1)
-      UNION
-      SELECT 1 FROM conversation_participants cp1
-      JOIN conversation_participants cp2 ON cp1.conversation_id = cp2.conversation_id
-      WHERE cp1.user_id = $1 AND cp2.user_id = $2
-      LIMIT 1
-    `, [req.userId, targetId]);
-    if (access.rows.length === 0) {
-      return res.status(404).json({ error: 'Аватарка не найдена' });
-    }
-  }
-
-  const result = await pool.query('SELECT avatar_data, avatar_mime FROM users WHERE id = $1', [targetId]);
-  if (result.rows.length === 0 || !result.rows[0].avatar_data) {
-    return res.status(404).json({ error: 'Аватарка не установлена' });
-  }
-  res.set('Content-Type', result.rows[0].avatar_mime || 'image/webp');
-  res.send(result.rows[0].avatar_data);
-});
 
 // Middleware для SSE (только куки и заголовок, без query token)
 function streamAuthMiddleware(req, res, next) {
@@ -590,8 +528,7 @@ app.delete('/api/account', authMiddleware, async (req, res) => {
 app.get('/api/friends', authMiddleware, async (req, res) => {
   const r = await pool.query(`
     SELECT u.id, u.username, u.display_name, u.friend_code, u.last_seen,
-          COALESCE(u.display_name, u.username) AS name,
-          u.avatar_data
+           COALESCE(u.display_name, u.username) AS name
     FROM friends f
     JOIN users u ON u.id = f.friend_id
     WHERE f.user_id = $1
@@ -600,8 +537,7 @@ app.get('/api/friends', authMiddleware, async (req, res) => {
 
   const friends = r.rows.map(u => ({
     ...u,
-    online: isUserOnline(u.id),
-    has_avatar: !!u.avatar_data 
+    online: isUserOnline(u.id)
   }));
   res.json(friends);
 });

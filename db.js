@@ -108,12 +108,6 @@ async function initDb(retries = 5) {
           UNIQUE(user_id, endpoint)
         )
       `);
-      await client.query(`
-      ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_data BYTEA;
-    `);
-    await client.query(`
-      ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_mime VARCHAR(50);
-    `);
       await client.query(`CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(user_id);`);
       await client.query(`CREATE INDEX IF NOT EXISTS idx_messages_conversation ON messages(conversation_id);`);
       await client.query(`CREATE INDEX IF NOT EXISTS idx_friends_user ON friends(user_id);`);
