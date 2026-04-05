@@ -2069,54 +2069,84 @@ app.get('*', (req, res) => {
 async function main() {
   try {
     await initDb();
-    await pool.query(`
-      ALTER TABLE users
-      ADD COLUMN IF NOT EXISTS last_seen TIMESTAMPTZ DEFAULT NOW()
-    `);
-    await pool.query(`
-      ALTER TABLE messages ADD COLUMN IF NOT EXISTS reply_to_id INTEGER REFERENCES messages(id) ON DELETE SET NULL
-    `);
-    console.log('Database ready');
 
-    // Миграция для добавления полей user1_id и user2_id в таблицу conversations (для DM)
-    // Выполняем после инициализации БД, чтобы гарантировать наличие таблиц
+    // 1. Добавляем недостающие колонки (если их нет)
     const client = await pool.connect();
     try {
-      // Добавляем колонки, если их нет
+      // Колонки для DM
       await client.query(`
         ALTER TABLE conversations 
-        ADD COLUMN IF NOT EXISTS user1_id INTEGER REFERENCES users(id),
-        ADD COLUMN IF NOT EXISTS user2_id INTEGER REFERENCES users(id)
+        ADD COLUMN IF NOT EXISTS user1_id INTEGER,
+        ADD COLUMN IF NOT EXISTS user2_id INTEGER
       `);
-      // Создаём уникальный индекс для DM (только для is_group = false)
+      // Колонка для каналов
       await client.query(`
+        ALTER TABLE conversations 
+        ADD COLUMN IF NOT EXISTS is_channel BOOLEAN DEFAULT false
+      `);
+      // Колонка last_seen для пользователей
+      await client.query(`
+        ALTER TABLE users
+        ADD COLUMN IF NOT EXISTS last_seen TIMESTAMPTZ DEFAULT NOW()
+      `);
+      // Колонка reply_to_id в сообщениях
+      await client.query(`
+        ALTER TABLE messages 
+        ADD COLUMN IF NOT EXISTS reply_to_id INTEGER REFERENCES messages(id) ON DELETE SET NULL
+      `);
+      console.log('All columns added/verified');
+    } catch (err) {
+      console.error('Failed to add columns:', err);
+      throw err;
+    } finally {
+      client.release();
+    }
+
+    // 2. Создаём уникальный индекс для DM (только для негрупповых чатов)
+    const clientIdx = await pool.connect();
+    try {
+      await clientIdx.query(`
         CREATE UNIQUE INDEX IF NOT EXISTS idx_unique_dm 
         ON conversations (user1_id, user2_id) 
         WHERE is_group = false
       `);
       console.log('DM unique index created/verified');
     } catch (err) {
-      console.error('Failed to apply DM migration:', err);
-      // Не выходим, так как приложение может работать и без этого (но DM будут не защищены)
+      console.error('Failed to create DM index:', err);
+      // Не фатально, продолжаем
     } finally {
-      client.release();
+      clientIdx.release();
     }
-    const client2 = await pool.connect();
+
+    // 3. Пересоздаём внешние ключи с CASCADE (если они уже есть – удаляем, потом создаём заново)
+    const clientFK = await pool.connect();
     try {
-      await client2.query(`
+      await clientFK.query(`
         ALTER TABLE conversations 
-        ADD COLUMN IF NOT EXISTS is_channel BOOLEAN DEFAULT false
+        DROP CONSTRAINT IF EXISTS conversations_user1_id_fkey,
+        DROP CONSTRAINT IF EXISTS conversations_user2_id_fkey
       `);
-      console.log('Column is_channel added/verified');
+      await clientFK.query(`
+        ALTER TABLE conversations 
+        ADD CONSTRAINT conversations_user1_id_fkey 
+          FOREIGN KEY (user1_id) REFERENCES users(id) ON DELETE CASCADE,
+        ADD CONSTRAINT conversations_user2_id_fkey 
+          FOREIGN KEY (user2_id) REFERENCES users(id) ON DELETE CASCADE
+      `);
+      console.log('Foreign keys with CASCADE recreated');
     } catch (err) {
-      console.error('Failed to add is_channel column:', err);
+      console.error('Failed to recreate foreign keys:', err);
+      // Если колонки NULL или нет записей – всё равно продолжаем
     } finally {
-      client2.release();
+      clientFK.release();
     }
+
+    console.log('Database initialization complete');
   } catch (e) {
     console.error('DB init failed:', e.message);
     process.exit(1);
   }
+
   app.listen(PORT, () => console.log(`Server listening on port ${PORT}`));
 }
 
