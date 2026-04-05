@@ -2268,5 +2268,9 @@ body {
   flex-shrink: 0;
   padding: 0.5rem 1rem;
   font-size: 0.9rem;
+  line-height: normal;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 
 }
