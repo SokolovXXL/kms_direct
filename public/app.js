@@ -134,6 +134,12 @@ async function tryAutoLogin() {
     const me = await api('/api/me');
     currentUser = me;
     localStorage.setItem('user', JSON.stringify(me));
+    // Проверяем, есть ли ожидающий код друга
+    const pendingCode = localStorage.getItem('pendingFriendCode');
+    if (pendingCode) {
+      localStorage.removeItem('pendingFriendCode');
+      await addFriendByCode(pendingCode);
+    }
   } catch (err) {
     currentUser = null;
     localStorage.removeItem('user');
@@ -477,6 +483,13 @@ if (loginForm) {
       localStorage.setItem('user', JSON.stringify(currentUser));
       $('login-password').value = '';
       
+      // ✅ Добавляем друга только после успешного входа
+      const pendingCode = localStorage.getItem('pendingFriendCode');
+      if (pendingCode) {
+        localStorage.removeItem('pendingFriendCode');
+        await addFriendByCode(pendingCode);
+      }
+      
       renderScreen();
     } catch (err) {
       showAuthError(err.message);
@@ -502,6 +515,13 @@ if (registerForm) {
       currentUser = data.user;
       localStorage.setItem('user', JSON.stringify(currentUser));
       $('register-password').value = '';
+      
+      // ✅ Добавляем друга только после успешной регистрации
+      const pendingCode = localStorage.getItem('pendingFriendCode');
+      if (pendingCode) {
+        localStorage.removeItem('pendingFriendCode');
+        await addFriendByCode(pendingCode);
+      }
       
       renderScreen();
     } catch (err) {
@@ -1134,6 +1154,7 @@ if (messageInput) {
     });
   }
 }
+
 
 // ---- Контекстное меню сообщений ----
 let contextMenu = null;
@@ -1918,6 +1939,96 @@ async function sendFileWithProgress(file, conversationId, replyToId) {
 }
 
 // ---- Friends modal ----
+
+// Добавление друга по ссылке
+async function addFriendByCode(code) {
+  if (!code) return false;
+  try {
+    const result = await api('/api/friends', {
+      method: 'POST',
+      body: JSON.stringify({ friendCode: code })
+    });
+    // После добавления друга создаём личный чат
+    if (result && result.id) {
+      const dmData = await api('/api/dms', {
+        method: 'POST',
+        body: JSON.stringify({ otherUserId: result.id })
+      });
+      showToast(`Пользователь ${result.username} добавлен в друзья!`, 'success');
+      if (dmData && dmData.conversationId) {
+        await selectConversation(dmData.conversationId);
+        if (isMobile()) showChat();
+      }
+      return true;
+    }
+  } catch (err) {
+    console.error('Add friend by code error:', err);
+    if (err.message.includes('already')) {
+      showToast('Этот пользователь уже у вас в друзьях', 'info');
+    } else {
+      showToast('Не удалось добавить друга по ссылке: ' + err.message, 'error');
+    }
+    return false;
+  }
+  return false;
+}
+
+// Обработка параметра code в URL
+function checkAndAddFriendFromUrl() {
+  const urlParams = new URLSearchParams(window.location.search);
+  const code = urlParams.get('code');
+  if (!code) return;
+
+  // Убираем параметр из URL, чтобы при обновлении страницы не добавлять повторно
+  const newUrl = window.location.origin + window.location.pathname;
+  window.history.replaceState({}, document.title, newUrl);
+
+  if (currentUser) {
+    // Пользователь уже авторизован – сразу добавляем
+    addFriendByCode(code);
+  } else {
+    // Сохраняем код в localStorage для добавления после входа
+    localStorage.setItem('pendingFriendCode', code);
+  }
+}
+
+
+
+const btnShareLink = document.getElementById('btn-share-link');
+if (btnShareLink) {
+  btnShareLink.addEventListener('click', () => {
+    const friendCode = currentUser?.friend_code;
+    if (!friendCode) return;
+    const shareUrl = `${window.location.origin}/?code=${friendCode}`;
+    if (navigator.share) {
+      navigator.share({
+        title: 'Приглашение в друзья',
+        text: 'Присоединяйся ко мне в мессенджере!',
+        url: shareUrl
+      }).catch(() => {
+        copyToClipboard(shareUrl);
+        showToast('Ссылка скопирована в буфер обмена', 'info');
+      });
+    } else {
+      copyToClipboard(shareUrl);
+      showToast('Ссылка скопирована в буфер обмена', 'info');
+    }
+  });
+}
+
+function copyToClipboard(text) {
+  if (navigator.clipboard) {
+    navigator.clipboard.writeText(text);
+  } else {
+    const textarea = document.createElement('textarea');
+    textarea.value = text;
+    document.body.appendChild(textarea);
+    textarea.select();
+    document.execCommand('copy');
+    document.body.removeChild(textarea);
+  }
+}
+
 const btnFriends = $('btn-friends');
 if (btnFriends) {
   btnFriends.addEventListener('click', async () => {
@@ -4402,6 +4513,7 @@ document.addEventListener('DOMContentLoaded', () => {
   tryAutoLogin();
   updateChatMessagesPaddingBottom();
   updateChatMessagesPaddingBottom();
+  checkAndAddFriendFromUrl();
 });
 // Auth tabs switching
 const tabs = document.querySelectorAll('.auth-tab');

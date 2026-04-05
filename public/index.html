@@ -5,6 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
   <meta name="referrer" content="strict-origin-when-cross-origin" />
   <meta name="vapid-public-key" content="BIBfRyaglcWeBura_wosiaOfXnwBflmMntf_LjxmJpDc1He1t4-rrDTtgIJg9ASwcX1U5k8ccAN1cGmH9VMzox0" />
+  <meta property="og:title" content="Приглашение в мессенджер" />
+  <meta property="og:description" content="Присоединяйся ко мне в мессенджере!" />
+  <meta property="og:image" content="/images/logo.png" />
+  <meta property="og:url" content="https://kms-direct.onrender.com" />
   <title>Мессенджер</title>
   <link rel="stylesheet" href="/style.css" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -114,7 +118,11 @@
     <div id="modal-friends" class="modal hidden">
       <div class="modal-content">
         <h2>Друзья</h2>
-        <p class="friend-code-row">Мой код друга: <strong id="my-friend-code"></strong> <button type="button" class="btn-copy" id="btn-copy-code">Копировать</button></p>
+        <p class="friend-code-row">
+          Мой код друга: <strong id="my-friend-code"></strong>
+          <button type="button" class="btn-copy" id="btn-copy-code">Копировать</button>
+          <button type="button" class="btn-copy" id="btn-share-link">Поделиться ссылкой</button>
+        </p>
         <label class="add-friend-label">Добавить друга по коду</label>
         <div class="add-friend-row">
           <input type="text" id="friend-code-input" placeholder="Вставьте код друга" />
