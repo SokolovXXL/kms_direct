@@ -2121,6 +2121,8 @@ if (btnChangePassword) {
     document.getElementById('change-new-password').value = '';
     document.getElementById('change-confirm-password').value = '';
     document.getElementById('change-password-error').textContent = '';
+    // Закрываем модалку профиля, чтобы не было наложения
+    hide(modalProfile);
     show(modalChangePassword);
   });
 }
