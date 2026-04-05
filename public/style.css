@@ -2238,3 +2238,27 @@ body {
 .modal-content input::placeholder {
   color: var(--text-muted);
 }
+
+@media (min-width: 769px) {
+  .sidebar-actions .btn-primary:first-child {
+    margin-bottom: 0.5rem;
+  }
+}
+
+@media (max-width: 768px) {
+  #btn-call {
+    position: absolute;
+    right: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    margin-left: 0 !important;
+    z-index: 2;
+    background: rgba(24, 24, 28, 0.8);
+    border-radius: 20px;
+    padding: 6px 10px;
+  }
+  .chat-header {
+    position: relative;
+    padding-right: 56px; /* чтобы текст не заезжал под кнопку */
+  }
+}
