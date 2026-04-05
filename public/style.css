@@ -309,6 +309,7 @@ body {
 .add-friend-row {
   display: flex;
   gap: 0.5rem;
+  align-items: center;
   margin-bottom: 0.75rem;
 }
 
@@ -2266,11 +2267,10 @@ body {
 .add-friend-row .btn-primary {
   width: auto;
   flex-shrink: 0;
-  padding: 0.5rem 1rem;
+  padding: 0.5rem 0.75rem;
   font-size: 0.9rem;
-  line-height: normal;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-
+  white-space: nowrap;
 }
