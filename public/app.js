@@ -4498,12 +4498,20 @@ document.addEventListener('DOMContentLoaded', () => {
       const touch = e.touches[0];
       const dx = touch.clientX - touchStartX;
       const dy = touch.clientY - touchStartY;
-      if (Math.abs(dx) > 30 && Math.abs(dx) > Math.abs(dy) && dx > 0) {
-        const message = e.target.closest('.message');
-        if (message) {
-          setReplyTo(message);
+      if (Math.abs(dx) > 30 && Math.abs(dx) > Math.abs(dy)) {
+        if (dx < 0) { // Свайп влево → ответить на сообщение
+          const message = e.target.closest('.message');
+          if (message) {
+            setReplyTo(message);
+            e.preventDefault();
+            touchStartX = 0;
+          }
+        } else if (dx > 0) {
           e.preventDefault();
           touchStartX = 0;
+          if (isMobile()) {
+            showSidebar();
+          }
         }
       }
     });
