@@ -145,22 +145,8 @@ async function tryAutoLogin() {
     currentUser = null;
     localStorage.removeItem('user');
   }
-
-  // В обработчиках успешного логина/регистрации:
-  const pendingToken = localStorage.getItem('pendingInviteToken');
-  if (pendingToken) {
-    localStorage.removeItem('pendingInviteToken');
-    try {
-      const result = await api('/api/join', { method: 'POST', body: JSON.stringify({ token: pendingToken }) });
-      showToast('Вы присоединились к беседе!', 'success');
-      await loadConversationList();
-      selectConversation(result.conversationId);
-      if (isMobile()) showChat();
-    } catch (err) {
-      showToast(err.message, 'error');
-    }
-  }
   renderScreen();
+  await processInviteJoin();
 }
 
 function renderScreen() {
@@ -2372,6 +2358,47 @@ if (btnSaveDisplayName) {
       profileError.textContent = err.message;
     }
   });
+}
+
+async function processInviteJoin() {
+  const urlParams = new URLSearchParams(window.location.search);
+  const token = urlParams.get('join');
+  if (token) {
+    // Убираем параметр из URL, чтобы не повторять
+    const newUrl = window.location.origin + window.location.pathname;
+    window.history.replaceState({}, document.title, newUrl);
+
+    if (!currentUser) {
+      localStorage.setItem('pendingInviteToken', token);
+      return;
+    }
+
+    try {
+      const result = await api('/api/join', { method: 'POST', body: JSON.stringify({ token }) });
+      showToast('Вы присоединились к беседе!', 'success');
+      await loadConversationList();
+      selectConversation(result.conversationId);
+      if (isMobile()) showChat();
+    } catch (err) {
+      showToast(err.message, 'error');
+    }
+    return;
+  }
+
+  // Если токена в URL нет, но есть сохранённый в localStorage
+  const pendingToken = localStorage.getItem('pendingInviteToken');
+  if (pendingToken && currentUser) {
+    localStorage.removeItem('pendingInviteToken');
+    try {
+      const result = await api('/api/join', { method: 'POST', body: JSON.stringify({ token: pendingToken }) });
+      showToast('Вы присоединились к беседе!', 'success');
+      await loadConversationList();
+      selectConversation(result.conversationId);
+      if (isMobile()) showChat();
+    } catch (err) {
+      showToast(err.message, 'error');
+    }
+  }
 }
 
 // ---- GROUPS ----

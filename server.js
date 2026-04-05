@@ -897,12 +897,12 @@ app.post('/api/conversations/:id/invite', authMiddleware, async (req, res) => {
   // Генерируем уникальный токен (16-байт случайных + hex)
   const token = crypto.randomBytes(32).toString('hex');
   const expiresAt = new Date();
-  expiresAt.setDate(expiresAt.getDate() + 7); // через 7 дней
+  expiresAt.setDate(expiresAt.getDate() + 7); // 7 дней
 
   await pool.query(
     `INSERT INTO group_invites (conversation_id, token, created_by, expires_at, max_uses, uses)
      VALUES ($1, $2, $3, $4, $5, $6)`,
-    [convId, token, req.userId, expiresAt, 1, 0]
+    [convId, token, req.userId, expiresAt, null, 0]  // max_uses = null
   );
 
   const inviteLink = `${process.env.FRONTEND_URL || req.protocol + '://' + req.get('host')}/?join=${token}`;
@@ -919,7 +919,6 @@ app.post('/api/join', authMiddleware, async (req, res) => {
   try {
     await client.query('BEGIN');
 
-    // Получаем информацию о приглашении
     const inviteRes = await client.query(
       `SELECT id, conversation_id, expires_at, max_uses, uses
        FROM group_invites WHERE token = $1 FOR UPDATE`,
@@ -930,26 +929,26 @@ app.post('/api/join', authMiddleware, async (req, res) => {
     }
     const invite = inviteRes.rows[0];
 
-    // Проверяем срок действия
+    // Проверка срока действия
     if (invite.expires_at && new Date(invite.expires_at) < new Date()) {
       await client.query('DELETE FROM group_invites WHERE id = $1', [invite.id]);
       return res.status(410).json({ error: 'Invite expired' });
     }
-    // Проверяем лимит использований
-    if (invite.uses >= invite.max_uses) {
+
+    // Проверка лимита использований (если max_uses не NULL)
+    if (invite.max_uses !== null && invite.uses >= invite.max_uses) {
       await client.query('DELETE FROM group_invites WHERE id = $1', [invite.id]);
       return res.status(410).json({ error: 'Invite already used' });
     }
 
     const conversationId = invite.conversation_id;
 
-    // Проверяем, не состоит ли уже пользователь в беседе
+    // Добавляем пользователя, если ещё не участник
     const memberCheck = await client.query(
       'SELECT 1 FROM conversation_participants WHERE conversation_id = $1 AND user_id = $2',
       [conversationId, req.userId]
     );
     if (memberCheck.rows.length === 0) {
-      // Добавляем участника с ролью 'member'
       await client.query(
         'INSERT INTO conversation_participants (conversation_id, user_id, role) VALUES ($1, $2, $3)',
         [conversationId, req.userId, 'member']
@@ -958,7 +957,7 @@ app.post('/api/join', authMiddleware, async (req, res) => {
 
     // Увеличиваем счётчик использований
     const newUses = invite.uses + 1;
-    if (newUses >= invite.max_uses) {
+    if (invite.max_uses !== null && newUses >= invite.max_uses) {
       await client.query('DELETE FROM group_invites WHERE id = $1', [invite.id]);
     } else {
       await client.query('UPDATE group_invites SET uses = $1 WHERE id = $2', [newUses, invite.id]);
