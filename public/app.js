@@ -2060,7 +2060,7 @@ if (modalFriends) {
 const btnDeleteAccount = $('btn-delete-account');
 if (btnDeleteAccount) {
   btnDeleteAccount.addEventListener('click', () => {
-    hide($('modal-friends'));
+    hide($('modal-profile'));
     show($('modal-delete-confirm'));
     const deletePassword = $('delete-password');
     const deleteError = $('delete-error');

@@ -2262,3 +2262,11 @@ body {
     padding-right: 56px; /* чтобы текст не заезжал под кнопку */
   }
 }
+
+.add-friend-row .btn-primary {
+  width: auto;
+  flex-shrink: 0;
+  padding: 0.5rem 1rem;
+  font-size: 0.9rem;
+
+}
