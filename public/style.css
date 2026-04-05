@@ -2273,4 +2273,8 @@ body {
   align-items: center;
   justify-content: center;
   white-space: nowrap;
+  border: 1px solid var(--border); 
+  background: var(--accent);       
+  line-height: 1;                  
+  height: auto;                    
 }
