@@ -777,6 +777,23 @@ function createMessageElement(message, isGroup, currentUserId) {
     replyBlock.className = 'message-reply-preview';
     replyBlock.dataset.replyId = message.reply_to.id;
     let replyText = message.reply_to.body || '';
+    // Если тело ответа — JSON с файлом, преобразуем в читаемый вид
+    if (replyText.startsWith('{')) {
+      try {
+        const parsed = JSON.parse(replyText);
+        if (parsed.type === 'file') {
+          replyText = `📎 ${parsed.name || 'Файл'}`;
+        } else if (parsed.type === 'gallery') {
+          replyText = `📷 Галерея (${parsed.files?.length || 0} фото/видео)`;
+        } else if (parsed.type === 'composite') {
+          if (parsed.text) {
+            replyText = parsed.text;
+          } else {
+            replyText = `📎 ${parsed.files?.length || 0} файлов`;
+          }
+        }
+      } catch (_) {}
+    }
     if (replyText.length > 100) replyText = replyText.slice(0, 97) + '…';
     replyBlock.innerHTML = `
       <span class="reply-icon">↩️</span>
@@ -1595,6 +1612,15 @@ async function selectConversation(convId) {
     el.classList.toggle('active', parseInt(el.dataset.id, 10) === convId);
   });
   
+  // Восстанавливаем индикатор печати, если другой участник печатает
+  const conv = conversationListCache.find(c => c.id === convId);
+  if (conv && conv.typingUserId) {
+    const typingUser = conv.isGroup 
+      ? `Пользователь ${conv.typingUserId}` 
+      : (conv.otherUser?.name || conv.otherUser?.username || 'Кто-то');
+    showTypingIndicator(typingUser, conv);
+  }
+
   // Загружаем сообщения
   loadMessages(convId);
   
@@ -1802,6 +1828,8 @@ const sendForm = $('send-form');
 if (sendForm) {
   sendForm.addEventListener('submit', async (e) => {
     e.preventDefault();
+    if (window._sendingMessage) return;
+    window._sendingMessage = true;
     if (!currentConversationId) return;
 
     const input = $('message-input');
@@ -1874,7 +1902,7 @@ if (sendForm) {
         alert('Ошибка отправки сообщения: ' + err.message);
       }
     }
-
+    window._sendingMessage = false;
     requestAnimationFrame(() => scrollMessagesToBottom());
   });
 }
@@ -3134,27 +3162,32 @@ async function sendCompositeMessage(text, files, replyToId) {
 
   showCompositeProgress(progressId, completed, total);
 
-  const uploadedFiles = await uploadFiles(files, (done, total) => {
-    completed = done;
-    updateCompositeProgress(progressId, completed, total);
-  });
+  try {
+    const uploadedFiles = await uploadFiles(files, (done, total) => {
+      completed = done;
+      updateCompositeProgress(progressId, completed, total);
+    });
 
-  removeCompositeProgress(progressId);
+    removeCompositeProgress(progressId);
 
-  const compositeBody = {
-    type: 'composite',
-    text: text,
-    files: uploadedFiles
-  };
-  const msg = await api(`/api/conversations/${currentConversationId}/messages`, {
-    method: 'POST',
-    body: JSON.stringify({ body: JSON.stringify(compositeBody), replyToId }),
-  });
+    const compositeBody = {
+      type: 'composite',
+      text: text,
+      files: uploadedFiles
+    };
+    const msg = await api(`/api/conversations/${currentConversationId}/messages`, {
+      method: 'POST',
+      body: JSON.stringify({ body: JSON.stringify(compositeBody), replyToId }),
+    });
 
-  if (!currentConversationIsGroup) msg.read = false;
-  appendMessageToChat(msg);
-  updateSidebarRow(currentConversationId, text ? text : `📎 ${files.length} файлов`);
-  return msg;
+    if (!currentConversationIsGroup) msg.read = false;
+    appendMessageToChat(msg);
+    updateSidebarRow(currentConversationId, text ? text : `📎 ${files.length} файлов`);
+    return msg;
+  } catch (err) {
+    removeCompositeProgress(progressId); // обязательно убираем прогресс при ошибке
+    throw err;
+  }
 }
 
 if (fileLabel && fileInput) {
@@ -4397,7 +4430,6 @@ function endPeerConnection(userId) {
   }
   remoteStreams.delete(userId);
   
-  // Удаляем соответствующий аудиоэлемент
   const audio = remoteAudioElements.get(userId);
   if (audio) {
     audio.pause();
@@ -4413,12 +4445,22 @@ function playRemoteStream(stream, userId) {
     audio = document.createElement('audio');
     audio.id = `remote-audio-${userId}`;
     audio.autoplay = true;
-    // Можно добавить контейнер, но можно просто в body
     document.body.appendChild(audio);
     remoteAudioElements.set(userId, audio);
   }
   audio.srcObject = stream;
-  audio.play().catch(e => console.error('Play error:', e));
+  audio.play().catch(e => {
+    console.warn('Autoplay blocked, showing manual play button', e);
+    // Показать кнопку "Разрешить звук" над чатом
+    const btn = document.createElement('button');
+    btn.textContent = '🔊 Нажмите для включения звука';
+    btn.className = 'unmute-call-btn';
+    btn.onclick = () => {
+      audio.play();
+      btn.remove();
+    };
+    document.querySelector('.call-status-bar')?.appendChild(btn);
+  });
 }
 
 function getRemoteName(userId) {

@@ -54,6 +54,9 @@ async function initDb(retries = 5) {
         );
       `);
       await client.query(`
+        CREATE INDEX IF NOT EXISTS idx_users_last_seen ON users(last_seen);
+      `);
+      await client.query(`
         CREATE TABLE IF NOT EXISTS messages (
           id SERIAL PRIMARY KEY,
           conversation_id INT REFERENCES conversations(id) ON DELETE CASCADE,
@@ -126,7 +129,8 @@ async function initDb(retries = 5) {
         );
       `);
       await client.query(`CREATE INDEX IF NOT EXISTS idx_group_invites_token ON group_invites(token);`);
-      
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_messages_conversation_created ON messages(conversation_id, created_at DESC);`);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_notifications_user_conversation ON notifications(user_id, conversation_id);`);
       console.log(`Database initialized successfully (attempt ${attempt})`);
       return; // успех
     } catch (err) {

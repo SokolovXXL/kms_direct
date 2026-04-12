@@ -65,6 +65,24 @@ app.set('trust proxy', 1);
 const PORT = process.env.PORT || 3000;
 const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret-change-in-production';
 
+const helmet = require('helmet');
+app.use(helmet());
+app.use(
+  helmet.contentSecurityPolicy({
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'", "'unsafe-inline'"], // если нужны inline-скрипты
+      styleSrc: ["'self'", "'unsafe-inline'"],
+      imgSrc: ["'self'", "data:", "blob:"],
+      connectSrc: ["'self'"],
+      fontSrc: ["'self'"],
+      objectSrc: ["'none'"],
+      mediaSrc: ["'self'", "blob:"],
+      frameSrc: ["'none'"],
+    },
+  })
+);
+
 const COOKIE_OPTIONS = {
   httpOnly: true,
   secure: process.env.NODE_ENV === 'production',
@@ -76,7 +94,8 @@ app.use(cors({
   origin: process.env.NODE_ENV === 'production' ? process.env.FRONTEND_URL : 'http://localhost:3000',
   credentials: true
 }));
-app.use(express.json());
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 app.use(cookieParser());
 app.use(express.static(path.join(__dirname, 'public')));
 
@@ -110,7 +129,9 @@ process.on('uncaughtException', (err) => {
 });
 
 const sseClients = new Map(); // userId -> array of response objects
-const MAX_SSE_PER_USER = 5;   // Максимум одновременных SSE соединений на пользователя
+const signalingChannels = new Map(); // userId -> Set of response streams
+const MAX_SSE_PER_USER = 5;
+const MAX_SIGNALING_PER_USER = 5;
 
 function isUserOnline(userId) {
   const clients = sseClients.get(userId);
@@ -125,8 +146,6 @@ function broadcastToUser(userId, payload) {
     try {
       clients[i].write(`data: ${JSON.stringify(payload)}\n\n`);
     } catch (err) {
-      // При ошибке закрываем соединение и удаляем
-      clients[i].end();
       clients.splice(i, 1);
     }
   }
@@ -294,10 +313,10 @@ app.post('/api/register', authLimiter, async (req, res) => {
 
   const hash = await bcrypt.hash(password, 10);
   let friendCode = generateFriendCode();
+  const MAX_FRIEND_CODE_ATTEMPTS = 10;
   let attempts = 0;
-  const maxAttempts = 100;
 
-  while (attempts < maxAttempts) {
+  while (attempts < MAX_FRIEND_CODE_ATTEMPTS) {
     try {
       const r = await pool.query(
         'INSERT INTO users (username, password_hash, friend_code) VALUES ($1, $2, $3) RETURNING id, username, friend_code',
@@ -305,9 +324,7 @@ app.post('/api/register', authLimiter, async (req, res) => {
       );
       const user = r.rows[0];
       const token = jwt.sign({ userId: user.id }, JWT_SECRET);
-
       res.cookie('token', token, COOKIE_OPTIONS);
-
       return res.json({
         user: {
           id: user.id,
@@ -316,15 +333,18 @@ app.post('/api/register', authLimiter, async (req, res) => {
         }
       });
     } catch (e) {
-      if (e.code === '23505') {
+      if (e.code === '23505') { // нарушение уникальности
+        // Проверяем, какое именно ограничение вызвало ошибку
         if (e.constraint && e.constraint.includes('friend_code')) {
+          // конфликт кода друга — генерируем новый и пробуем снова
           friendCode = generateFriendCode();
           attempts++;
           continue;
         }
+        // Иначе конфликт username
         return res.status(400).json({ error: 'Имя пользователя уже занято' });
       }
-      throw e; // будет перехвачено express-async-errors
+      throw e; // другие ошибки пробрасываем в глобальный обработчик
     }
   }
   return res.status(500).json({ error: 'Не удалось сгенерировать уникальный код друга' });
@@ -362,6 +382,29 @@ app.post('/api/login', authLimiter, async (req, res) => {
 });
 
 app.post('/api/logout', (req, res) => {
+  const token = req.cookies.token;
+  if (token) {
+    try {
+      const payload = jwt.verify(token, JWT_SECRET);
+      const userId = payload.userId;
+      // Закрываем все SSE соединения пользователя
+      const clients = sseClients.get(userId);
+      if (clients) {
+        clients.forEach(client => {
+          try { client.end(); } catch (_) {}
+        });
+        sseClients.delete(userId);
+      }
+      // Закрываем сигнальные каналы
+      const sigClients = signalingChannels.get(userId);
+      if (sigClients) {
+        sigClients.forEach(client => {
+          try { client.end(); } catch (_) {}
+        });
+        signalingChannels.delete(userId);
+      }
+    } catch (_) {}
+  }
   res.clearCookie('token', COOKIE_OPTIONS);
   res.json({ success: true });
 });
@@ -650,7 +693,13 @@ app.post('/api/dms', authMiddleware, async (req, res) => {
 
   const otherId = parseInt(otherUserId, 10);
   if (isNaN(otherId) || otherId <= 0) {
-    return res.status(400).json({ error: 'Неверный пользователь ID' });
+    return res.status(400).json({ error: 'Неверный ID пользователя' });
+  }
+
+  // Проверяем существование пользователя
+  const userExists = await pool.query('SELECT id FROM users WHERE id = $1', [otherId]);
+  if (userExists.rows.length === 0) {
+    return res.status(404).json({ error: 'Пользователь не найден' });
   }
 
   const isFriend = await pool.query(
@@ -669,7 +718,6 @@ app.post('/api/dms', authMiddleware, async (req, res) => {
     const user1 = Math.min(req.userId, otherId);
     const user2 = Math.max(req.userId, otherId);
 
-    // Пытаемся вставить новый диалог, если он ещё не существует
     const insertResult = await client.query(
       `INSERT INTO conversations (is_group, user1_id, user2_id)
        VALUES (false, $1, $2)
@@ -681,14 +729,12 @@ app.post('/api/dms', authMiddleware, async (req, res) => {
 
     let conversationId;
     if (insertResult.rows.length > 0) {
-      // Новый диалог создан, добавляем участников
       conversationId = insertResult.rows[0].id;
       await client.query(
         'INSERT INTO conversation_participants (conversation_id, user_id) VALUES ($1, $2), ($1, $3)',
         [conversationId, req.userId, otherId]
       );
     } else {
-      // Диалог уже существует, получаем его ID
       const selectResult = await client.query(
         'SELECT id FROM conversations WHERE user1_id = $1 AND user2_id = $2 AND is_group = false',
         [user1, user2]
@@ -697,18 +743,16 @@ app.post('/api/dms', authMiddleware, async (req, res) => {
     }
 
     await client.query('COMMIT');
-    const otherUserId = (req.userId === user1 ? user2 : user1);
-    broadcastToUser(otherUserId, {
-        type: 'new_dm',
-        conversationId: conversationId
+    const targetUserId = (req.userId === user1 ? user2 : user1);
+    broadcastToUser(targetUserId, {
+      type: 'new_dm',
+      conversationId: conversationId
     });
 
     res.json({ conversationId });
   } catch (e) {
     await client.query('ROLLBACK');
-    // Если ошибка сериализации – повторяем (маловероятно, но оставим)
     if (e.code === '40001') {
-      // Можно реализовать повтор, но для простоты вернём ошибку
       return res.status(500).json({ error: 'Одновременное создание, повторите попытку' });
     }
     throw e;
@@ -1440,15 +1484,21 @@ app.delete('/api/messages/:id', authMiddleware, async (req, res) => {
     }
   }
 
-  // Удаляем файл, если сообщение содержит ссылку на загруженный файл (с защитой path traversal)
+  // Удаляем файлы, привязанные к сообщению
   if (message.body && message.body.includes('/uploads/')) {
     const matches = message.body.match(/\/uploads\/([^"'\s]+)/g);
     if (matches) {
+      const uploadsDir = path.resolve(__dirname, 'uploads');
       for (const match of matches) {
         const filename = path.basename(match);
-        const filePath = path.join(__dirname, 'uploads', filename);
-        if (fs.existsSync(filePath)) {
-          fs.unlinkSync(filePath);
+        const filePath = path.join(uploadsDir, filename);
+        // Проверяем, что путь действительно внутри uploads
+        if (filePath.startsWith(uploadsDir) && fs.existsSync(filePath)) {
+          try {
+            await fsPromises.unlink(filePath);
+          } catch (unlinkErr) {
+            console.error(`Failed to delete file ${filePath}:`, unlinkErr);
+          }
         }
       }
     }
@@ -1567,7 +1617,6 @@ app.get('/api/notifications/stream', streamAuthMiddleware, sseConnectionLimiter,
 
   const userId = req.userId;
 
-  // Проверяем лимит
   if (sseClients.has(userId) && sseClients.get(userId).length >= MAX_SSE_PER_USER) {
     res.status(429).end('Слишком много SSE-соединений');
     return;
@@ -1578,7 +1627,6 @@ app.get('/api/notifications/stream', streamAuthMiddleware, sseConnectionLimiter,
   if (!sseClients.has(userId)) sseClients.set(userId, []);
   sseClients.get(userId).push(res);
 
-  // Если пользователь только что появился в сети
   if (!wasOnline) {
     broadcastStatusChange(userId, true).catch(console.error);
   }
@@ -1588,21 +1636,20 @@ app.get('/api/notifications/stream', streamAuthMiddleware, sseConnectionLimiter,
     if (list) {
       const wasOnlineBefore = list.length > 0;
       const i = list.indexOf(res);
-      if (i !== -1) {
-        list.splice(i, 1);
-      }
+      if (i !== -1) list.splice(i, 1);
       const isOnlineNow = list.length > 0;
       if (!isOnlineNow) {
         sseClients.delete(userId);
-        // Обновляем last_seen в БД
-        await pool.query('UPDATE users SET last_seen = NOW() WHERE id = $1', [userId]);
-        // Если был онлайн, а теперь нет – стал офлайн
-        if (wasOnlineBefore) {
-          await broadcastStatusChange(userId, false);
+        try {
+          await pool.query('UPDATE users SET last_seen = NOW() WHERE id = $1', [userId]);
+          if (wasOnlineBefore) {
+            await broadcastStatusChange(userId, false);
+          }
+        } catch (err) {
+          console.error(`Failed to update last_seen for user ${userId}:`, err);
         }
       }
     }
-    res.end();
   });
 });
 
@@ -1644,8 +1691,6 @@ app.post('/api/notifications/read', authMiddleware, async (req, res) => {
 });
 
 // ---- CALL SIGNALING ----
-const signalingChannels = new Map(); // userId -> Set of response streams
-const MAX_SIGNALING_PER_USER = 5;
 
 app.get('/api/signaling', streamAuthMiddleware, sseConnectionLimiter, (req, res) => {
   res.setHeader('Content-Type', 'text/event-stream');
@@ -1667,7 +1712,6 @@ app.get('/api/signaling', streamAuthMiddleware, sseConnectionLimiter, (req, res)
     const set = signalingChannels.get(userId);
     if (set) {
       set.delete(res);
-      res.end();
       if (set.size === 0) signalingChannels.delete(userId);
     }
   });
@@ -2251,6 +2295,9 @@ async function main() {
     } finally {
       clientFK.release();
     }
+    if (!process.env.VAPID_PUBLIC_KEY || !process.env.VAPID_PRIVATE_KEY) {
+      console.warn('VAPID keys missing – push notifications disabled');
+    }
 
     console.log('Database initialization complete');
   } catch (e) {
@@ -2258,7 +2305,34 @@ async function main() {
     process.exit(1);
   }
 
-  app.listen(PORT, () => console.log(`Server listening on port ${PORT}`));
+  server = app.listen(PORT, () => console.log(`Server listening on port ${PORT}`));
 }
+
+// Graceful shutdown
+let server;
+async function shutdown(signal) {
+  console.log(`${signal} received, shutting down gracefully...`);
+  if (server) {
+    server.close(() => {
+      console.log('HTTP server closed');
+      pool.end().then(() => {
+        console.log('Database pool closed');
+        process.exit(0);
+      }).catch(err => {
+        console.error('Error closing pool:', err);
+        process.exit(1);
+      });
+    });
+  } else {
+    pool.end().then(() => process.exit(0));
+  }
+  setTimeout(() => {
+    console.error('Forced shutdown due to timeout');
+    process.exit(1);
+  }, 10000);
+}
+
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT', () => shutdown('SIGINT'));
 
 main();
