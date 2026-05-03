@@ -2000,6 +2000,7 @@ app.post('/api/upload', authMiddleware, uploadLimiter, upload.single('file'), (r
 
   res.json({
     url: '/uploads/' + encodeURIComponent(req.file.filename),
+    downloadUrl: '/api/files/' + encodeURIComponent(req.file.filename) + '?name=' + encodeURIComponent(fixedName),
     name: fixedName,
     type: req.file.mimetype
   });
@@ -2258,6 +2259,27 @@ app.delete('/api/groups/:id/kick/:userId', authMiddleware, async (req, res) => {
 // Раздача файлов
 app.use('/uploads', express.static('uploads'));
 
+app.get('/api/files/:filename', (req, res) => {
+  const filename = req.params.filename;
+  const name = req.query.name;
+  const filePath = path.join(__dirname, 'uploads', filename);
+  
+  // Базовая защита от выхода за пределы директории
+  const resolvedPath = path.resolve(filePath);
+  if (!resolvedPath.startsWith(path.resolve(__dirname, 'uploads'))) {
+    return res.status(400).end();
+  }
+  if (!fs.existsSync(resolvedPath)) {
+    return res.status(404).end();
+  }
+  
+  // Content‑Disposition с поддержкой UTF-8 для кириллических имён
+  res.setHeader(
+    'Content-Disposition',
+    `attachment; filename*=UTF-8''${encodeURIComponent(name || filename)}`
+  );
+  res.sendFile(resolvedPath);
+});
 // ===== Централизованный обработчик ошибок (должен быть после всех маршрутов, но перед catch-all) =====
 app.use((err, req, res, next) => {
   console.error('Unhandled error:', err.stack);

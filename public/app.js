@@ -1936,6 +1936,7 @@ async function sendFileWithProgress(file, conversationId, replyToId) {
           const fileMessage = {
             type: 'file',
             url: fileData.url,
+            downloadUrl: fileData.downloadUrl,
             name: fileData.name,
             mime: fileData.type,
             size: file.size
@@ -3450,8 +3451,8 @@ function renderFileMessage(container, fileData, messageDiv) {
         downloadBtn.innerHTML = '<img src="/images/download.png" alt="Download" style="width:16px; height:16px;">';
         downloadBtn.setAttribute('aria-label', 'Download');
         downloadBtn.onclick = (e) => {
-            e.stopPropagation();
-            window.open(fileData.url, '_blank');
+          e.stopPropagation();
+          window.open(fileData.downloadUrl || fileData.url, '_blank');
         };
 
         customPlayer.appendChild(playBtn);
@@ -3562,7 +3563,7 @@ function renderFileMessage(container, fileData, messageDiv) {
   downloadBtn.innerHTML = '⬇️ Download';
   downloadBtn.onclick = (e) => {
     e.stopPropagation();
-    window.open(fileData.url, '_blank');
+    window.open(fileData.downloadUrl || fileData.url, '_blank');
   };
   actionsDiv.appendChild(downloadBtn);
 
