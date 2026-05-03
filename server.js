@@ -43,14 +43,6 @@ const storage = multer.diskStorage({
 const upload = multer({
   storage,
   limits: { fileSize: 1024 * 1024 * 1024 }, // 1 GB
-  fileFilter: (req, file, cb) => {
-    const dangerousExtensions = ['.html', '.htm', '.svg', '.xml', '.xhtml', '.mjs', '.js', '.php', '.asp', '.aspx', '.jsp'];
-    const ext = path.extname(file.originalname).toLowerCase();
-    if (dangerousExtensions.includes(ext)) {
-      return cb(new Error('Загрузка файлов с таким расширением запрещена'), false);
-    }
-    cb(null, true);
-  }
 });
 
 // Генерация friend code
