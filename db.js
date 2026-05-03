@@ -27,6 +27,11 @@ async function initDb(retries = 5) {
         );
       `);
       await client.query(`
+        ALTER TABLE conversations 
+          ADD COLUMN IF NOT EXISTS user1_id INTEGER,
+          ADD COLUMN IF NOT EXISTS user2_id INTEGER
+      `);
+      await client.query(`
         UPDATE conversations c SET
           user1_id = sub.user1,
           user2_id = sub.user2

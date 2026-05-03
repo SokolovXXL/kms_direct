@@ -26,7 +26,8 @@ const replySenderName = document.getElementById('reply-sender-name');
 const replyTextSpan = document.getElementById('reply-text');
 const replyCancel = document.getElementById('reply-cancel');
 const $ = (id) => document.getElementById(id);
-const publicVapidKey = document.querySelector('meta[name="vapid-public-key"]').content;
+const vapidMeta = document.querySelector('meta[name="vapid-public-key"]');
+const publicVapidKey = vapidMeta ? vapidMeta.content : null;
 const chatHeader = document.getElementById('chat-header');
 
 if (chatHeader) {
@@ -1308,10 +1309,14 @@ function showContextMenu(messageElement, clickX, clickY) {
     });
   }
 
-  contextMenu.classList.remove('hidden');
+  contextMenu.classList.remove('hidden'); 
 }
 
 async function subscribeUserToPush() {
+  if (!publicVapidKey) {
+    console.warn('VAPID public key missing, push notifications disabled');
+    return;
+  }
   const registration = await navigator.serviceWorker.ready;
   const subscription = await registration.pushManager.subscribe({
     userVisibleOnly: true,
@@ -1823,7 +1828,6 @@ async function loadMessages(convId) {
 }
 
 // Отправка сообщений
-// Отправка сообщений (обновлённая версия)
 const sendForm = $('send-form');
 if (sendForm) {
   sendForm.addEventListener('submit', async (e) => {
