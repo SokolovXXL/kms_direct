@@ -2315,7 +2315,9 @@ body {
 .add-friend-row .btn-primary {
   width: auto;
 }
-/* Новый стиль для блока файла (горизонтальный) */
+
+/* Блок файла — растягивается по ширине сообщения */
+
 .message-file-content {
   display: flex;
   align-items: center;
@@ -2325,13 +2327,22 @@ body {
   padding: 12px 16px;
   border: 1px solid var(--border);
   transition: var(--transition-default);
+  width: 100%;        /* растягиваем на всю ширину родителя */
+  box-sizing: border-box;
 }
 
-.message-file-content:hover {
-  border-color: var(--accent);
+/* Название файла — занимает оставшееся место, обрезается с ... */
+.message-file-content .file-name {
+  flex: 1;
+  font-weight: 600;
+  font-size: 0.95rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;       /* важно для flex-ребёнка, чтобы сжимался */
 }
 
-/* Круглая кнопка «Открыть» */
+/* Круглая кнопка — фиксированного размера, не сжимается */
 .file-open-btn {
   width: 36px;
   height: 36px;
@@ -2344,19 +2355,24 @@ body {
   justify-content: center;
   transition: all 0.2s ease;
   flex-shrink: 0;
-  margin-left: auto; /* прижимает к правому краю */
+  margin-left: auto;   /* прижимает к правому краю */
 }
 
-.file-open-btn:hover {
-  background: var(--accent);
-  border-color: var(--accent);
+/* Иконка файла — тоже фиксированный размер */
+.message-file-content .file-icon {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
-.file-open-btn img {
-  pointer-events: none;
+.message-file-content .file-icon img {
+  width: 32px;
+  height: 32px;
+  display: block;
 }
 
-/* Стили для сообщений, отправленных текущим пользователем */
+/* Для сообщений, отправленных текущим пользователем */
 .message.mine .message-file-content {
   background: rgba(255, 255, 255, 0.1);
   border-color: rgba(255, 255, 255, 0.2);
