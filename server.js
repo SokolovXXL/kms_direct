@@ -1200,9 +1200,9 @@ app.get('/api/conversations/:id/messages', authMiddleware, async (req, res) => {
   const r = await pool.query(`
     SELECT 
       CASE 
-        WHEN body LIKE '{"type":"file"}' THEN 'file'
-        WHEN body LIKE '{"type":"gallery"}' THEN 'gallery'
-        WHEN body LIKE '{"type":"composite"}' THEN 'composite'
+        WHEN m.body LIKE '{"type":"file"}' THEN 'file'
+        WHEN m.body LIKE '{"type":"gallery"}' THEN 'gallery'
+        WHEN m.body LIKE '{"type":"composite"}' THEN 'composite'
         ELSE 'text'
       END AS message_type,
       m.id, 
