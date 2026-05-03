@@ -818,7 +818,7 @@ function createMessageElement(message, isGroup, currentUserId) {
     // Проверка на файл или составное сообщение
   let isFile = false;
   let fileData = null;
-  if (message.message_type === 'file' || message.message_type === 'gallery' || message.message_type === 'composite') {
+  if (message.body && message.body.startsWith('{')) {
     try {
       fileData = JSON.parse(message.body);
       if (fileData.type === 'file' || fileData.type === 'gallery' || fileData.type === 'composite') {
