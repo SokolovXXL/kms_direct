@@ -1364,18 +1364,45 @@ function downloadMedia(messageElement) {
   try {
     const body = messageElement.dataset.fileBody;
     if (!body) return;
-    const file = JSON.parse(body);
+    const data = JSON.parse(body);
+
+    // Функция-помощник для скачивания одного файла
+    const downloadFile = (file) => {
+      const url = file.downloadUrl || file.url;
+      if (url) window.open(url, '_blank');
+    };
+
+    // Обработка галереи (несколько медиафайлов)
+    if (data.type === 'gallery' && data.files && data.files.length) {
+      const count = data.files.length;
+      if (confirm(`Скачать ${count} файл(ов)? Каждый файл откроется в новой вкладке.`)) {
+        data.files.forEach(downloadFile);
+      }
+      return;
+    }
+
+    // Обработка составного сообщения (текст + файлы)
+    if (data.type === 'composite' && data.files && data.files.length) {
+      const count = data.files.length;
+      if (confirm(`Скачать ${count} вложенных файл(ов)? Каждый файл откроется в новой вкладке.`)) {
+        data.files.forEach(downloadFile);
+      }
+      return;
+    }
+
+    // Одиночный файл
     let downloadUrl = null;
-    if (file.url) {
-      downloadUrl = file.downloadUrl || file.url;
-    } else if (file.files && file.files.length > 0) {
-      downloadUrl = file.files[0].downloadUrl || file.files[0].url;
+    if (data.url) {
+      downloadUrl = data.downloadUrl || data.url;
+    } else if (data.files && data.files.length > 0) {
+      downloadUrl = data.files[0].downloadUrl || data.files[0].url;
     }
     if (downloadUrl) {
       window.open(downloadUrl, '_blank');
     }
   } catch (e) {
     console.error('Download media error:', e);
+    showToast('Ошибка при скачивании', 'error');
   }
 }
 
@@ -3572,54 +3599,38 @@ function renderFileMessage(container, fileData, messageDiv) {
   const fileDiv = document.createElement('div');
   fileDiv.className = 'message-file-content';
 
-  const headerDiv = document.createElement('div');
-  headerDiv.className = 'file-info-header';
-
+  // Иконка файла (слева)
   const iconSpan = document.createElement('span');
   iconSpan.className = 'file-icon';
-
-
-  iconSpan.innerHTML = ''; // очищаем
   const iconImg = document.createElement('img');
-  iconImg.src = '/images/file.png'; // новая функция
+  iconImg.src = '/images/file.png';
   iconImg.alt = 'File';
-  iconImg.style.width = '24px';
-  iconImg.style.height = '24px';
+  iconImg.style.width = '32px';
+  iconImg.style.height = '32px';
   iconSpan.appendChild(iconImg);
-  headerDiv.appendChild(iconSpan);
 
-  
-  const infoDiv = document.createElement('div');
-  infoDiv.className = 'file-details';
-
+  // Название файла
   const nameDiv = document.createElement('div');
   nameDiv.className = 'file-name';
   nameDiv.textContent = fileData.name || 'Unnamed file';
-  infoDiv.appendChild(nameDiv);
 
-  if (fileData.size) {
-    const sizeDiv = document.createElement('div');
-    sizeDiv.className = 'file-size';
-    sizeDiv.textContent = formatFileSize(fileData.size);
-    infoDiv.appendChild(sizeDiv);
-  }
-
-  headerDiv.appendChild(infoDiv);
-  fileDiv.appendChild(headerDiv);
-
-  const actionsDiv = document.createElement('div');
-  actionsDiv.className = 'file-actions';
-
-  const downloadBtn = document.createElement('button');
-  downloadBtn.className = 'file-download-btn';
-  downloadBtn.innerHTML = '⬇️ Download';
-  downloadBtn.onclick = (e) => {
+  // Круглая кнопка «Открыть»
+  const openBtn = document.createElement('button');
+  openBtn.className = 'file-open-btn';
+  const openImg = document.createElement('img');
+  openImg.src = '/images/open.png';
+  openImg.alt = 'Open';
+  openImg.style.width = '20px';
+  openImg.style.height = '20px';
+  openBtn.appendChild(openImg);
+  openBtn.onclick = (e) => {
     e.stopPropagation();
     window.open(fileData.downloadUrl || fileData.url, '_blank');
   };
-  actionsDiv.appendChild(downloadBtn);
 
-  fileDiv.appendChild(actionsDiv);
+  fileDiv.appendChild(iconSpan);
+  fileDiv.appendChild(nameDiv);
+  fileDiv.appendChild(openBtn);
   container.appendChild(fileDiv);
 }
 
