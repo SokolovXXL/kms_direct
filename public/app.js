@@ -828,6 +828,7 @@ function createMessageElement(message, isGroup, currentUserId) {
   }
 
   if (isFile && fileData) {
+    messageDiv.dataset.fileBody = message.body;
     if (fileData.type === 'composite') {
       // Текст
       if (fileData.text) {
@@ -1185,19 +1186,20 @@ function initContextMenu() {
   contextMenu = document.getElementById('message-context-menu');
   if (!contextMenu) return;
 
-  // Добавляем пункт "Ответить" перед "Удалить"
   const actionsContainer = contextMenu.querySelector('.context-menu-actions');
   const deleteItem = actionsContainer.querySelector('[data-action="delete"]');
   const replyItem = document.createElement('div');
   replyItem.className = 'context-menu-item';
   replyItem.dataset.action = 'reply';
   replyItem.textContent = 'Ответить';
+  actionsContainer.insertBefore(replyItem, deleteItem);
 
-  if (deleteItem) {
-    actionsContainer.insertBefore(replyItem, deleteItem);
-  } else {
-    actionsContainer.appendChild(replyItem);
-  }
+  // Пункт "Скачать"
+  const downloadItem = document.createElement('div');
+  downloadItem.className = 'context-menu-item';
+  downloadItem.dataset.action = 'download';
+  downloadItem.textContent = 'Скачать';
+  actionsContainer.insertBefore(downloadItem, deleteItem);
 
   // Закрытие по клику вне меню
   document.addEventListener('click', (e) => {
@@ -1224,17 +1226,19 @@ function initContextMenu() {
   });
 
   // Обработка кликов по пунктам меню
-  contextMenu.addEventListener('click', (e) => {
+  contextMenu.addEventListener('click', async (e) => {
     const actionItem = e.target.closest('.context-menu-item');
     if (!actionItem || !currentContextMessage) return;
-
     const action = actionItem.dataset.action;
     if (action === 'copy') {
-      copyMessageContent(currentContextMessage);
+      await copyMessageContent(currentContextMessage);
     } else if (action === 'delete') {
       deleteMessage(currentContextMessage);
     } else if (action === 'reply') {
       setReplyTo(currentContextMessage);
+      hideContextMenu();
+    } else if (action === 'download') {
+      downloadMedia(currentContextMessage);
       hideContextMenu();
     } else if (action === 'react') {
       e.preventDefault();
@@ -1264,7 +1268,22 @@ function showContextMenu(messageElement, clickX, clickY) {
       deleteItem.style.display = 'none';
     }
   }
-
+  const downloadItem = contextMenu.querySelector('[data-action="download"]');
+  if (downloadItem) {
+    if (messageElement.dataset.fileBody) {
+      try {
+        const parsed = JSON.parse(messageElement.dataset.fileBody);
+        let hasUrl = false;
+        if (parsed.url) hasUrl = true;
+        else if (parsed.files && parsed.files.length > 0) hasUrl = true;
+        downloadItem.style.display = hasUrl ? 'block' : 'none';
+      } catch (e) {
+        downloadItem.style.display = 'none';
+      }
+    } else {
+      downloadItem.style.display = 'none';
+    }
+  }
   const menuWidth = contextMenu.offsetWidth || 180;
   const menuHeight = contextMenu.offsetHeight || 100;
   
@@ -1341,14 +1360,41 @@ function urlBase64ToUint8Array(base64String) {
   return outputArray;
 }
 
-function hideContextMenu() {
-  if (contextMenu) {
-    contextMenu.classList.add('hidden');
-    currentContextMessage = null;
+function downloadMedia(messageElement) {
+  try {
+    const body = messageElement.dataset.fileBody;
+    if (!body) return;
+    const file = JSON.parse(body);
+    let downloadUrl = null;
+    if (file.url) {
+      downloadUrl = file.downloadUrl || file.url;
+    } else if (file.files && file.files.length > 0) {
+      downloadUrl = file.files[0].downloadUrl || file.files[0].url;
+    }
+    if (downloadUrl) {
+      window.open(downloadUrl, '_blank');
+    }
+  } catch (e) {
+    console.error('Download media error:', e);
   }
 }
 
-function copyMessageContent(messageElement) {
+async function copyMessageContent(messageElement) {
+  const img = messageElement.querySelector('img');
+  if (img) {
+    try {
+      const response = await fetch(img.src);
+      const blob = await response.blob();
+      await navigator.clipboard.write([
+        new ClipboardItem({ [blob.type]: blob })
+      ]);
+      showToast('Изображение скопировано', 'info');
+    } catch (err) {
+      showToast('Не удалось скопировать изображение', 'error');
+    }
+    return;
+  }
+  // остальная логика копирования текста / имени файла
   const bodyEl = messageElement.querySelector('.message-body');
   if (bodyEl) {
     navigator.clipboard.writeText(bodyEl.textContent).then(() => {
@@ -1358,7 +1404,6 @@ function copyMessageContent(messageElement) {
     });
     return;
   }
-
   const fileNameEl = messageElement.querySelector('.file-name');
   if (fileNameEl) {
     navigator.clipboard.writeText(fileNameEl.textContent).then(() => {
@@ -1366,6 +1411,13 @@ function copyMessageContent(messageElement) {
     }).catch(() => {
       showToast('Не удалось скопировать', 'error');
     });
+  }
+}
+
+function hideContextMenu() {
+  if (contextMenu) {
+    contextMenu.classList.add('hidden');
+    currentContextMessage = null;
   }
 }
 
