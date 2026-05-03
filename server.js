@@ -44,6 +44,11 @@ const upload = multer({
   storage,
   limits: { fileSize: 1024 * 1024 * 1024 }, // 1 GB
   fileFilter: (req, file, cb) => {
+    const dangerousExtensions = ['.html', '.htm', '.svg', '.xml', '.xhtml', '.mjs', '.js', '.php', '.asp', '.aspx', '.jsp'];
+    const ext = path.extname(file.originalname).toLowerCase();
+    if (dangerousExtensions.includes(ext)) {
+      return cb(new Error('Загрузка файлов с таким расширением запрещена'), false);
+    }
     cb(null, true);
   }
 });
@@ -489,6 +494,21 @@ app.post('/api/change-password', authMiddleware, async (req, res) => {
   res.json({ success: true });
 });
 
+function closeUserConnections(userId) {
+  // Закрываем SSE
+  const sseList = sseClients.get(userId);
+  if (sseList) {
+    sseList.forEach(client => { try { client.end(); } catch (_) {} });
+    sseClients.delete(userId);
+  }
+  // Закрываем signaling
+  const sigSet = signalingChannels.get(userId);
+  if (sigSet) {
+    sigSet.forEach(client => { try { client.end(); } catch (_) {} });
+    signalingChannels.delete(userId);
+  }
+}
+
 // ---- Delete account ----
 app.delete('/api/account', authMiddleware, async (req, res) => {
   const { password } = req.body || {};
@@ -502,7 +522,7 @@ app.delete('/api/account', authMiddleware, async (req, res) => {
   // --- ПОЛУЧАЕМ СПИСОК СООБЩЕНИЙ ПОЛЬЗОВАТЕЛЯ ДО УДАЛЕНИЯ ---
   const messagesResult = await pool.query('SELECT body FROM messages WHERE sender_id = $1', [req.userId]);
   const messages = messagesResult.rows; // <-- теперь переменная определена
-
+  closeUserConnections(req.userId);
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -1178,6 +1198,12 @@ app.get('/api/conversations/:id/messages', authMiddleware, async (req, res) => {
 
   const r = await pool.query(`
     SELECT 
+      CASE 
+        WHEN body LIKE '{"type":"file"}' THEN 'file'
+        WHEN body LIKE '{"type":"gallery"}' THEN 'gallery'
+        WHEN body LIKE '{"type":"composite"}' THEN 'composite'
+        ELSE 'text'
+      END AS message_type,
       m.id, 
       m.body, 
       m.created_at, 
@@ -1301,63 +1327,57 @@ app.post('/api/conversations/:id/messages', authMiddleware, async (req, res) => 
     }
   }
 
-  const ins = await pool.query(
-    'INSERT INTO messages (conversation_id, sender_id, body, reply_to_id) VALUES ($1, $2, $3, $4) RETURNING id, body, created_at, sender_id',
-    [convId, req.userId, messageBody, replyToIdNum]
-  );
-  const msg = ins.rows[0];
-
-  // Получаем полные данные сообщения вместе с reply_to
-  const fullMsg = await pool.query(`
-    SELECT m.id, m.body, m.created_at, m.sender_id, u.username AS sender_username,
-           u.display_name AS sender_display_name,
-           m.reply_to_id, r.body AS reply_body,
-           ru.username AS reply_sender_username, ru.display_name AS reply_sender_display_name
-    FROM messages m
+  const ins = await pool.query(`
+    WITH new_msg AS (
+      INSERT INTO messages (conversation_id, sender_id, body, reply_to_id)
+      VALUES ($1, $2, $3, $4)
+      RETURNING *
+    )
+    SELECT m.*, u.username AS sender_username, u.display_name AS sender_display_name,
+          r.body AS reply_body, ru.username AS reply_sender_username, ru.display_name AS reply_sender_display_name
+    FROM new_msg m
     JOIN users u ON u.id = m.sender_id
     LEFT JOIN messages r ON r.id = m.reply_to_id
     LEFT JOIN users ru ON ru.id = r.sender_id
-    WHERE m.id = $1
-  `, [msg.id]);
+  `, [convId, req.userId, messageBody, replyToIdNum]);
 
-  const messageWithReply = fullMsg.rows[0];
+  const fullMsg = ins.rows[0];
+
   const resultMsg = {
-    id: messageWithReply.id,
-    body: messageWithReply.body,
-    created_at: messageWithReply.created_at,
-    sender_id: messageWithReply.sender_id,
-    sender_username: messageWithReply.sender_username,
-    sender_display_name: messageWithReply.sender_display_name,
+    id: fullMsg.id,
+    body: fullMsg.body,
+    created_at: fullMsg.created_at,
+    sender_id: fullMsg.sender_id,
+    sender_username: fullMsg.sender_username,
+    sender_display_name: fullMsg.sender_display_name,
   };
-  if (messageWithReply.reply_to_id) {
+  if (fullMsg.reply_to_id) {
     resultMsg.reply_to = {
-      id: messageWithReply.reply_to_id,
-      body: messageWithReply.reply_body,
-      senderName: messageWithReply.reply_sender_display_name || messageWithReply.reply_sender_username || 'Unknown'
+      id: fullMsg.reply_to_id,
+      body: fullMsg.reply_body,
+      senderName: fullMsg.reply_sender_display_name || fullMsg.reply_sender_username || 'Unknown'
     };
   }
 
   // Отправляем уведомления
   const otherUserIds = part.rows.filter(p => p.user_id !== req.userId).map(p => p.user_id);
-  const payload = {
-    type: 'new_message',
-    conversationId: convId,
-    message: resultMsg,
-  };
-
   for (const uid of otherUserIds) {
     await pool.query(
       'INSERT INTO notifications (user_id, conversation_id, message_id) VALUES ($1, $2, $3)',
-      [uid, convId, msg.id]
+      [uid, convId, resultMsg.id]
     );
-    broadcastToUser(uid, payload);
+    broadcastToUser(uid, {
+      type: 'new_message',
+      conversationId: convId,
+      message: resultMsg,
+    });
   }
 
   const pushPayload = {
     title: `Новое сообщение от ${resultMsg.sender_username}`,
     body: messageBody.length > 100 ? messageBody.slice(0, 97) + '...' : messageBody,
     icon: '/images/logo.png',
-    data: { conversationId: convId, messageId: msg.id },
+    data: { conversationId: convId, messageId: resultMsg.id },
   };
   sendPushNotifications(otherUserIds, pushPayload).catch(console.error);
 
@@ -2207,7 +2227,11 @@ app.delete('/api/groups/:id/kick/:userId', authMiddleware, async (req, res) => {
 });
 
 // Раздача файлов
-app.use('/uploads', express.static('uploads'));
+app.use('/uploads', express.static('uploads', {
+  setHeaders: (res, filePath) => {
+    res.setHeader('Content-Disposition', 'attachment');
+  }
+}));
 
 // ===== Централизованный обработчик ошибок (должен быть после всех маршрутов, но перед catch-all) =====
 app.use((err, req, res, next) => {

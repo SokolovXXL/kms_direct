@@ -27,6 +27,22 @@ async function initDb(retries = 5) {
         );
       `);
       await client.query(`
+        UPDATE conversations c SET
+          user1_id = sub.user1,
+          user2_id = sub.user2
+        FROM (
+          SELECT c.id,
+                MIN(cp.user_id) as user1,
+                MAX(cp.user_id) as user2
+          FROM conversations c
+          JOIN conversation_participants cp ON cp.conversation_id = c.id
+          WHERE c.is_group = false AND (c.user1_id IS NULL OR c.user2_id IS NULL)
+          GROUP BY c.id
+          HAVING COUNT(cp.user_id) = 2
+        ) sub
+        WHERE c.id = sub.id
+      `);
+      await client.query(`
         ALTER TABLE users ADD COLUMN IF NOT EXISTS last_seen TIMESTAMPTZ DEFAULT NOW()
       `);
       await client.query(`

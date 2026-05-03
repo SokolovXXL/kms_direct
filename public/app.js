@@ -817,7 +817,7 @@ function createMessageElement(message, isGroup, currentUserId) {
     // Проверка на файл или составное сообщение
   let isFile = false;
   let fileData = null;
-  if (typeof message.body === 'string' && message.body.startsWith('{')) {
+  if (message.message_type === 'file' || message.message_type === 'gallery' || message.message_type === 'composite') {
     try {
       fileData = JSON.parse(message.body);
       if (fileData.type === 'file' || fileData.type === 'gallery' || fileData.type === 'composite') {
@@ -4271,6 +4271,24 @@ async function handleRemoteOffer(data) {
     }
     // Если тот же чат, продолжаем (возможно переподключение)
   }
+
+  if (conversationId && !callActive) {
+    (async () => {
+      try {
+        const groupData = await api(`/api/groups/${conversationId}`);
+        const members = groupData.participants;
+        for (const member of members) {
+          if (member.id !== currentUser.id && member.id !== fromUserId) {
+            if (!peerConnections.has(member.id)) {
+              await createPeerConnection(member.id, true);
+            }
+          }
+        }
+      } catch (e) {
+        console.error('Failed to mesh group call', e);
+      }
+    })();
+  }
   
   // Если нет conversationId, пытаемся найти личный чат по fromUserId
   let targetConversationId = conversationId;
@@ -4306,6 +4324,16 @@ async function handleRemoteOffer(data) {
         
         try {
           localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+          if (localStream) {
+            // Добавляем треки во все существующие пиры (кроме того, с которым только что создали или получили)
+            for (const [uid, pc] of peerConnections) {
+              if (uid !== fromUserId) {
+                localStream.getTracks().forEach(track => {
+                  pc.addTrack(track, localStream);
+                });
+              }
+            }
+          }
         } catch (err) {
           console.error('Failed to get media for incoming call:', err);
           callActive = false;

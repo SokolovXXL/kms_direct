@@ -615,7 +615,6 @@ body {
   font-size: 0.8rem;
   font-weight: bold;
   margin-bottom: 4px;
-  color: #666;
 }
 
 .message.theirs .message-sender {
@@ -2261,6 +2260,31 @@ body {
   .chat-header {
     position: relative;
     padding-right: 56px;
+  }
+
+  .send-form {
+    padding: 0.5rem 0.75rem;
+    gap: 0.4rem;
+    flex-wrap: nowrap;
+  }
+
+  .send-form input {
+    padding: 0.6rem 0.8rem;
+    font-size: 16px;
+    min-width: 0;
+    flex: 1 1 auto;
+  }
+
+  .send-form button {
+    padding: 0.6rem 1rem;
+    white-space: nowrap;
+  }
+
+  .send-form label {
+    padding: 0.6rem 0.8rem;
+    font-size: 0.9rem;
+    white-space: nowrap;
+    flex-shrink: 0;
   }
 }
 
