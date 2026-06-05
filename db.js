@@ -1,10 +1,10 @@
 const { Pool } = require('pg');
 
-const isRender = !!process.env.RENDER; // или process.env.DATABASE_URL?.includes('render.com')
+const isRender = !!process.env.RENDER;
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: isRender ? { rejectUnauthorized: false } : false,
+  ssl: isRender ? false : { rejectUnauthorized: false }, // на Render SSL не нужен
   connectionTimeoutMillis: 10000,
   statement_timeout: 30000,
 });
