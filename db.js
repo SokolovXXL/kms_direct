@@ -4,13 +4,19 @@ const isRender = !!process.env.RENDER;
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: isRender ? false : { rejectUnauthorized: false }, // на Render SSL не нужен
+  ssl: isRender ? false : { rejectUnauthorized: false },
   connectionTimeoutMillis: 10000,
   statement_timeout: 30000,
+  max: 20,
+  idleTimeoutMillis: 30000,
 });
 
 pool.on('connect', (client) => {
   client.query("SET client_encoding TO 'UTF8'");
+});
+
+pool.on('error', (err) => {
+  console.error('Unexpected DB pool error:', err);
 });
 
 async function initDb(retries = 5) {
@@ -33,7 +39,7 @@ async function initDb(retries = 5) {
       await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS friend_code VARCHAR(16) UNIQUE`);
       await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS display_name VARCHAR(64)`);
 
-      // 2. Таблица conversations (основная)
+      // 2. Таблица conversations
       await client.query(`
         CREATE TABLE IF NOT EXISTS conversations (
           id SERIAL PRIMARY KEY,
@@ -57,7 +63,7 @@ async function initDb(retries = 5) {
       await client.query(`ALTER TABLE conversation_participants ADD COLUMN IF NOT EXISTS role TEXT DEFAULT 'member'`);
       await client.query(`ALTER TABLE conversation_participants ADD COLUMN IF NOT EXISTS muted_until TIMESTAMPTZ`);
 
-      // 4. Заполнение user1_id, user2_id для существующих DM (если есть данные)
+      // 4. Заполнение user1_id, user2_id для существующих DM
       await client.query(`
         UPDATE conversations c SET
           user1_id = sub.user1,
@@ -143,8 +149,7 @@ async function initDb(retries = 5) {
           created_at TIMESTAMPTZ DEFAULT NOW(),
           expires_at TIMESTAMPTZ,
           max_uses INTEGER DEFAULT 1,
-          uses INTEGER DEFAULT 0,
-          CHECK (uses <= max_uses)
+          uses INTEGER DEFAULT 0
         );
       `);
 
@@ -157,8 +162,10 @@ async function initDb(retries = 5) {
       await client.query(`CREATE INDEX IF NOT EXISTS idx_group_invites_token ON group_invites(token);`);
       await client.query(`CREATE INDEX IF NOT EXISTS idx_messages_conversation_created ON messages(conversation_id, created_at DESC);`);
       await client.query(`CREATE INDEX IF NOT EXISTS idx_notifications_user_conversation ON notifications(user_id, conversation_id);`);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_reactions_message ON reactions(message_id);`);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_push_subs_user ON push_subscriptions(user_id);`);
 
-      // 12. Уникальный индекс для DM (если используете отдельную таблицу conversations с user1_id, user2_id)
+      // 12. Уникальный индекс для DM
       await client.query(`
         CREATE UNIQUE INDEX IF NOT EXISTS idx_unique_dm 
         ON conversations (user1_id, user2_id) 
