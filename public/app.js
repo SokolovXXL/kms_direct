@@ -26,7 +26,8 @@ const replySenderName = document.getElementById('reply-sender-name');
 const replyTextSpan = document.getElementById('reply-text');
 const replyCancel = document.getElementById('reply-cancel');
 const $ = (id) => document.getElementById(id);
-const publicVapidKey = document.querySelector('meta[name="vapid-public-key"]').content;
+const vapidMeta = document.querySelector('meta[name="vapid-public-key"]');
+const publicVapidKey = vapidMeta ? vapidMeta.content : null;
 const chatHeader = document.getElementById('chat-header');
 
 if (chatHeader) {
@@ -817,7 +818,7 @@ function createMessageElement(message, isGroup, currentUserId) {
     // Проверка на файл или составное сообщение
   let isFile = false;
   let fileData = null;
-  if (typeof message.body === 'string' && message.body.startsWith('{')) {
+  if (message.body && message.body.startsWith('{')) {
     try {
       fileData = JSON.parse(message.body);
       if (fileData.type === 'file' || fileData.type === 'gallery' || fileData.type === 'composite') {
@@ -827,6 +828,7 @@ function createMessageElement(message, isGroup, currentUserId) {
   }
 
   if (isFile && fileData) {
+    messageDiv.dataset.fileBody = message.body;
     if (fileData.type === 'composite') {
       // Текст
       if (fileData.text) {
@@ -1184,19 +1186,20 @@ function initContextMenu() {
   contextMenu = document.getElementById('message-context-menu');
   if (!contextMenu) return;
 
-  // Добавляем пункт "Ответить" перед "Удалить"
   const actionsContainer = contextMenu.querySelector('.context-menu-actions');
   const deleteItem = actionsContainer.querySelector('[data-action="delete"]');
   const replyItem = document.createElement('div');
   replyItem.className = 'context-menu-item';
   replyItem.dataset.action = 'reply';
   replyItem.textContent = 'Ответить';
+  actionsContainer.insertBefore(replyItem, deleteItem);
 
-  if (deleteItem) {
-    actionsContainer.insertBefore(replyItem, deleteItem);
-  } else {
-    actionsContainer.appendChild(replyItem);
-  }
+  // Пункт "Скачать"
+  const downloadItem = document.createElement('div');
+  downloadItem.className = 'context-menu-item';
+  downloadItem.dataset.action = 'download';
+  downloadItem.textContent = 'Скачать';
+  actionsContainer.insertBefore(downloadItem, deleteItem);
 
   // Закрытие по клику вне меню
   document.addEventListener('click', (e) => {
@@ -1223,17 +1226,19 @@ function initContextMenu() {
   });
 
   // Обработка кликов по пунктам меню
-  contextMenu.addEventListener('click', (e) => {
+  contextMenu.addEventListener('click', async (e) => {
     const actionItem = e.target.closest('.context-menu-item');
     if (!actionItem || !currentContextMessage) return;
-
     const action = actionItem.dataset.action;
     if (action === 'copy') {
-      copyMessageContent(currentContextMessage);
+      await copyMessageContent(currentContextMessage);
     } else if (action === 'delete') {
       deleteMessage(currentContextMessage);
     } else if (action === 'reply') {
       setReplyTo(currentContextMessage);
+      hideContextMenu();
+    } else if (action === 'download') {
+      downloadMedia(currentContextMessage);
       hideContextMenu();
     } else if (action === 'react') {
       e.preventDefault();
@@ -1263,7 +1268,22 @@ function showContextMenu(messageElement, clickX, clickY) {
       deleteItem.style.display = 'none';
     }
   }
-
+  const downloadItem = contextMenu.querySelector('[data-action="download"]');
+  if (downloadItem) {
+    if (messageElement.dataset.fileBody) {
+      try {
+        const parsed = JSON.parse(messageElement.dataset.fileBody);
+        let hasUrl = false;
+        if (parsed.url) hasUrl = true;
+        else if (parsed.files && parsed.files.length > 0) hasUrl = true;
+        downloadItem.style.display = hasUrl ? 'block' : 'none';
+      } catch (e) {
+        downloadItem.style.display = 'none';
+      }
+    } else {
+      downloadItem.style.display = 'none';
+    }
+  }
   const menuWidth = contextMenu.offsetWidth || 180;
   const menuHeight = contextMenu.offsetHeight || 100;
   
@@ -1308,10 +1328,14 @@ function showContextMenu(messageElement, clickX, clickY) {
     });
   }
 
-  contextMenu.classList.remove('hidden');
+  contextMenu.classList.remove('hidden'); 
 }
 
 async function subscribeUserToPush() {
+  if (!publicVapidKey) {
+    console.warn('VAPID public key missing, push notifications disabled');
+    return;
+  }
   const registration = await navigator.serviceWorker.ready;
   const subscription = await registration.pushManager.subscribe({
     userVisibleOnly: true,
@@ -1336,14 +1360,68 @@ function urlBase64ToUint8Array(base64String) {
   return outputArray;
 }
 
-function hideContextMenu() {
-  if (contextMenu) {
-    contextMenu.classList.add('hidden');
-    currentContextMessage = null;
+function downloadMedia(messageElement) {
+  try {
+    const body = messageElement.dataset.fileBody;
+    if (!body) return;
+    const data = JSON.parse(body);
+
+    // Функция-помощник для скачивания одного файла
+    const downloadFile = (file) => {
+      const url = file.downloadUrl || file.url;
+      if (url) window.open(url, '_blank');
+    };
+
+    // Обработка галереи (несколько медиафайлов)
+    if (data.type === 'gallery' && data.files && data.files.length) {
+      const count = data.files.length;
+      if (confirm(`Скачать ${count} файл(ов)? Каждый файл откроется в новой вкладке.`)) {
+        data.files.forEach(downloadFile);
+      }
+      return;
+    }
+
+    // Обработка составного сообщения (текст + файлы)
+    if (data.type === 'composite' && data.files && data.files.length) {
+      const count = data.files.length;
+      if (confirm(`Скачать ${count} вложенных файл(ов)? Каждый файл откроется в новой вкладке.`)) {
+        data.files.forEach(downloadFile);
+      }
+      return;
+    }
+
+    // Одиночный файл
+    let downloadUrl = null;
+    if (data.url) {
+      downloadUrl = data.downloadUrl || data.url;
+    } else if (data.files && data.files.length > 0) {
+      downloadUrl = data.files[0].downloadUrl || data.files[0].url;
+    }
+    if (downloadUrl) {
+      window.open(downloadUrl, '_blank');
+    }
+  } catch (e) {
+    console.error('Download media error:', e);
+    showToast('Ошибка при скачивании', 'error');
   }
 }
 
-function copyMessageContent(messageElement) {
+async function copyMessageContent(messageElement) {
+  const img = messageElement.querySelector('img');
+  if (img) {
+    try {
+      const response = await fetch(img.src);
+      const blob = await response.blob();
+      await navigator.clipboard.write([
+        new ClipboardItem({ [blob.type]: blob })
+      ]);
+      showToast('Изображение скопировано', 'info');
+    } catch (err) {
+      showToast('Не удалось скопировать изображение', 'error');
+    }
+    return;
+  }
+  // остальная логика копирования текста / имени файла
   const bodyEl = messageElement.querySelector('.message-body');
   if (bodyEl) {
     navigator.clipboard.writeText(bodyEl.textContent).then(() => {
@@ -1353,7 +1431,6 @@ function copyMessageContent(messageElement) {
     });
     return;
   }
-
   const fileNameEl = messageElement.querySelector('.file-name');
   if (fileNameEl) {
     navigator.clipboard.writeText(fileNameEl.textContent).then(() => {
@@ -1361,6 +1438,13 @@ function copyMessageContent(messageElement) {
     }).catch(() => {
       showToast('Не удалось скопировать', 'error');
     });
+  }
+}
+
+function hideContextMenu() {
+  if (contextMenu) {
+    contextMenu.classList.add('hidden');
+    currentContextMessage = null;
   }
 }
 
@@ -1823,7 +1907,6 @@ async function loadMessages(convId) {
 }
 
 // Отправка сообщений
-// Отправка сообщений (обновлённая версия)
 const sendForm = $('send-form');
 if (sendForm) {
   sendForm.addEventListener('submit', async (e) => {
@@ -1932,6 +2015,7 @@ async function sendFileWithProgress(file, conversationId, replyToId) {
           const fileMessage = {
             type: 'file',
             url: fileData.url,
+            downloadUrl: fileData.downloadUrl,
             name: fileData.name,
             mime: fileData.type,
             size: file.size
@@ -3446,8 +3530,8 @@ function renderFileMessage(container, fileData, messageDiv) {
         downloadBtn.innerHTML = '<img src="/images/download.png" alt="Download" style="width:16px; height:16px;">';
         downloadBtn.setAttribute('aria-label', 'Download');
         downloadBtn.onclick = (e) => {
-            e.stopPropagation();
-            window.open(fileData.url, '_blank');
+          e.stopPropagation();
+          window.open(fileData.downloadUrl || fileData.url, '_blank');
         };
 
         customPlayer.appendChild(playBtn);
@@ -3515,54 +3599,38 @@ function renderFileMessage(container, fileData, messageDiv) {
   const fileDiv = document.createElement('div');
   fileDiv.className = 'message-file-content';
 
-  const headerDiv = document.createElement('div');
-  headerDiv.className = 'file-info-header';
-
+  // Иконка файла (слева)
   const iconSpan = document.createElement('span');
   iconSpan.className = 'file-icon';
-
-
-  iconSpan.innerHTML = ''; // очищаем
   const iconImg = document.createElement('img');
-  iconImg.src = '/images/file.png'; // новая функция
+  iconImg.src = '/images/file.png';
   iconImg.alt = 'File';
-  iconImg.style.width = '24px';
-  iconImg.style.height = '24px';
+  iconImg.style.width = '32px';
+  iconImg.style.height = '32px';
   iconSpan.appendChild(iconImg);
-  headerDiv.appendChild(iconSpan);
 
-  
-  const infoDiv = document.createElement('div');
-  infoDiv.className = 'file-details';
-
+  // Название файла
   const nameDiv = document.createElement('div');
   nameDiv.className = 'file-name';
   nameDiv.textContent = fileData.name || 'Unnamed file';
-  infoDiv.appendChild(nameDiv);
 
-  if (fileData.size) {
-    const sizeDiv = document.createElement('div');
-    sizeDiv.className = 'file-size';
-    sizeDiv.textContent = formatFileSize(fileData.size);
-    infoDiv.appendChild(sizeDiv);
-  }
-
-  headerDiv.appendChild(infoDiv);
-  fileDiv.appendChild(headerDiv);
-
-  const actionsDiv = document.createElement('div');
-  actionsDiv.className = 'file-actions';
-
-  const downloadBtn = document.createElement('button');
-  downloadBtn.className = 'file-download-btn';
-  downloadBtn.innerHTML = '⬇️ Download';
-  downloadBtn.onclick = (e) => {
+  // Круглая кнопка «Открыть»
+  const openBtn = document.createElement('button');
+  openBtn.className = 'file-open-btn';
+  const openImg = document.createElement('img');
+  openImg.src = '/images/open.png';
+  openImg.alt = 'Open';
+  openImg.style.width = '20px';
+  openImg.style.height = '20px';
+  openBtn.appendChild(openImg);
+  openBtn.onclick = (e) => {
     e.stopPropagation();
-    window.open(fileData.url, '_blank');
+    window.open(fileData.downloadUrl || fileData.url, '_blank');
   };
-  actionsDiv.appendChild(downloadBtn);
 
-  fileDiv.appendChild(actionsDiv);
+  fileDiv.appendChild(iconSpan);
+  fileDiv.appendChild(nameDiv);
+  fileDiv.appendChild(openBtn);
   container.appendChild(fileDiv);
 }
 
@@ -4271,6 +4339,24 @@ async function handleRemoteOffer(data) {
     }
     // Если тот же чат, продолжаем (возможно переподключение)
   }
+
+  if (conversationId && !callActive) {
+    (async () => {
+      try {
+        const groupData = await api(`/api/groups/${conversationId}`);
+        const members = groupData.participants;
+        for (const member of members) {
+          if (member.id !== currentUser.id && member.id !== fromUserId) {
+            if (!peerConnections.has(member.id)) {
+              await createPeerConnection(member.id, true);
+            }
+          }
+        }
+      } catch (e) {
+        console.error('Failed to mesh group call', e);
+      }
+    })();
+  }
   
   // Если нет conversationId, пытаемся найти личный чат по fromUserId
   let targetConversationId = conversationId;
@@ -4306,6 +4392,16 @@ async function handleRemoteOffer(data) {
         
         try {
           localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+          if (localStream) {
+            // Добавляем треки во все существующие пиры (кроме того, с которым только что создали или получили)
+            for (const [uid, pc] of peerConnections) {
+              if (uid !== fromUserId) {
+                localStream.getTracks().forEach(track => {
+                  pc.addTrack(track, localStream);
+                });
+              }
+            }
+          }
         } catch (err) {
           console.error('Failed to get media for incoming call:', err);
           callActive = false;

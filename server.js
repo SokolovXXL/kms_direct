@@ -43,9 +43,6 @@ const storage = multer.diskStorage({
 const upload = multer({
   storage,
   limits: { fileSize: 1024 * 1024 * 1024 }, // 1 GB
-  fileFilter: (req, file, cb) => {
-    cb(null, true);
-  }
 });
 
 // Генерация friend code
@@ -489,6 +486,21 @@ app.post('/api/change-password', authMiddleware, async (req, res) => {
   res.json({ success: true });
 });
 
+function closeUserConnections(userId) {
+  // Закрываем SSE
+  const sseList = sseClients.get(userId);
+  if (sseList) {
+    sseList.forEach(client => { try { client.end(); } catch (_) {} });
+    sseClients.delete(userId);
+  }
+  // Закрываем signaling
+  const sigSet = signalingChannels.get(userId);
+  if (sigSet) {
+    sigSet.forEach(client => { try { client.end(); } catch (_) {} });
+    signalingChannels.delete(userId);
+  }
+}
+
 // ---- Delete account ----
 app.delete('/api/account', authMiddleware, async (req, res) => {
   const { password } = req.body || {};
@@ -502,7 +514,7 @@ app.delete('/api/account', authMiddleware, async (req, res) => {
   // --- ПОЛУЧАЕМ СПИСОК СООБЩЕНИЙ ПОЛЬЗОВАТЕЛЯ ДО УДАЛЕНИЯ ---
   const messagesResult = await pool.query('SELECT body FROM messages WHERE sender_id = $1', [req.userId]);
   const messages = messagesResult.rows; // <-- теперь переменная определена
-
+  closeUserConnections(req.userId);
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -542,7 +554,8 @@ app.delete('/api/account', authMiddleware, async (req, res) => {
         const matches = msg.body.match(/\/uploads\/([^"'\s]+)/g);
         if (matches) {
           for (const match of matches) {
-            const filename = path.basename(match);
+            const urlPath = new URL(match, 'http://dummy').pathname;
+            const filename = path.basename(urlPath.split('?')[0]);
             const filePath = path.join(__dirname, 'uploads', filename);
             try {
               await fsPromises.unlink(filePath);
@@ -997,14 +1010,14 @@ app.post('/api/join', authMiddleware, async (req, res) => {
         'INSERT INTO conversation_participants (conversation_id, user_id, role) VALUES ($1, $2, $3)',
         [conversationId, req.userId, 'member']
       );
-    }
 
-    // Увеличиваем счётчик использований
-    const newUses = invite.uses + 1;
-    if (invite.max_uses !== null && newUses >= invite.max_uses) {
-      await client.query('DELETE FROM group_invites WHERE id = $1', [invite.id]);
-    } else {
-      await client.query('UPDATE group_invites SET uses = $1 WHERE id = $2', [newUses, invite.id]);
+      // Увеличиваем счётчик только при реальном добавлении
+      const newUses = invite.uses + 1;
+      if (invite.max_uses !== null && newUses >= invite.max_uses) {
+        await client.query('DELETE FROM group_invites WHERE id = $1', [invite.id]);
+      } else {
+        await client.query('UPDATE group_invites SET uses = $1 WHERE id = $2', [newUses, invite.id]);
+      }
     }
 
     await client.query('COMMIT');
@@ -1178,6 +1191,12 @@ app.get('/api/conversations/:id/messages', authMiddleware, async (req, res) => {
 
   const r = await pool.query(`
     SELECT 
+      CASE 
+        WHEN m.body LIKE '{"type":"file"%' THEN 'file'
+        WHEN m.body LIKE '{"type":"gallery"%' THEN 'gallery'
+        WHEN m.body LIKE '{"type":"composite"%' THEN 'composite'
+        ELSE 'text'
+      END AS message_type,
       m.id, 
       m.body, 
       m.created_at, 
@@ -1263,21 +1282,17 @@ app.post('/api/conversations/:id/messages', authMiddleware, async (req, res) => 
   const isMember = part.rows.some(p => p.user_id === req.userId);
   if (!isMember) return res.status(403).json({ error: 'Вы не участвуете в этом чате' });
 
-  const convInfo = await pool.query(
-    'SELECT is_group, is_channel FROM conversations WHERE id = $1',
-    [convId]
-  );
+  // Взять is_channel из БД
+  const convInfo = await pool.query('SELECT is_channel FROM conversations WHERE id = $1', [convId]);
   if (convInfo.rows.length === 0) return res.status(404).json({ error: 'Чат не найден' });
-  const { is_group: isGroup, is_channel: isChannel } = convInfo.rows[0];
-
-  if (isChannel) {
-    const roleCheck = await pool.query(
+  if (convInfo.rows[0].is_channel) {
+    // В каналах только owner может выполнять модерацию
+    const requesterRole = await pool.query(
       'SELECT role FROM conversation_participants WHERE conversation_id = $1 AND user_id = $2',
       [convId, req.userId]
     );
-    const role = roleCheck.rows[0]?.role;
-    if (role !== 'owner' && role !== 'admin') {
-      return res.status(403).json({ error: 'Только администраторы могут писать в каналах' });
+    if (requesterRole.rows[0]?.role !== 'owner') {
+      return res.status(403).json({ error: 'В каналах только владелец может выполнять это действие' });
     }
   }
 
@@ -1301,63 +1316,66 @@ app.post('/api/conversations/:id/messages', authMiddleware, async (req, res) => 
     }
   }
 
-  const ins = await pool.query(
-    'INSERT INTO messages (conversation_id, sender_id, body, reply_to_id) VALUES ($1, $2, $3, $4) RETURNING id, body, created_at, sender_id',
-    [convId, req.userId, messageBody, replyToIdNum]
-  );
-  const msg = ins.rows[0];
-
-  // Получаем полные данные сообщения вместе с reply_to
-  const fullMsg = await pool.query(`
-    SELECT m.id, m.body, m.created_at, m.sender_id, u.username AS sender_username,
-           u.display_name AS sender_display_name,
-           m.reply_to_id, r.body AS reply_body,
-           ru.username AS reply_sender_username, ru.display_name AS reply_sender_display_name
-    FROM messages m
+  const ins = await pool.query(`
+    WITH new_msg AS (
+      INSERT INTO messages (conversation_id, sender_id, body, reply_to_id)
+      VALUES ($1, $2, $3, $4)
+      RETURNING *
+    )
+    SELECT m.*, u.username AS sender_username, u.display_name AS sender_display_name,
+          r.body AS reply_body, ru.username AS reply_sender_username, ru.display_name AS reply_sender_display_name
+    FROM new_msg m
     JOIN users u ON u.id = m.sender_id
     LEFT JOIN messages r ON r.id = m.reply_to_id
     LEFT JOIN users ru ON ru.id = r.sender_id
-    WHERE m.id = $1
-  `, [msg.id]);
+  `, [convId, req.userId, messageBody, replyToIdNum]);
 
-  const messageWithReply = fullMsg.rows[0];
+  const fullMsg = ins.rows[0];
+
+  let msgType = 'text';
+  try {
+    const parsed = JSON.parse(fullMsg.body);
+    if (parsed.type === 'file') msgType = 'file';
+    else if (parsed.type === 'gallery') msgType = 'gallery';
+    else if (parsed.type === 'composite') msgType = 'composite';
+  } catch (_) {}
+
   const resultMsg = {
-    id: messageWithReply.id,
-    body: messageWithReply.body,
-    created_at: messageWithReply.created_at,
-    sender_id: messageWithReply.sender_id,
-    sender_username: messageWithReply.sender_username,
-    sender_display_name: messageWithReply.sender_display_name,
+    id: fullMsg.id,
+    body: fullMsg.body,
+    created_at: fullMsg.created_at,
+    sender_id: fullMsg.sender_id,
+    sender_username: fullMsg.sender_username,
+    sender_display_name: fullMsg.sender_display_name,
+    message_type: msgType
   };
-  if (messageWithReply.reply_to_id) {
+  if (fullMsg.reply_to_id) {
     resultMsg.reply_to = {
-      id: messageWithReply.reply_to_id,
-      body: messageWithReply.reply_body,
-      senderName: messageWithReply.reply_sender_display_name || messageWithReply.reply_sender_username || 'Unknown'
+      id: fullMsg.reply_to_id,
+      body: fullMsg.reply_body,
+      senderName: fullMsg.reply_sender_display_name || fullMsg.reply_sender_username || 'Unknown'
     };
   }
 
   // Отправляем уведомления
   const otherUserIds = part.rows.filter(p => p.user_id !== req.userId).map(p => p.user_id);
-  const payload = {
-    type: 'new_message',
-    conversationId: convId,
-    message: resultMsg,
-  };
-
   for (const uid of otherUserIds) {
     await pool.query(
       'INSERT INTO notifications (user_id, conversation_id, message_id) VALUES ($1, $2, $3)',
-      [uid, convId, msg.id]
+      [uid, convId, resultMsg.id]
     );
-    broadcastToUser(uid, payload);
+    broadcastToUser(uid, {
+      type: 'new_message',
+      conversationId: convId,
+      message: resultMsg,
+    });
   }
 
   const pushPayload = {
     title: `Новое сообщение от ${resultMsg.sender_username}`,
     body: messageBody.length > 100 ? messageBody.slice(0, 97) + '...' : messageBody,
     icon: '/images/logo.png',
-    data: { conversationId: convId, messageId: msg.id },
+    data: { conversationId: convId, messageId: resultMsg.id },
   };
   sendPushNotifications(otherUserIds, pushPayload).catch(console.error);
 
@@ -1490,7 +1508,8 @@ app.delete('/api/messages/:id', authMiddleware, async (req, res) => {
     if (matches) {
       const uploadsDir = path.resolve(__dirname, 'uploads');
       for (const match of matches) {
-        const filename = path.basename(match);
+        const urlPath = new URL(match, 'http://dummy').pathname;
+        const filename = path.basename(urlPath.split('?')[0]);
         const filePath = path.join(uploadsDir, filename);
         // Проверяем, что путь действительно внутри uploads
         if (filePath.startsWith(uploadsDir) && fs.existsSync(filePath)) {
@@ -1718,7 +1737,7 @@ app.get('/api/signaling', streamAuthMiddleware, sseConnectionLimiter, (req, res)
 });
 
 app.post('/api/signaling', authMiddleware, async (req, res) => {
-  const { type, targetUserId, offer, answer, candidate } = req.body || {};
+  const { type, targetUserId, offer, answer, candidate, conversationId } = req.body || {};
 
   if (!type || !targetUserId) {
     return res.status(400).json({ error: 'Требуется тип и целевой пользователь' });
@@ -1764,16 +1783,33 @@ app.post('/api/signaling', authMiddleware, async (req, res) => {
     }
   }
 
-  const payload = {
-    type,
-    fromUserId: req.userId,
-    [type === 'ice-candidate' ? 'candidate' : type]: type === 'ice-candidate' ? candidate : (type === 'offer' ? offer : answer)
-  };
+  const payload = { type, fromUserId: req.userId };
+  switch (type) {
+    case 'offer':
+      if (!offer) return res.status(400).json({ error: 'Требуется предложение' });
+      payload.offer = offer;
+      break;
+    case 'answer':
+      if (!answer) return res.status(400).json({ error: 'Требуется ответ' });
+      payload.answer = answer;
+      break;
+    case 'ice-candidate':
+      if (!candidate) return res.status(400).json({ error: 'Требуется кандидат' });
+      payload.candidate = candidate;
+      break;
+    case 'call-ended':
+    case 'call-rejected':
+      // дополнительных данных не требуется, conversationId опционален
+      if (conversationId) payload.conversationId = conversationId;
+      break;
+    default:
+      return res.status(400).json({ error: 'Неизвестный тип сигнала' });
+  }
 
+  // Пересылка осталась без изменений
   const channels = signalingChannels.get(targetId);
   if (channels) {
     const eventName = type === 'ice-candidate' ? 'ice-candidate' : type;
-    // Безопасная итерация с удалением сбойных
     for (const client of Array.from(channels)) {
       try {
         client.write(`event: ${eventName}\n`);
@@ -1785,7 +1821,6 @@ app.post('/api/signaling', authMiddleware, async (req, res) => {
     }
     if (channels.size === 0) signalingChannels.delete(targetId);
   }
-
   res.json({ ok: true });
 });
 
@@ -1935,8 +1970,14 @@ app.post('/api/groups/:id/members', authMiddleware, async (req, res) => {
   res.json({ success: true });
 });
 
+const uploadLimiter = rateLimit({
+  windowMs: 30000,
+  max: 10,
+  message: { error: 'Слишком много загрузок, повторите позже.' }
+});
+
 // ---- FILE UPLOAD ----
-app.post('/api/upload', authMiddleware, upload.single('file'), (req, res) => {
+app.post('/api/upload', authMiddleware, uploadLimiter, upload.single('file'), (req, res) => {
   // Сначала проверяем, есть ли файл
   if (!req.file) {
     return res.status(400).json({ error: 'Файл не загружен' });
@@ -1951,6 +1992,7 @@ app.post('/api/upload', authMiddleware, upload.single('file'), (req, res) => {
 
   res.json({
     url: '/uploads/' + encodeURIComponent(req.file.filename),
+    downloadUrl: '/api/files/' + encodeURIComponent(req.file.filename) + '?name=' + encodeURIComponent(fixedName),
     name: fixedName,
     type: req.file.mimetype
   });
@@ -2209,6 +2251,27 @@ app.delete('/api/groups/:id/kick/:userId', authMiddleware, async (req, res) => {
 // Раздача файлов
 app.use('/uploads', express.static('uploads'));
 
+app.get('/api/files/:filename', (req, res) => {
+  const filename = req.params.filename;
+  const name = req.query.name;
+  const filePath = path.join(__dirname, 'uploads', filename);
+  
+  // Базовая защита от выхода за пределы директории
+  const resolvedPath = path.resolve(filePath);
+  if (!resolvedPath.startsWith(path.resolve(__dirname, 'uploads'))) {
+    return res.status(400).end();
+  }
+  if (!fs.existsSync(resolvedPath)) {
+    return res.status(404).end();
+  }
+  
+  // Content‑Disposition с поддержкой UTF-8 для кириллических имён
+  res.setHeader(
+    'Content-Disposition',
+    `attachment; filename*=UTF-8''${encodeURIComponent(name || filename)}`
+  );
+  res.sendFile(resolvedPath);
+});
 // ===== Централизованный обработчик ошибок (должен быть после всех маршрутов, но перед catch-all) =====
 app.use((err, req, res, next) => {
   console.error('Unhandled error:', err.stack);
